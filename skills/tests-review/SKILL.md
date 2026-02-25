@@ -20,7 +20,7 @@ Review test files for edge case coverage iteratively. Writes feedback to `tests-
 
 ```bash
 # Source shared library and initialize
-source "/home/node/.claude/commands/lib/tests-common.sh"
+source "/home/node/.claude/plugins/cache/work-workflow/work-workflow/1.0.0/lib/tests-common.sh"
 tests_lib_strict_mode
 tests_lib_require_jq
 tests_lib_init "$ARGUMENTS"
