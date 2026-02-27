@@ -9,6 +9,7 @@
 
 const { execSync } = require('child_process');
 const path = require('path');
+const { appendAction } = require(path.join(__dirname, '..', 'lib', 'work-actions'));
 
 // Use CLAUDE_PLUGIN_ROOT if available, otherwise fallback to __dirname
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
@@ -40,6 +41,17 @@ function main() {
     if (plan.error) {
       console.log(`ORCHESTRATOR ERROR: ${plan.message}`);
       process.exit(0);
+    }
+
+    // Log plan generation action
+    if (plan.ticket && !plan.ticket.startsWith('TBD')) {
+      const runCount = plan.summary?.run || 0;
+      const mode = plan.mode || 'unknown';
+      const currentStep = plan.currentStep || '1_ticket';
+      appendAction(plan.ticket, {
+        step: currentStep,
+        what: `plan generated (${mode}, ${runCount} RUN)`,
+      });
     }
 
     // Format the plan for injection

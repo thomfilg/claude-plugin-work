@@ -36,6 +36,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { appendAction, loadActions, analyzeActions } = require(path.join(__dirname, '..', 'lib', 'work-actions'));
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -416,6 +417,7 @@ function transitionStep(ticket, targetStep) {
       errors: [], startTime: new Date().toISOString(), lastUpdate: new Date().toISOString(),
     };
     ALL_STEPS.forEach(s => { ws.stepStatus[s] = 'pending'; });
+    appendAction(ticket, { step: '1_ticket', what: 'workflow started' });
   }
 
   const currentIdx = ALL_STEPS.indexOf(currentStep);
@@ -423,19 +425,25 @@ function transitionStep(ticket, targetStep) {
 
   // Mark current as completed
   ws.stepStatus[currentStep] = 'completed';
+  appendAction(ticket, { step: currentStep, what: 'step completed' });
+
   ws.stepStatus[targetStep] = 'in_progress';
+  appendAction(ticket, { step: targetStep, what: 'step started' });
+
   ws.currentStep = targetIdx + 1;
 
   if (targetIdx < currentIdx) {
     // Going backward (retry loop) — reset intermediate steps to pending
     for (let i = targetIdx + 1; i <= currentIdx; i++) {
       ws.stepStatus[ALL_STEPS[i]] = 'pending';
+      appendAction(ticket, { step: ALL_STEPS[i], what: 'step reset' });
     }
   } else {
     // Going forward — mark skipped intermediates as completed
     for (let i = currentIdx + 1; i < targetIdx; i++) {
       if (ws.stepStatus[ALL_STEPS[i]] === 'pending') {
         ws.stepStatus[ALL_STEPS[i]] = 'completed';
+        appendAction(ticket, { step: ALL_STEPS[i], what: 'step skipped' });
       }
     }
   }
@@ -469,7 +477,7 @@ function main() {
     process.exit(1);
   }
 
-  const subcommands = ['plan', 'transition', 'transitions', 'graph'];
+  const subcommands = ['plan', 'transition', 'transitions', 'graph', 'actions'];
   const command = subcommands.includes(args[0]) ? args[0] : 'plan';
   const rest = subcommands.includes(args[0]) ? args.slice(1) : args;
 
@@ -529,6 +537,23 @@ function main() {
 
     case 'graph': {
       console.log(JSON.stringify({ steps: ALL_STEPS, transitions: STEP_TRANSITIONS }, null, 2));
+      break;
+    }
+
+    case 'actions': {
+      if (!rest[0]) {
+        console.log(JSON.stringify({ error: true, message: 'Usage: actions <TICKET> [--raw]' }));
+        process.exit(1);
+      }
+      const ticket = rest[0].toUpperCase();
+      const raw = rest.includes('--raw');
+      const actions = loadActions(ticket);
+      if (raw) {
+        console.log(JSON.stringify({ ticket, actions }, null, 2));
+      } else {
+        const analysis = analyzeActions(actions);
+        console.log(JSON.stringify({ ticket, analysis, actions }, null, 2));
+      }
       break;
     }
   }

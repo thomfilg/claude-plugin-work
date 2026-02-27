@@ -300,6 +300,29 @@ const resumeInfo = JSON.parse(RESUME_INFO);
 Task(subagent_type: "qa-feature-tester", prompt: "
 Test ${APP_NAME} application.
 
+## SERVER IS ALREADY RUNNING — DO NOT START ANY DEV SERVERS
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  THE APP SERVER IS ALREADY RUNNING AND READY FOR TESTING             ║
+║                                                                      ║
+║  URL: ${APP_URL}                                                     ║
+║                                                                      ║
+║  FORBIDDEN COMMANDS (will break other agents):                       ║
+║  - pnpm dev, pnpm start, make dev-local                             ║
+║  - tmux new-session ... pnpm dev                                     ║
+║  - npm run dev, npx vite, npx remix dev                              ║
+║  - sleep && curl (health checks to wait for server startup)          ║
+║  - Starting ANY server process whatsoever                            ║
+║                                                                      ║
+║  JUST NAVIGATE TO THE URL ABOVE WITH PLAYWRIGHT AND START TESTING.  ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Your FIRST action must be:
+  mcp__playwright__browser_navigate(url: '${APP_URL}')
+
+If the page does not load, report INFRASTRUCTURE_FAILURE.
+Do NOT attempt to start a server yourself.
+
 ## Context Variables
 - JIRA_TICKET_ID: ${JIRA_TICKET_ID}
 - REPORT_PATH: ${REPORT_PATH}
@@ -328,12 +351,12 @@ ${AFFECTED_PACKAGES.join('\n') || 'None specified'}
 ```
 
 **The agent will:**
-1. **Track progress incrementally** (call qa-progress.js at each step)
-2. Navigate to app with Playwright MCP
+1. **Navigate directly to APP_URL** (server is already running — started by check-start-env.js)
+2. **Track progress incrementally** (call qa-progress.js at each step)
 3. Run tests based on affected files (skip completed tests from resume info)
 4. Take screenshots
 5. Write report to REPORT_PATH
-6. Handle infrastructure failures with MCP diagnostics
+6. Handle infrastructure failures with MCP diagnostics (NEVER start a server)
 
 ---
 
