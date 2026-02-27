@@ -1,0 +1,2 @@
+# Override global .claude* exclusion for this plugin repo
+!.claude-plugin/

@@ -1,0 +1,16 @@
+{
+  "name": "work-workflow",
+  "version": "1.0.0",
+  "description": "Deterministic workflow orchestrator for Jira task implementation. Pre-computes action plans with state machine validation to enforce exact step execution.",
+  "author": {
+    "name": "Custom",
+    "email": "custom@local"
+  },
+  "keywords": [
+    "workflow",
+    "jira",
+    "orchestrator",
+    "state-machine",
+    "automation"
+  ]
+}
