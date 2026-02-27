@@ -12,25 +12,38 @@ A Claude Code plugin that provides deterministic workflow orchestration for Jira
 
 ## Installation
 
-### From the Claude Plugin Marketplace
+All installation commands are run **inside a Claude Code session** using the `/plugin` slash command.
 
-```bash
-claude plugin marketplace add work-workflow
+### Step 1: Add the Marketplace
+
+```
+/plugin marketplace add tigredonorte/claude-plugin-work
 ```
 
-### Manual Install from GitHub
+You can also use the full URL:
 
-```bash
-claude plugin install --from git@github.com:tigredonorte/claude-plugin-work.git
+```
+/plugin marketplace add https://github.com/tigredonorte/claude-plugin-work
+```
+
+Or SSH:
+
+```
+/plugin marketplace add git@github.com:tigredonorte/claude-plugin-work.git
+```
+
+### Step 2: Install the Plugin
+
+```
+/plugin install work-workflow
 ```
 
 ### Local Development Install
 
-Clone the repository and install it as a local plugin:
+For local development, point to a local directory:
 
-```bash
-git clone https://github.com/tigredonorte/claude-plugin-work.git
-claude plugin install --local ./claude-plugin-work
+```
+/plugin marketplace add ./path/to/claude-plugin-work
 ```
 
 ## Available Skills (Slash Commands)
