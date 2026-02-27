@@ -210,42 +210,34 @@ describe('enforce-step-workflow', () => {
     });
 
     describe('step command matching', () => {
-      it('recognizes jira-task-creator as 1_ticket', async () => {
-        const { code } = await runHook({
-          tool_name: 'Task',
-          tool_input: { subagent_type: 'jira-task-creator', prompt: 'create ticket' },
-        });
-        assert.equal(code, 0);
-      });
-
-      it('recognizes mcp__atlassian__jira_get_issue as 1_ticket', async () => {
-        const { code } = await runHook({
-          tool_name: 'mcp__atlassian__jira_get_issue',
-          tool_input: { issue_key: 'APPSUPEN-123' },
-        });
-        assert.equal(code, 0);
-      });
-
-      it('recognizes bootstrap skill as 2_bootstrap', async () => {
-        const { code } = await runHook({
-          tool_name: 'Skill',
-          tool_input: { skill: 'bootstrap' },
-        });
-        assert.equal(code, 0);
-      });
-
-      it('recognizes pnpm dev:check as 4_quality', async () => {
-        const { code } = await runHook({
-          tool_name: 'Bash',
-          tool_input: { command: 'pnpm dev:check' },
-        });
-        assert.equal(code, 0);
-      });
-
       it('recognizes commit-writer as 5_commit', async () => {
         const { code } = await runHook({
           tool_name: 'Task',
           tool_input: { subagent_type: 'commit-writer', prompt: 'commit changes' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes work-implement skill as 3_implement', async () => {
+        const { code } = await runHook({
+          tool_name: 'Skill',
+          tool_input: { skill: 'work-implement' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes check skill as 6_check', async () => {
+        const { code } = await runHook({
+          tool_name: 'Skill',
+          tool_input: { skill: 'check' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes test-coordination skill as 8_test_enhancement', async () => {
+        const { code } = await runHook({
+          tool_name: 'Skill',
+          tool_input: { skill: 'test-coordination' },
         });
         assert.equal(code, 0);
       });
@@ -257,27 +249,77 @@ describe('enforce-step-workflow', () => {
         });
         assert.equal(code, 0);
       });
+    });
 
-      it('recognizes gh pr ready as 10_ready', async () => {
+    describe('Task-based delegation patterns', () => {
+      it('recognizes Task with description "1_ticket" as 1_ticket', async () => {
         const { code } = await runHook({
-          tool_name: 'Bash',
-          tool_input: { command: 'gh pr ready' },
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'general-purpose', description: '1_ticket fetch ticket details', prompt: 'fetch ticket' },
         });
         assert.equal(code, 0);
       });
 
-      it('recognizes gh pr checks as 11_ci', async () => {
+      it('recognizes Task(quality-checker) via subagent_type as 4_quality', async () => {
         const { code } = await runHook({
-          tool_name: 'Bash',
-          tool_input: { command: 'gh pr checks --watch --interval 60' },
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'quality-checker', description: '4_quality run checks', prompt: 'run checks' },
         });
         assert.equal(code, 0);
       });
 
-      it('recognizes work-state.js complete as 13_complete', async () => {
+      it('recognizes Task with description "4_quality" as 4_quality', async () => {
         const { code } = await runHook({
-          tool_name: 'Bash',
-          tool_input: { command: 'node ~/.claude/hooks/work-state.js complete APPSUPEN-123' },
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'Bash', description: '4_quality run dev:check', prompt: 'run checks' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Task with description "7_cleanup" as 7_cleanup', async () => {
+        const { code } = await runHook({
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'Bash', description: '7_cleanup kill dev session', prompt: 'kill session' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Task with description "10_ready" as 10_ready', async () => {
+        const { code } = await runHook({
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'Bash', description: '10_ready mark PR ready', prompt: 'gh pr ready' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Task with description "11_ci" as 11_ci', async () => {
+        const { code } = await runHook({
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'Bash', description: '11_ci watch CI', prompt: 'gh pr checks' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Task with description "12_reports" as 12_reports', async () => {
+        const { code } = await runHook({
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'Bash', description: '12_reports consolidate', prompt: 'consolidate reports' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Task with description "13_complete" as 13_complete', async () => {
+        const { code } = await runHook({
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'Bash', description: '13_complete finish', prompt: 'mark complete' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('description matching is case-insensitive', async () => {
+        const { code } = await runHook({
+          tool_name: 'Task',
+          tool_input: { subagent_type: 'Bash', description: '7_CLEANUP kill dev session', prompt: 'kill session' },
         });
         assert.equal(code, 0);
       });
