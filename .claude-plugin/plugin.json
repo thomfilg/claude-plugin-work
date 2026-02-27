@@ -1,7 +1,7 @@
 {
   "name": "work-workflow",
-  "version": "1.0.0",
-  "description": "Deterministic workflow orchestrator for Jira task implementation. Pre-computes action plans with state machine validation to enforce exact step execution.",
+  "version": "2.0.0",
+  "description": "Self-contained workflow plugin with agents, hooks, skills, and orchestration. Includes 16 specialized agents, agent-specific hooks, and 23 skills.",
   "author": {
     "name": "Custom",
     "email": "custom@local"
@@ -11,6 +11,12 @@
     "jira",
     "orchestrator",
     "state-machine",
-    "automation"
+    "automation",
+    "agents",
+    "hooks",
+    "skills",
+    "qa-testing",
+    "code-review",
+    "pr-management"
   ]
 }
