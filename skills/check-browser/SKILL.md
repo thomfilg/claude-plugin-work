@@ -3,7 +3,7 @@ name: check-browser
 description: Verify browser/UI state using API-first approach with browser fallback
 argument-hint: <question>
 user-invocable: true
-allowed-tools: Bash, Read, mcp__playwright_headed__browser_navigate, mcp__playwright_headed__browser_snapshot, mcp__playwright_headed__browser_evaluate, mcp__playwright_headed__browser_take_screenshot
+allowed-tools: Bash, Read, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_evaluate, mcp__playwright__browser_take_screenshot
 ---
 
 # Browser Verification Command

@@ -1,6 +1,6 @@
 ---
 name: check
-argument-hint: [jira-ticket-id]
+argument-hint: jira-ticket-id
 description: Run full quality check - QA testing, code review, and requirements verification in parallel
 user-invocable: true
 allowed-tools: Task, Bash, Read, Write, Edit, Grep, Glob, TodoWrite, Skill, AskUserQuestion, mcp__atlassian__jira_get_issue, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot
