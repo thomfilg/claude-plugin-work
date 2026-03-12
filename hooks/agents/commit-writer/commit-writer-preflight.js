@@ -24,7 +24,7 @@ try {
   runQualityCheck = qc.runQualityCheck;
   describeStrategy = qc.describeStrategy;
 } catch (err) {
-  if (err && err.code === 'MODULE_NOT_FOUND') {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /['"].*lib\/quality-check['"]/.test(err.message)) {
     process.exit(0); // Can't load quality checks — fail open
   } else {
     throw err;

@@ -105,4 +105,4 @@ function buildCommandMap() {
   return map;
 }
 
-main();
+try { main(); } catch { process.exit(0); }

@@ -20,7 +20,7 @@ let config;
 try {
   config = require('../lib/config');
 } catch (err) {
-  if (err && err.code === 'MODULE_NOT_FOUND') {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\.\/lib\/config['"]/.test(err.message)) {
     config = null;
   } else {
     throw err;
@@ -29,7 +29,7 @@ try {
 if (!config) process.exit(0);
 
 let toolInput;
-try { toolInput = JSON.parse(process.env.TOOL_INPUT || '{}'); } catch { process.exit(0); }
+try { toolInput = JSON.parse(process.env.TOOL_INPUT || '{}'); } catch { toolInput = {}; }
 const hookType = process.env.CLAUDE_HOOK_TYPE || 'PostToolUse'; // PreToolUse or PostToolUse
 
 // Only handle work and work-pr skills

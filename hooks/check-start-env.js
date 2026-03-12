@@ -15,8 +15,8 @@
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 
-process.on('uncaughtException', () => process.exit(0));
-process.on('unhandledRejection', () => process.exit(0));
+process.on('uncaughtException', () => { console.log(JSON.stringify({ error: 'uncaught exception', apps: {} })); process.exit(0); });
+process.on('unhandledRejection', () => { console.log(JSON.stringify({ error: 'unhandled rejection', apps: {} })); process.exit(0); });
 
 // Get impacted apps from args
 let IMPACTED_APPS;

@@ -47,7 +47,7 @@ try {
   loadActions = wa.loadActions;
   analyzeActions = wa.analyzeActions;
 } catch (err) {
-  if (err && err.code === 'MODULE_NOT_FOUND') {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /['"].*lib\/work-actions['"]/.test(err.message)) {
     appendAction = () => {};
     loadActions = () => [];
     analyzeActions = () => ({});
@@ -60,7 +60,7 @@ let tp;
 try {
   tp = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
 } catch (err) {
-  if (err && err.code === 'MODULE_NOT_FOUND') {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /['"].*lib\/ticket-provider['"]/.test(err.message)) {
     tp = null;
   } else {
     throw err;

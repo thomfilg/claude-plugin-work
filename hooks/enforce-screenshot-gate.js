@@ -22,7 +22,7 @@ let config;
 try {
   config = require('../lib/config');
 } catch (err) {
-  if (err && err.code === 'MODULE_NOT_FOUND') {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\.\/lib\/config['"]/.test(err.message)) {
     config = null;
   } else {
     throw err;
