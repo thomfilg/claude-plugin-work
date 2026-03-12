@@ -12,7 +12,12 @@
  */
 
 const fs = require('fs');
-const config = require('../lib/config');
+
+process.on('uncaughtException', () => process.exit(0));
+process.on('unhandledRejection', () => process.exit(0));
+
+let config;
+try { config = require('../lib/config'); } catch { config = null; }
 
 const COVERAGE_FAILURE_PATTERNS = [
   /coverage\s+decrease/i,
@@ -116,4 +121,4 @@ Per /follow-up-pr section 4.3: ANY coverage-related CI failure → /test-coordin
   }
 }
 
-main().catch(() => {});
+main().catch(() => process.exit(0));

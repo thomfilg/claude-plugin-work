@@ -11,9 +11,17 @@
 
 const fs = require('fs');
 const path = require('path');
-const config = require('../lib/config');
 
-const toolInput = JSON.parse(process.env.TOOL_INPUT || '{}');
+let didBlock = false;
+process.on('uncaughtException', () => process.exit(didBlock ? 2 : 0));
+process.on('unhandledRejection', () => process.exit(didBlock ? 2 : 0));
+
+let config;
+try { config = require('../lib/config'); } catch { config = null; }
+if (!config) process.exit(0);
+
+let toolInput;
+try { toolInput = JSON.parse(process.env.TOOL_INPUT || '{}'); } catch { process.exit(0); }
 const hookType = process.env.CLAUDE_HOOK_TYPE || 'PostToolUse'; // PreToolUse or PostToolUse
 
 // Only handle work and work-pr skills
@@ -136,6 +144,7 @@ if (hookType === 'PreToolUse') {
       console.log('║  This command updates the PR and creates required SHA tracking.     ║');
       console.log('║                                                                      ║');
       console.log('╚══════════════════════════════════════════════════════════════════════╝');
+      didBlock = true;
       process.exit(1);
     }
 

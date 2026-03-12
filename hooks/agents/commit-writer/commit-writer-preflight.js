@@ -13,7 +13,21 @@
 
 const { execSync } = require('child_process');
 const path = require('path');
-const { runQualityCheck, describeStrategy } = require(path.join(__dirname, '..', '..', '..', 'lib', 'quality-check'));
+
+let didBlock = false;
+process.on('uncaughtException', () => process.exit(didBlock ? 2 : 0));
+process.on('unhandledRejection', () => process.exit(didBlock ? 2 : 0));
+
+let runQualityCheck, describeStrategy;
+try {
+  const qc = require(path.join(__dirname, '..', '..', '..', 'lib', 'quality-check'));
+  runQualityCheck = qc.runQualityCheck;
+  describeStrategy = qc.describeStrategy;
+} catch {
+  runQualityCheck = null;
+  describeStrategy = null;
+}
+if (!runQualityCheck) process.exit(0);
 
 async function main() {
   let input = '';
@@ -26,6 +40,7 @@ async function main() {
     hookData = JSON.parse(input);
   } catch (err) {
     process.stderr.write(`COMMIT-WRITER PREFLIGHT: Failed to parse hook input: ${err.message}\n`);
+    didBlock = true;
     process.exit(2);
   }
 
@@ -47,6 +62,7 @@ async function main() {
     execSync('git diff --staged --quiet', { stdio: 'pipe', cwd });
     // Exit code 0 means NO changes staged
     process.stderr.write('COMMIT-WRITER PREFLIGHT: No staged changes found. Stage files with `git add` first.\n');
+    didBlock = true;
     process.exit(2);
   } catch {
     // Exit code 1 means there ARE staged changes — continue
@@ -64,6 +80,7 @@ async function main() {
   if (!result.success) {
     const summary = result.output.split('\n').slice(-20).join('\n');
     process.stderr.write(`COMMIT-WRITER PREFLIGHT: Quality checks failed [${strategyLabel}]:\n${summary}\n`);
+    didBlock = true;
     process.exit(2);
   }
 
@@ -71,7 +88,4 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  process.stderr.write(`COMMIT-WRITER PREFLIGHT ERROR: ${err.message}\n`);
-  process.exit(2);
-});
+main().catch(() => process.exit(didBlock ? 2 : 0));

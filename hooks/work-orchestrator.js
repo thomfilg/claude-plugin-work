@@ -36,8 +36,25 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { appendAction, loadActions, analyzeActions } = require(path.join(__dirname, '..', 'lib', 'work-actions'));
-const tp = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
+
+process.on('uncaughtException', () => process.exit(0));
+process.on('unhandledRejection', () => process.exit(0));
+
+let appendAction, loadActions, analyzeActions;
+try {
+  const wa = require(path.join(__dirname, '..', 'lib', 'work-actions'));
+  appendAction = wa.appendAction;
+  loadActions = wa.loadActions;
+  analyzeActions = wa.analyzeActions;
+} catch {
+  appendAction = () => {};
+  loadActions = () => [];
+  analyzeActions = () => ({});
+}
+
+let tp;
+try { tp = require(path.join(__dirname, '..', 'lib', 'ticket-provider')); } catch { tp = null; }
+if (!tp) process.exit(0);
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 

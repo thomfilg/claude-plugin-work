@@ -16,6 +16,9 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+process.on('uncaughtException', () => process.exit(0));
+process.on('unhandledRejection', () => process.exit(0));
+
 const WORKFLOWS_DIR = path.join(__dirname, '..', 'workflows');
 const ENGINE_PATH = path.join(__dirname, '..', 'lib', 'workflow-engine.js');
 
