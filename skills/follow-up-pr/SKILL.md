@@ -171,7 +171,7 @@ The script automatically classifies review comments by priority:
 | Reviewer | Blocking (must fix) | Non-blocking (ignore) |
 |----------|--------------------|-----------------------|
 | **Cursor** (`cursor-ai[bot]`) | severity: critical/high/major/medium/moderate | severity: minor/low/nitpick/trivial/suggestion |
-| **Copilot** (`copilot-pull-request-reviewer`) | Comments WITHOUT `[nitpick]` tag | Comments WITH `[nitpick]` tag |
+| **Copilot** (`copilot-pull-request-reviewer`) | `[critical]`, `[high]`, `[medium]`, or no tag | `[low]` or `[nitpick]` tags |
 | **Human reviewers** | Always blocking | — |
 
 - **Blocking reviews** (medium/high priority) → you MUST fix these

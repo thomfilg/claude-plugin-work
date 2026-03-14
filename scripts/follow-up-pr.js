@@ -321,9 +321,12 @@ function getReviews(prNumber) {
     while (true) {
       const pageData = ghExec(['api', `repos/${repo}/pulls/${prNumber}/comments?per_page=${perPage}&page=${page}`]);
       if (!Array.isArray(pageData) || pageData.length === 0) break;
-      // Filter out outdated comments: when `line` is null but `original_line`
-      // exists, the code the comment referenced has changed — it's stale.
-      const activeComments = pageData.filter((cm) => cm.line !== null);
+      // Filter out stale comments: line=null AND original_line exists means
+      // the code changed since the comment was made. Keep file-level comments
+      // (both line and original_line null) and current-line comments.
+      const activeComments = pageData.filter(
+        (cm) => !(cm.line === null && cm.original_line != null)
+      );
       comments.push(...activeComments.map((cm) => ({
         id: cm.id,
         author: cm.user?.login || 'unknown',
@@ -351,7 +354,7 @@ function getReviews(prNumber) {
     const requestedLogins = (requested.users || []).map((u) => u.login.toLowerCase());
     // Map known bot display names to their reviewer login names
     const botLoginAliases = {
-      'copilot-pull-request-reviewer': ['copilot'],
+      'copilot-pull-request-reviewer': ['copilot', 'copilot-pull-request-reviewer'],
       'cursor-ai[bot]': ['cursor-ai[bot]', 'cursor-ai'],
     };
     for (const bot of botReviewers) {
@@ -383,7 +386,12 @@ function getReviews(prNumber) {
   const isBotAuthor = (author) => botReviewers.includes(author);
   const actionable = reviews.filter(
     (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body && !isBotAuthor(r.author))
-  ).map((r) => ({ ...r, priority: classifyCommentPriority(r.author, r.body) }));
+  ).map((r) => {
+    const priority = classifyCommentPriority(r.author, r.body);
+    // CHANGES_REQUESTED is always at least medium (blocking), regardless of severity tags
+    const effectivePriority = (r.state === 'CHANGES_REQUESTED' && priority === 'low') ? 'medium' : priority;
+    return { ...r, priority: effectivePriority };
+  });
 
   // Classify inline comments by priority
   const classifiedComments = comments.map((cm) => ({
