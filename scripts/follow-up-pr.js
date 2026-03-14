@@ -321,12 +321,15 @@ function getReviews(prNumber) {
     while (true) {
       const pageData = ghExec(['api', `repos/${repo}/pulls/${prNumber}/comments?per_page=${perPage}&page=${page}`]);
       if (!Array.isArray(pageData) || pageData.length === 0) break;
-      comments.push(...pageData.map((cm) => ({
+      // Filter out outdated comments: when `line` is null but `original_line`
+      // exists, the code the comment referenced has changed — it's stale.
+      const activeComments = pageData.filter((cm) => cm.line !== null);
+      comments.push(...activeComments.map((cm) => ({
         id: cm.id,
         author: cm.user?.login || 'unknown',
         body: (cm.body || '').trim(),
         path: cm.path || null,
-        line: cm.line || cm.original_line || null,
+        line: cm.line || null,
         state: 'COMMENTED',
       })));
       if (pageData.length < perPage) break;
