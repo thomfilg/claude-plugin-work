@@ -376,9 +376,13 @@ function getReviews(prNumber) {
     }
   }
 
-  // Actionable reviews: CHANGES_REQUESTED or COMMENTED with body
+  // Actionable reviews:
+  // - CHANGES_REQUESTED: always actionable (human or bot)
+  // - COMMENTED with body: actionable for humans, but bot COMMENTED reviews
+  //   are typically informational summaries (not action items) — skip them.
+  const isBotAuthor = (author) => botReviewers.includes(author);
   const actionable = reviews.filter(
-    (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body)
+    (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body && !isBotAuthor(r.author))
   ).map((r) => ({ ...r, priority: classifyCommentPriority(r.author, r.body) }));
 
   // Classify inline comments by priority
