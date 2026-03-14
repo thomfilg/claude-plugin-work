@@ -36,25 +36,8 @@ function exec(cmd, options = {}) {
   }
 }
 
-/**
- * Detect the correct base branch for the repository.
- * Checks origin/HEAD symbolic ref, then falls back to common branch names.
- */
-function getBaseBranch() {
-  // 1. Explicit repo config (highest priority)
-  if (config.BASE_BRANCH) return `origin/${config.BASE_BRANCH}`;
-
-  // 2. Git symbolic ref detection
-  const headRef = exec('git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null');
-  if (headRef) return headRef.replace('refs/remotes/', '');
-
-  // 3. Probe common branch names
-  for (const branch of ['origin/main', 'origin/dev', 'origin/master']) {
-    if (exec(`git rev-parse --verify ${branch} 2>/dev/null`)) return branch;
-  }
-
-  return 'origin/main';
-}
+// Use centralized getBaseBranch() from config
+const getBaseBranch = config.getBaseBranch;
 
 /**
  * Get the main worktree path
@@ -167,7 +150,7 @@ function getImpactedApps() {
   if (!output) return [];
 
   const apps = new Set();
-  const packages = [];
+  const packages = new Set();
   const lines = output.split('\n');
 
   for (const line of lines) {
@@ -177,14 +160,14 @@ function getImpactedApps() {
     }
     const pkgMatch = line.match(/^packages\/([^/]+)\//);
     if (pkgMatch) {
-      packages.push(pkgMatch[1]);
+      packages.add(pkgMatch[1]);
     }
   }
 
   // If no direct app changes but packages changed, all web apps may be affected
   const webAppNames = config.webAppNames();
-  if (apps.size === 0 && packages.length > 0 && webAppNames.length > 0) {
-    console.error(`No direct app changes but ${packages.length} package(s) changed — including all web apps for QA`);
+  if (apps.size === 0 && packages.size > 0 && webAppNames.length > 0) {
+    console.error(`No direct app changes but ${packages.size} package(s) changed — including all web apps for QA`);
     return webAppNames;
   }
 

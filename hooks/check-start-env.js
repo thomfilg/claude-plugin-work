@@ -332,8 +332,13 @@ async function main() {
   let webAppsToStart = IMPACTED_APPS.filter(app => WEB_APPS[app]);
 
   if (webAppsToStart.length === 0) {
-    console.error('No directly impacted apps detected — starting all web apps for mandatory QA');
-    webAppsToStart = Object.keys(WEB_APPS);
+    const allWebApps = Object.keys(WEB_APPS);
+    if (allWebApps.length === 0) {
+      console.error('No impacted apps and no WEB_APPS configured in .env — nothing to start');
+    } else {
+      console.error(`No directly impacted apps detected — starting all ${allWebApps.length} web apps for mandatory QA`);
+      webAppsToStart = allWebApps;
+    }
   }
 
   for (const appName of webAppsToStart) {

@@ -39,21 +39,8 @@ function safeExec(cmd, options = {}) {
   }
 }
 
-function getBaseBranch() {
-  // 1. Explicit repo config (highest priority)
-  if (config.BASE_BRANCH) return `origin/${config.BASE_BRANCH}`;
-
-  // 2. Git symbolic ref detection
-  const headRef = safeExec('git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null');
-  if (headRef) return headRef.replace('refs/remotes/', '');
-
-  // 3. Probe common branch names
-  for (const branch of ['origin/main', 'origin/dev', 'origin/master']) {
-    if (safeExec(`git rev-parse --verify ${branch} 2>/dev/null`)) return branch;
-  }
-
-  return 'origin/main';
-}
+// Use centralized getBaseBranch() from config
+const getBaseBranch = config.getBaseBranch;
 
 function getReportFolder(instanceId) {
   return path.join(TASKS_BASE, instanceId);
@@ -84,17 +71,17 @@ function getImpactedApps() {
   const output = safeExec(`git diff --name-only ${baseBranch}...HEAD`);
   if (!output) return [];
   const apps = new Set();
-  const packages = [];
+  const packages = new Set();
   for (const line of output.split('\n')) {
     const appMatch = line.match(/^apps\/([^/]+)\//);
     if (appMatch) apps.add(appMatch[1]);
     const pkgMatch = line.match(/^packages\/([^/]+)\//);
-    if (pkgMatch) packages.push(pkgMatch[1]);
+    if (pkgMatch) packages.add(pkgMatch[1]);
   }
 
   // If no direct app changes but packages changed, all web apps may be affected
   const webAppNames = config.webAppNames();
-  if (apps.size === 0 && packages.length > 0 && webAppNames.length > 0) {
+  if (apps.size === 0 && packages.size > 0 && webAppNames.length > 0) {
     return webAppNames;
   }
 
