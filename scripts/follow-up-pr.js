@@ -269,9 +269,11 @@ function getBotReviewers() {
 function classifyCommentPriority(author, body) {
   const lower = (body || '').toLowerCase();
 
-  // Copilot: [nitpick] flag = low priority
-  if (author === 'copilot-pull-request-reviewer') {
-    if (/\[nitpick\]/i.test(body)) return 'low';
+  // Copilot: [severity] tags (from copilot-instructions.md) or [nitpick] flag
+  if (author === 'copilot-pull-request-reviewer' || author === 'Copilot') {
+    if (/\[nitpick\]/i.test(body) || /\[low\]/i.test(body)) return 'low';
+    if (/\[critical\]/i.test(body) || /\[high\]/i.test(body)) return 'high';
+    if (/\[medium\]/i.test(body)) return 'medium';
     return 'medium';
   }
 
@@ -334,20 +336,40 @@ function getReviews(prNumber) {
     // Non-critical — inline comments are supplementary
   }
 
-  // Detect pending bot reviews
+  // Detect pending bot reviews via GitHub REST API (requested_reviewers)
+  // gh pr view --json reviewRequests doesn't reliably include bots,
+  // so we use the REST API which correctly lists pending bot reviewers.
   const botReviewers = getBotReviewers();
-  const reviewedByBots = new Set(reviews.map((r) => r.author));
-  const checksRunning = (data.statusCheckRollup || []).some(
-    (ck) => ck.status !== 'COMPLETED'
-  );
-
-  const pendingBots = [];
-  for (const bot of botReviewers) {
-    if (!reviewedByBots.has(bot)) {
-      if (checksRunning) {
+  let pendingBots = [];
+  try {
+    const repoInfo = ghExec('repo view --json nameWithOwner');
+    const repo = repoInfo.nameWithOwner;
+    const requested = ghExec(['api', `repos/${repo}/pulls/${prNumber}/requested_reviewers`]);
+    const requestedLogins = (requested.users || []).map((u) => u.login.toLowerCase());
+    // Map known bot display names to their reviewer login names
+    const botLoginAliases = {
+      'copilot-pull-request-reviewer': ['copilot'],
+      'cursor-ai[bot]': ['cursor-ai[bot]', 'cursor-ai'],
+    };
+    for (const bot of botReviewers) {
+      const aliases = botLoginAliases[bot] || [bot.toLowerCase()];
+      const isPending = requestedLogins.some((login) =>
+        aliases.some((alias) => login === alias || login.includes(alias))
+      );
+      if (isPending) {
         pendingBots.push(bot);
       }
-      // If all checks done and bot hasn't reviewed, it wasn't requested — skip
+    }
+  } catch {
+    // Fallback: use the old heuristic (CI still running + bot hasn't reviewed)
+    const reviewedByBots = new Set(reviews.map((r) => r.author));
+    const checksRunning = (data.statusCheckRollup || []).some(
+      (ck) => ck.status !== 'COMPLETED'
+    );
+    for (const bot of botReviewers) {
+      if (!reviewedByBots.has(bot) && checksRunning) {
+        pendingBots.push(bot);
+      }
     }
   }
 
@@ -531,7 +553,7 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
     lines.push(`→ Resolve conflicts, push, then re-run: ${c.dim('node scripts/follow-up-pr.js')}`);
   } else if (!isMergeReady) {
     lines.push(`→ Merge status not ready (${prInfo.mergeable || 'UNKNOWN'}). Waiting...`);
-  } else if (ci.status === 'passing' && (!reviews.hasBlocking || opts.noReviews) && isMergeReady) {
+  } else if (ci.status === 'passing' && (!reviews.hasBlocking || opts.noReviews) && reviews.pendingBots.length === 0 && isMergeReady) {
     lines.push(c.green('═══════════════════════════════════════'));
     lines.push(c.green('  PR READY TO REVIEW'));
     lines.push(c.green('═══════════════════════════════════════'));
@@ -681,7 +703,12 @@ async function main() {
   process.exit(1);
 }
 
-main().catch((err) => {
-  console.error(c.red(`Unexpected error: ${err.message}`));
-  process.exit(2);
-});
+// Export for testing; guard main() so it only runs when executed directly
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(c.red(`Unexpected error: ${err.message}`));
+    process.exit(2);
+  });
+}
+
+module.exports = { classifyCommentPriority, isBlockingPriority };

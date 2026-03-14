@@ -435,9 +435,9 @@ If 10 attempts are reached without success:
 User: `/follow-up-pr`
 
 Claude will:
-1. Run `node scripts/follow-up-pr.js` → script waits for CI → exit 1 (CI failing: unit-tests)
-2. Diagnose: coverage report glob pattern issue
-3. Fix: update glob pattern in ci.yml
+1. Run `node scripts/follow-up-pr.js` → script waits for CI → exit 1 (CI failing: lint)
+2. Diagnose: unused import in src/utils.ts
+3. Fix: remove the unused import
 4. Commit and push
 5. Re-run script → script waits for CI → exit 1 (CI passes, but 2 blocking review comments [MEDIUM])
 6. Address blocking review feedback, commit and push
