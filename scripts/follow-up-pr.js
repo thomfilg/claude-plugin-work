@@ -713,8 +713,8 @@ async function main() {
     }
 
     // Blocking reviews or conflicts → exit 1 (agent needs to fix)
-    // But if only pending bot reviews (no blocking reviews, no conflicts), keep polling
-    const hasPendingBotsOnly = reviews.pendingBots.length > 0 && !reviews.hasBlocking && !isConflicting;
+    // Only keep polling for pending bots when the PR is otherwise fully mergeable
+    const hasPendingBotsOnly = reviews.pendingBots.length > 0 && !reviews.hasBlocking && !isConflicting && isMergeReady;
     if (ciPassed && !hasPendingBotsOnly && (reviews.hasBlocking || !isMergeReady)) {
       state.finalStatus = reviews.hasBlocking ? 'reviews-blocking' : isConflicting ? 'conflicting' : 'not-merge-ready';
       saveState(state);
