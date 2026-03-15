@@ -136,3 +136,74 @@ has_bin() {
   local cmd="$2"
   [ -x "$dir/node_modules/.bin/$cmd" ] || command -v "$cmd" &>/dev/null
 }
+
+# ─── Detect test runner (vitest > jest > node --test) ───
+# Like detect_tool but also checks if the "test" script uses `node --test`
+detect_test_runner() {
+  local pkg_json="$1"
+
+  if [ ! -f "$pkg_json" ]; then
+    echo ""
+    return
+  fi
+
+  # Check for vitest/jest in deps first
+  local tool
+  tool=$(detect_tool "$pkg_json" "vitest" "jest")
+  if [ -n "$tool" ]; then
+    echo "$tool"
+    return
+  fi
+
+  # Fall back: check if "test" script contains "node --test"
+  local test_script
+  test_script=$(node -e "try{const p=require('$pkg_json');console.log((p.scripts&&p.scripts.test)||'')}catch{console.log('')}" 2>/dev/null)
+  if echo "$test_script" | grep -q 'node --test'; then
+    echo "node-test"
+    return
+  fi
+
+  echo ""
+}
+
+# ─── Map source files to their __tests__/*.test.js counterparts ───
+# Files already in __tests__/ are passed through. Source files are mapped
+# to __tests__/<basename>.test.js counterparts. Files with no matching
+# test are silently skipped.
+# Args: files (newline-separated, relative to root), root dir
+map_to_test_files() {
+  local files="$1"
+  local root="$2"
+  local result=""
+
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+
+    # Already a test file — pass through if it exists
+    if echo "$f" | grep -qE '/__tests__/.*\.test\.[jt]sx?$'; then
+      if [ -f "$root/$f" ]; then
+        result="${result}${f}"$'\n'
+      fi
+      continue
+    fi
+
+    # Map source → __tests__/basename.test.js
+    local dir base test_path
+    dir=$(dirname "$f")
+    base=$(basename "$f" | sed -E 's/\.[^.]+$//')
+    test_path="${dir}/__tests__/${base}.test.js"
+    if [ -f "$root/$test_path" ]; then
+      result="${result}${test_path}"$'\n'
+      continue
+    fi
+
+    # Also try .test.ts
+    test_path="${dir}/__tests__/${base}.test.ts"
+    if [ -f "$root/$test_path" ]; then
+      result="${result}${test_path}"$'\n'
+    fi
+  done <<< "$files"
+
+  # Deduplicate and trim trailing newline
+  echo "$result" | sort -u | sed '/^$/d'
+}
