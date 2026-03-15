@@ -322,9 +322,11 @@ function getReviews(prNumber) {
     try {
       const prData = ghExec(['pr', 'view', String(prNumber), '--json', 'commits']);
       if (prData.commits) {
-        for (const c of prData.commits) branchCommits.add(c.oid);
+        for (const commit of prData.commits) branchCommits.add(commit.oid);
       }
-    } catch { /* ignore — fall back to line-based staleness only */ }
+    } catch (err) {
+      console.error(c.dim(`  (could not fetch branch commits: ${err.message?.slice(0, 80)})`));
+    }
 
     const perPage = 100;
     let page = 1;
