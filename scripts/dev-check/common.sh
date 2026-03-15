@@ -187,21 +187,19 @@ map_to_test_files() {
       continue
     fi
 
-    # Map source → __tests__/basename.test.js
+    # Map source → __tests__/basename.test.{js,ts,jsx,tsx}
     local dir base test_path
     dir=$(dirname "$f")
     base=$(basename "$f" | sed -E 's/\.[^.]+$//')
-    test_path="${dir}/__tests__/${base}.test.js"
-    if [ -f "$root/$test_path" ]; then
-      result="${result}${test_path}"$'\n'
-      continue
-    fi
-
-    # Also try .test.ts
-    test_path="${dir}/__tests__/${base}.test.ts"
-    if [ -f "$root/$test_path" ]; then
-      result="${result}${test_path}"$'\n'
-    fi
+    local found=false
+    for ext in js ts jsx tsx; do
+      test_path="${dir}/__tests__/${base}.test.${ext}"
+      if [ -f "$root/$test_path" ]; then
+        result="${result}${test_path}"$'\n'
+        found=true
+        break
+      fi
+    done
   done <<< "$files"
 
   # Deduplicate and trim trailing newline

@@ -173,4 +173,36 @@ describe('map_to_test_files', () => {
     const result = runBashFunction(`map_to_test_files "hooks/agents/gate.js" "${tmpDir}"`);
     assert.equal(result, 'hooks/agents/__tests__/gate.test.js');
   });
+
+  it('maps source file to __tests__/basename.test.jsx', () => {
+    const testDir = path.join(tmpDir, 'components', '__tests__');
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'Button.test.jsx'), '// test');
+
+    const result = runBashFunction(`map_to_test_files "components/Button.jsx" "${tmpDir}"`);
+    assert.equal(result, 'components/__tests__/Button.test.jsx');
+  });
+
+  it('maps source file to __tests__/basename.test.tsx', () => {
+    const testDir = path.join(tmpDir, 'components', '__tests__');
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'Card.test.tsx'), '// test');
+
+    const result = runBashFunction(`map_to_test_files "components/Card.tsx" "${tmpDir}"`);
+    assert.equal(result, 'components/__tests__/Card.test.tsx');
+  });
+
+  it('handles space-separated input (monorepo mode)', () => {
+    const testDir = path.join(tmpDir, 'lib', '__tests__');
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'a.test.js'), '// test');
+    fs.writeFileSync(path.join(testDir, 'b.test.js'), '// test');
+
+    // Simulate monorepo PKG_FILES which are space-separated, normalized via tr
+    const files = 'lib/a.js lib/b.js';
+    const normalized = files.replace(/ /g, '\\n');
+    const result = runBashFunction(`map_to_test_files "$(echo -e '${normalized}')" "${tmpDir}"`);
+    assert.match(result, /lib\/__tests__\/a\.test\.js/);
+    assert.match(result, /lib\/__tests__\/b\.test\.js/);
+  });
 });

@@ -83,8 +83,11 @@ run_tests() {
       }
       ;;
     node-test)
+      # Normalize space-separated paths (from monorepo mode) to newline-separated
+      local normalized_files
+      normalized_files=$(echo "$files" | tr ' ' '\n' | sed '/^$/d')
       local test_files
-      test_files=$(map_to_test_files "$files" "$dir")
+      test_files=$(map_to_test_files "$normalized_files" "$dir")
       if [ -z "$test_files" ]; then
         echo -e "${YELLOW}No matching test files found for changed files${NC}"
         return 0
