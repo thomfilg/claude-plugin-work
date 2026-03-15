@@ -157,7 +157,7 @@ detect_test_runner() {
 
   # Fall back: check if "test" script contains "node --test"
   local test_script
-  test_script=$(node -e "try{const p=require('$pkg_json');console.log((p.scripts&&p.scripts.test)||'')}catch{console.log('')}" 2>/dev/null)
+  test_script=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log((p.scripts&&p.scripts.test)||'')}catch{console.log('')}" "$pkg_json" 2>/dev/null)
   if echo "$test_script" | grep -q 'node --test'; then
     echo "node-test"
     return
@@ -180,7 +180,7 @@ map_to_test_files() {
     [ -z "$f" ] && continue
 
     # Already a test file — pass through if it exists
-    if echo "$f" | grep -qE '/__tests__/.*\.test\.[jt]sx?$'; then
+    if echo "$f" | grep -qE '(^|/)__tests__/.*\.test\.[jt]sx?$'; then
       if [ -f "$root/$f" ]; then
         result="${result}${f}"$'\n'
       fi
@@ -188,15 +188,19 @@ map_to_test_files() {
     fi
 
     # Map source → __tests__/basename.test.{js,ts,jsx,tsx}
-    local dir base test_path
+    local dir base test_path prefix
     dir=$(dirname "$f")
     base=$(basename "$f" | sed -E 's/\.[^.]+$//')
-    local found=false
+    # Handle root-level files where dirname returns "."
+    if [ "$dir" = "." ]; then
+      prefix=""
+    else
+      prefix="${dir}/"
+    fi
     for ext in js ts jsx tsx; do
-      test_path="${dir}/__tests__/${base}.test.${ext}"
+      test_path="${prefix}__tests__/${base}.test.${ext}"
       if [ -f "$root/$test_path" ]; then
         result="${result}${test_path}"$'\n'
-        found=true
         break
       fi
     done

@@ -205,4 +205,22 @@ describe('map_to_test_files', () => {
     assert.match(result, /lib\/__tests__\/a\.test\.js/);
     assert.match(result, /lib\/__tests__\/b\.test\.js/);
   });
+
+  it('passes through root-level test files', () => {
+    const testDir = path.join(tmpDir, '__tests__');
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'root.test.js'), '// test');
+
+    const result = runBashFunction(`map_to_test_files "__tests__/root.test.js" "${tmpDir}"`);
+    assert.equal(result, '__tests__/root.test.js');
+  });
+
+  it('maps root-level source file to __tests__/basename.test.js', () => {
+    const testDir = path.join(tmpDir, '__tests__');
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'index.test.js'), '// test');
+
+    const result = runBashFunction(`map_to_test_files "index.js" "${tmpDir}"`);
+    assert.equal(result, '__tests__/index.test.js');
+  });
 });
