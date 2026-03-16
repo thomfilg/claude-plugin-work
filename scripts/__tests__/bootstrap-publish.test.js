@@ -1,7 +1,8 @@
-const { describe, it, beforeEach, afterEach } = require('node:test');
+const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { execFileSync } = require('child_process');
 const path = require('path');
+const { buildCommitCommands, buildPrCommands } = require('../bootstrap-publish.js');
 
 const SCRIPT = path.join(__dirname, '..', 'bootstrap-publish.js');
 
@@ -61,6 +62,66 @@ describe('bootstrap-publish.js', () => {
     it('skips when both env vars are not set', () => {
       const output = run(['--pr', '/tmp', 'branch', 'TICKET-1'], { ENABLE_EMPTY_COMMIT: '', ENABLE_DRAFT_PR: '' });
       assert.match(output, /skipping/i);
+    });
+  });
+
+  describe('buildCommitCommands', () => {
+    it('returns git commit and push commands', () => {
+      const cmds = buildCommitCommands('my-branch', 'PROJ-123');
+      assert.equal(cmds.length, 2);
+
+      assert.equal(cmds[0].bin, 'git');
+      assert.deepEqual(cmds[0].args, ['commit', '--allow-empty', '-m', 'chore: bootstrap PROJ-123']);
+
+      assert.equal(cmds[1].bin, 'git');
+      assert.deepEqual(cmds[1].args, ['push', '-u', 'origin', 'my-branch']);
+    });
+
+    it('interpolates ticket ID into commit message', () => {
+      const cmds = buildCommitCommands('branch', 'ABC-999');
+      assert.equal(cmds[0].args[3], 'chore: bootstrap ABC-999');
+    });
+  });
+
+  describe('buildPrCommands', () => {
+    it('returns gh pr create command with --draft flag', () => {
+      const cmds = buildPrCommands('PROJ-123');
+      assert.equal(cmds.length, 1);
+      assert.equal(cmds[0].bin, 'gh');
+      assert.ok(cmds[0].args.includes('--draft'));
+    });
+
+    it('sets correct PR title with ticket ID', () => {
+      const cmds = buildPrCommands('PROJ-123');
+      const titleIdx = cmds[0].args.indexOf('--title') + 1;
+      assert.equal(cmds[0].args[titleIdx], 'PROJ-123 - chore: bootstrap task');
+    });
+
+    it('produces body with real newlines, not escaped \\n', () => {
+      const cmds = buildPrCommands('PROJ-123');
+      const bodyIdx = cmds[0].args.indexOf('--body') + 1;
+      const body = cmds[0].args[bodyIdx];
+
+      assert.ok(body.includes('\n'), 'body should contain real newlines');
+      assert.ok(!body.includes('\\n'), 'body should not contain escaped \\n');
+    });
+
+    it('includes ticket ID in body summary', () => {
+      const cmds = buildPrCommands('PROJ-456');
+      const bodyIdx = cmds[0].args.indexOf('--body') + 1;
+      const body = cmds[0].args[bodyIdx];
+
+      assert.ok(body.includes('Bootstrap PR for PROJ-456'));
+    });
+
+    it('includes status checklist in body', () => {
+      const cmds = buildPrCommands('PROJ-123');
+      const bodyIdx = cmds[0].args.indexOf('--body') + 1;
+      const body = cmds[0].args[bodyIdx];
+
+      assert.ok(body.includes('- [ ] Implementation in progress'));
+      assert.ok(body.includes('- [ ] Tests passing'));
+      assert.ok(body.includes('- [ ] Ready for review'));
     });
   });
 });

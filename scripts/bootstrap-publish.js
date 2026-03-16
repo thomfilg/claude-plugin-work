@@ -15,33 +15,14 @@
 
 const { execFileSync } = require('child_process');
 
-const args = process.argv.slice(2);
-const mode = args[0];
-const [worktreePath, branchName, ticketId] = args.slice(1);
-
-if (!mode || !worktreePath || !branchName || !ticketId) {
-  console.error('Usage: bootstrap-publish.js --commit|--pr <worktree-path> <branch-name> <ticket-id>');
-  process.exit(1);
+function buildCommitCommands(branchName, ticketId) {
+  return [
+    { bin: 'git', args: ['commit', '--allow-empty', '-m', `chore: bootstrap ${ticketId}`] },
+    { bin: 'git', args: ['push', '-u', 'origin', branchName] },
+  ];
 }
 
-function run(bin, cmdArgs) {
-  console.log(`$ ${bin} ${cmdArgs.join(' ')}`);
-  execFileSync(bin, cmdArgs, { cwd: worktreePath, stdio: 'inherit' });
-}
-
-if (mode === '--commit') {
-  if (!process.env.ENABLE_EMPTY_COMMIT) {
-    console.log('ENABLE_EMPTY_COMMIT not set, skipping');
-    process.exit(0);
-  }
-  run('git', ['commit', '--allow-empty', '-m', `chore: bootstrap ${ticketId}`]);
-  run('git', ['push', '-u', 'origin', branchName]);
-} else if (mode === '--pr') {
-  // Both required: without a commit there's no pushed branch to create a PR from
-  if (!process.env.ENABLE_EMPTY_COMMIT || !process.env.ENABLE_DRAFT_PR) {
-    console.log('ENABLE_EMPTY_COMMIT or ENABLE_DRAFT_PR not set, skipping');
-    process.exit(0);
-  }
+function buildPrCommands(ticketId) {
   const body = [
     '## Summary',
     `Bootstrap PR for ${ticketId}`,
@@ -51,8 +32,47 @@ if (mode === '--commit') {
     '- [ ] Tests passing',
     '- [ ] Ready for review',
   ].join('\n');
-  run('gh', ['pr', 'create', '--title', `${ticketId} - chore: bootstrap task`, '--body', body, '--draft']);
-} else {
-  console.error(`Unknown mode: ${mode}. Use --commit or --pr`);
-  process.exit(1);
+  return [
+    { bin: 'gh', args: ['pr', 'create', '--title', `${ticketId} - chore: bootstrap task`, '--body', body, '--draft'] },
+  ];
+}
+
+function exec(commands, worktreePath) {
+  for (const { bin, args } of commands) {
+    console.log(`$ ${bin} ${args.join(' ')}`);
+    execFileSync(bin, args, { cwd: worktreePath, stdio: 'inherit' });
+  }
+}
+
+// Exported for testing
+module.exports = { buildCommitCommands, buildPrCommands };
+
+// CLI entry point
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const mode = args[0];
+  const [worktreePath, branchName, ticketId] = args.slice(1);
+
+  if (!mode || !worktreePath || !branchName || !ticketId) {
+    console.error('Usage: bootstrap-publish.js --commit|--pr <worktree-path> <branch-name> <ticket-id>');
+    process.exit(1);
+  }
+
+  if (mode === '--commit') {
+    if (!process.env.ENABLE_EMPTY_COMMIT) {
+      console.log('ENABLE_EMPTY_COMMIT not set, skipping');
+      process.exit(0);
+    }
+    exec(buildCommitCommands(branchName, ticketId), worktreePath);
+  } else if (mode === '--pr') {
+    // Both required: without a commit there's no pushed branch to create a PR from
+    if (!process.env.ENABLE_EMPTY_COMMIT || !process.env.ENABLE_DRAFT_PR) {
+      console.log('ENABLE_EMPTY_COMMIT or ENABLE_DRAFT_PR not set, skipping');
+      process.exit(0);
+    }
+    exec(buildPrCommands(ticketId), worktreePath);
+  } else {
+    console.error(`Unknown mode: ${mode}. Use --commit or --pr`);
+    process.exit(1);
+  }
 }
