@@ -37,6 +37,7 @@ if (mode === '--commit') {
   run('git', ['commit', '--allow-empty', '-m', `chore: bootstrap ${ticketId}`]);
   run('git', ['push', '-u', 'origin', branchName]);
 } else if (mode === '--pr') {
+  // Both required: without a commit there's no pushed branch to create a PR from
   if (!process.env.ENABLE_EMPTY_COMMIT || !process.env.ENABLE_DRAFT_PR) {
     console.log('ENABLE_EMPTY_COMMIT or ENABLE_DRAFT_PR not set, skipping');
     process.exit(0);
