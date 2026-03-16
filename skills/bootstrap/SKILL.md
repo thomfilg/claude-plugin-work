@@ -173,7 +173,7 @@ Next steps:
 | 5 | Copy credentials, .claude, symlink CLAUDE.md, symlink .env files, create .env.local |
 | 6 | pnpm install |
 | 7 | Initial commit + push (empty commit if `ENABLE_EMPTY_COMMIT`) |
-| 8 | Create draft PR (if `ENABLE_DRAFT_PR`) |
+| 8 | Create draft PR (if `ENABLE_EMPTY_COMMIT` + `ENABLE_DRAFT_PR`) |
 | 9 | Display summary |
 
 ## Notes
@@ -182,6 +182,6 @@ Next steps:
 - Default project key: configured via `JIRA_PROJECT_KEY` env var
 - Worktree path: `../$REPO_NAME-<TICKET-ID>`
 - Branch format: `<TICKET-ID>-<kebab-case-description>`
-- Draft PRs created when `ENABLE_DRAFT_PR` is set
+- Draft PRs created when both `ENABLE_EMPTY_COMMIT` and `ENABLE_DRAFT_PR` are set
 - Empty bootstrap commits when `ENABLE_EMPTY_COMMIT` is set
 - `.env.local` is created for `as-dashboard` with `VITE_TITLE_PREFIX` to identify browser tabs per agent
