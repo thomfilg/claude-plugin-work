@@ -120,13 +120,12 @@ const WORKFLOWS = [
   },
 ];
 
-// Protected state file basenames — block direct Edit/Write/MultiEdit
-const PROTECTED_STATE_BASENAMES = new Set([
-  ...WORKFLOWS.map(wf => wf.stateFile),    // .work-state.json, .workflow-state.json
-  ...WORKFLOWS.map(wf => wf.evidenceFile), // .step-evidence.json, .step-evidence-work-pr.json
-  '.work-actions.json',
-  '.pr-update-sha',
-]);
+// Protected state file basenames — block direct Edit/Write/MultiEdit/Bash writes
+const { buildProtectedBasenames, basenameProtector, createFileProtector } = require(path.join(__dirname, '..', 'lib', 'protect-state-files'));
+const PROTECTED_STATE_BASENAMES = buildProtectedBasenames(WORKFLOWS, ['.work-actions.json', '.pr-update-sha']);
+const stateFileProtector = createFileProtector({
+  isProtected: basenameProtector(PROTECTED_STATE_BASENAMES),
+});
 
 // (Patch 7) Validate workflow config at startup
 function validateWorkflow(wf) {
@@ -308,41 +307,16 @@ function handlePreToolUse(hookData) {
 
   // Rule 3: Block direct writes to workflow state files
   // Prevents agents from bypassing the state machine by directly editing state files
-
-  // 3a. Edit/Write/MultiEdit — check file_path basename
-  if (toolName === 'Write' || toolName === 'Edit' || toolName === 'MultiEdit') {
-    const filePath = toolInput?.file_path || '';
-    const basename = path.basename(filePath);
-    if (PROTECTED_STATE_BASENAMES.has(basename)) {
-      didBlock = true;
-      process.stderr.write(
-        `BLOCKED: Direct ${toolName} to ${basename} is not allowed.\n` +
-        `State files must only be modified through the orchestrator/workflow-engine scripts.\n` +
-        `Use: node work-orchestrator.js transition ${ticketId} <step>\n`
-      );
-      process.exit(2);
-    }
-    return; // Edit/Write/MultiEdit only need Rule 3 — skip per-workflow loop
+  const rule3 = stateFileProtector.check(toolName, toolInput);
+  if (rule3.blocked) {
+    didBlock = true;
+    process.stderr.write(
+      rule3.message +
+      `Use: node work-orchestrator.js transition ${ticketId} <step>\n`
+    );
+    process.exit(2);
   }
-
-  // 3b. Bash — detect shell write operators targeting protected state files
-  if (toolName === 'Bash') {
-    const cmd = String(toolInput?.command || '');
-    const hasWriteOp = /(?:>{1,2}|\btee\b|\bcp\b|\bmv\b|\bdd\b.*\bof=)/.test(cmd);
-    if (hasWriteOp) {
-      for (const basename of PROTECTED_STATE_BASENAMES) {
-        if (cmd.includes(basename)) {
-          didBlock = true;
-          process.stderr.write(
-            `BLOCKED: Bash command writes to protected state file ${basename}.\n` +
-            `State files must only be modified through the orchestrator/workflow-engine scripts.\n` +
-            `Use: node work-orchestrator.js transition ${ticketId} <step>\n`
-          );
-          process.exit(2);
-        }
-      }
-    }
-  }
+  if (rule3.skipRemainingChecks) return; // Edit/Write/MultiEdit — skip per-workflow loop
 
   // 2. Check each workflow independently
   for (const wf of WORKFLOWS) {

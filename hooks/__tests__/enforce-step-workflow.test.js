@@ -1402,15 +1402,16 @@ describe('enforce-step-workflow', () => {
 
     // ── Source verification ─────────────────────────────────────────────────
 
-    it('source defines PROTECTED_STATE_BASENAMES Set', () => {
+    it('source uses createFileProtector from protect-state-files lib', () => {
       const hookSource = fs.readFileSync(HOOK_PATH, 'utf-8');
+      assert.ok(hookSource.includes('createFileProtector'), 'Should use createFileProtector');
       assert.ok(hookSource.includes('PROTECTED_STATE_BASENAMES'), 'Should define PROTECTED_STATE_BASENAMES');
-      assert.ok(hookSource.includes('new Set('), 'Should use a Set');
     });
 
-    it('source handles MultiEdit in Rule 3', () => {
-      const hookSource = fs.readFileSync(HOOK_PATH, 'utf-8');
-      assert.ok(hookSource.includes("'MultiEdit'"), 'Should check for MultiEdit tool');
+    it('protect-state-files lib covers MultiEdit in FILE_WRITE_TOOLS', () => {
+      const libPath = path.join(__dirname, '..', '..', 'lib', 'protect-state-files.js');
+      const libSource = fs.readFileSync(libPath, 'utf-8');
+      assert.ok(libSource.includes("'MultiEdit'"), 'Library should cover MultiEdit');
     });
   });
 });
