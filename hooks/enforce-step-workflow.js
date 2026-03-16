@@ -120,6 +120,14 @@ const WORKFLOWS = [
   },
 ];
 
+// Protected state file basenames — block direct Edit/Write/MultiEdit
+const PROTECTED_STATE_BASENAMES = new Set([
+  ...WORKFLOWS.map(wf => wf.stateFile),    // .work-state.json, .workflow-state.json
+  ...WORKFLOWS.map(wf => wf.evidenceFile), // .step-evidence.json, .step-evidence-work-pr.json
+  '.work-actions.json',
+  '.pr-update-sha',
+]);
+
 // (Patch 7) Validate workflow config at startup
 function validateWorkflow(wf) {
   const stepSet = new Set(wf.steps);
@@ -298,13 +306,12 @@ function handlePreToolUse(hookData) {
   const ticketId = getTicketId();
   if (!ticketId) return; // No ticket context → allow
 
-  // Rule 3: Block Write/Edit on workflow state files
+  // Rule 3: Block Write/Edit/MultiEdit on workflow state files
   // Prevents agents from bypassing the state machine by directly editing state files
-  if (toolName === 'Write' || toolName === 'Edit') {
+  if (toolName === 'Write' || toolName === 'Edit' || toolName === 'MultiEdit') {
     const filePath = toolInput?.file_path || '';
-    const protectedFiles = WORKFLOWS.map(wf => wf.stateFile);
     const basename = path.basename(filePath);
-    if (protectedFiles.includes(basename)) {
+    if (PROTECTED_STATE_BASENAMES.has(basename)) {
       didBlock = true;
       process.stderr.write(
         `BLOCKED: Direct ${toolName} to ${basename} is not allowed.\n` +
@@ -313,6 +320,7 @@ function handlePreToolUse(hookData) {
       );
       process.exit(2);
     }
+    return; // Edit/Write/MultiEdit only need Rule 3 — skip per-workflow loop
   }
 
   // 2. Check each workflow independently
