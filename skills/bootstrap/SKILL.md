@@ -114,7 +114,7 @@ cd "$WORKTREE_PATH"
 node ${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-publish.js --pr "$WORKTREE_PATH" "$BRANCH_NAME" "$TICKET_ID"
 ```
 
-Creates a draft PR (if `ENABLE_DRAFT_PR` is set). Skips silently if not enabled.
+Skips if `ENABLE_EMPTY_COMMIT` or `ENABLE_DRAFT_PR` is not set (no commit means no PR).
 
 ### Step 9: Report results
 
