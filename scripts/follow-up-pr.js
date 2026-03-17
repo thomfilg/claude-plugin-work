@@ -318,7 +318,7 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
         args.push('-f', `cursor=${cursor}`);
       }
       const graphqlResult = execFn(args);
-      if (graphqlResult?.errors?.length) {
+      if (graphqlResult?.errors?.length && !graphqlResult?.data) {
         throw new Error(graphqlResult.errors[0].message || 'GraphQL error');
       }
       const threadData = graphqlResult?.data?.repository?.pullRequest?.reviewThreads;
@@ -341,7 +341,7 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
               '-f', `commentCursor=${commentPageInfo.endCursor}`,
             ];
             const commentResult = execFn(commentArgs);
-            if (commentResult?.errors?.length) break;
+            if (commentResult?.errors?.length && !commentResult?.data) break;
             const nextComments = commentResult?.data?.repository?.pullRequest?.reviewThreads?.nodes?.[0]?.comments;
             for (const comment of (nextComments?.nodes || [])) {
               if (comment?.databaseId) resolved.add(comment.databaseId);

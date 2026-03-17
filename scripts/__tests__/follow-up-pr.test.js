@@ -226,10 +226,28 @@ describe('getResolvedCommentIds', () => {
     assert.equal(ids.size, 0);
   });
 
-  it('returns empty set when GraphQL returns errors field', () => {
+  it('returns empty set when GraphQL returns errors without data', () => {
     const exec = () => ({ errors: [{ message: 'Rate limited' }] });
     const ids = getResolvedCommentIds('owner/repo', 1, exec);
     assert.equal(ids.size, 0);
+  });
+
+  it('processes partial data when GraphQL returns errors with data', () => {
+    const exec = () => ({
+      errors: [{ message: 'Partial failure' }],
+      data: {
+        repository: {
+          pullRequest: {
+            reviewThreads: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [{ isResolved: true, isOutdated: false, comments: makeComments([42]) }],
+            },
+          },
+        },
+      },
+    });
+    const ids = getResolvedCommentIds('owner/repo', 1, exec);
+    assert.equal(ids.has(42), true);
   });
 
   it('handles threads with missing comments gracefully', () => {
