@@ -269,15 +269,13 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
         console.error(`Warning: ${envVarName} rejects untracked/gitignored file: ${relPath}`);
         continue;
       }
-      // Full guard chain passed: denylist → .env regex → resolve prefix → realpathSync → isFile → 256KB cap → git ls-files
-      const fileContents = fs.readFileSync(realPath, 'utf8');
-      docs += `\n--- ${relPath} ---\n${fileContents}\n`; // guarded by denylist + git-tracked check + size cap
-    } catch (readErr) { // outer catch: any guard failure above (denylist, resolve, isFile, size, git-tracked) falls through
+      // Guards passed: DOCS_DENYLIST + .env regex + resolve-prefix + realpathSync + isFile + 256KB + git-ls-files
+      docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
+    } catch (readErr) {
       console.error(`Warning: ${envVarName} skipped file (${readErr.code || readErr.message}): ${relPath}`);
-      continue;
     }
   }
-  return docs; // all paths above passed the full security guard chain
+  return docs;
 }
 
 /**
