@@ -42,24 +42,24 @@ if [ -n "${READ_DOCS_ON_TEST:-}" ]; then
     case "$(basename "$doc_path")" in .env|.env.*|*.pem|*.key|*.pfx|*.secret|*.token|*.credentials|id_rsa|id_ed25519|credentials.json|service-account.json) continue ;; esac
     # Portable path resolution (no realpath -m — GNU-only): resolve only if file exists
     full_path="$REPO_ROOT/$doc_path"
-    [ -f "$full_path" ] || continue
-    resolved=$(cd "$(dirname "$full_path")" && pwd -P)/$(basename "$full_path")
+    [ -f "$full_path" ] || continue  # file must exist
+    resolved="$(cd "$(dirname "$full_path")" && pwd -P)/$(basename "$full_path")"  # quoted to preserve spaces/globs
     [[ "$resolved" != "$REPO_ROOT"/* ]] && continue  # reject directory path traversal (pwd -P resolves dir symlinks)
-    # Also reject if the file itself is a symlink pointing outside repo (file-level symlink check)
+    # Reject file-level symlinks pointing outside repo
     if [ -L "$resolved" ]; then
-      # readlink -f is GNU/Linux only; python3 fallback handles macOS
       real_target=$(readlink -f "$resolved" 2>/dev/null \
         || python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$resolved" 2>/dev/null)
       [ -z "$real_target" ] && continue
-      [[ "$real_target" != "$REPO_ROOT"/* ]] && continue  # reject file-level symlink traversal
+      [[ "$real_target" != "$REPO_ROOT"/* ]] && continue
       resolved="$real_target"
     fi
-    # Guard: 256 KB size cap — prevents injecting large files into agent prompts
+    # Size cap: 256 KB
     file_size=$(wc -c < "$resolved" 2>/dev/null || echo 0)
-    [ "$file_size" -gt 262144 ] && continue  # 256 * 1024 = 262144
-    # Guard: reject untracked/gitignored files — prevents secret exfiltration even if denylist misses something
-    git -C "$REPO_ROOT" ls-files --error-unmatch -- "$doc_path" >/dev/null 2>&1 || continue
-    TEST_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$TEST_DOCS" "$doc_path" "$(cat "$resolved")")"  # full guard chain: denylist + resolve + symlink + size + git-tracked
+    [ "$file_size" -gt 262144 ] && continue
+    # Guard: reject untracked/gitignored — use resolved path (repo-relative) so symlink targets are also checked
+    resolved_rel="${resolved#"$REPO_ROOT"/}"
+    git -C "$REPO_ROOT" ls-files --error-unmatch -- "$resolved_rel" >/dev/null 2>&1 || continue
+    TEST_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$TEST_DOCS" "$doc_path" "$(cat "$resolved")")"
   done
 fi
 

@@ -64,12 +64,12 @@ function checkSegment(segment) {
       return; // allowed: commit staged files with -m
     }
 
-    // git push — allowed, but never --force, --force-with-lease, or -f
+    // git push — allowed, but never --force, --force-with-lease, or -f (shell injection caught by pre-check above)
     if (sub === 'push') {
       if (/--force\b|--force-with-lease\b|-f\b/.test(s)) {
         block(`'git push --force' is not allowed. Blocked: ${s.slice(0, 100)}`);
       }
-      return; // allowed: push to remote
+      return; // allowed: push to remote (redirections/substitution already blocked by pre-check at line 42)
     }
 
     // git tag — only listing (no -d, -a, -m, no creation)
@@ -88,12 +88,13 @@ function checkSegment(segment) {
       return; // allowed (list only)
     }
 
-    // git remote — read-only queries only (show, get-url, -v/--verbose); block add/remove/set-url
+    // git remote — strict allowlist: only bare `git remote`, `-v`, `show <name>`, `get-url <name>`
     if (sub === 'remote') {
-      if (/\s(add|remove|rm|rename|set-url|set-head|set-branches|prune)\b/.test(s)) {
-        block(`'git remote' mutation subcommands are not allowed. Blocked: ${s.slice(0, 100)}`);
+      const remoteArgs = s.replace(/^git\s+remote\s*/, '').trim();
+      if (!remoteArgs || /^(-v|--verbose)$/.test(remoteArgs) || /^(show|get-url)\s+\S/.test(remoteArgs)) {
+        return; // allowed: list, verbose list, show, get-url
       }
-      return; // allowed (show, get-url, -v, etc.)
+      block(`'git remote ${remoteArgs.split(/\s/)[0]}' is not allowed — only list/show/get-url permitted. Blocked: ${s.slice(0, 100)}`);
     }
 
     // git config — read-only queries only
@@ -125,12 +126,16 @@ function checkSegment(segment) {
 
   // ── grep — commitlint/cz setup detection only (package.json or .commitlintrc) ──
   if (/^grep\b/.test(s)) {
-    // package.json must appear as a standalone word (file target), not just mentioned in a pattern
-    // .commitlintrc is allowed anywhere since it's specific enough to not be abusable
-    if (/(?:^|\s)package\.json(\s|$)/.test(s) || /\.commitlintrc/.test(s)) {
-      return; // allowed
+    // Extract non-flag arguments (skip -E, -i, -q, etc. and their values)
+    const grepParts = s.replace(/^grep\s+/, '').split(/\s+/);
+    const nonFlags = grepParts.filter(a => !a.startsWith('-'));
+    // First non-flag is the pattern, rest are file operands — ALL must be allowed filenames
+    const fileArgs = nonFlags.slice(1);
+    const allowedFiles = /^(\.\/)?package\.json$|^\.commitlintrc/;
+    if (fileArgs.length > 0 && fileArgs.every(f => allowedFiles.test(f)) && !fileArgs.some(f => f.startsWith('/') || f.includes('..'))) {
+      return; // allowed: all file operands are package.json or .commitlintrc variants
     }
-    block(`grep is only allowed for commitlint/cz setup detection in package.json or .commitlintrc. Blocked: ${s.slice(0, 100)}`);
+    block(`grep is only allowed for commitlint/cz setup detection targeting package.json or .commitlintrc. Blocked: ${s.slice(0, 100)}`);
   }
 
   // ── ls — only for commitlintrc check ─────────────────────────────────────
