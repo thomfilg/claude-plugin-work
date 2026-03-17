@@ -261,8 +261,15 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
         console.error(`Warning: ${envVarName} file too large (${stat.size} bytes, max ${MAX_DOC_BYTES}): ${relPath}`);
         continue;
       }
-      // Safe to read: denylist + .env regex checked, realpathSync verified within repo, isFile checked, size-capped
-      docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
+      // Reject gitignored files — prevents injecting secrets even when denylist is misconfigured
+      try {
+        execSync(`git -C ${JSON.stringify(resolvedRoot)} ls-files --error-unmatch ${JSON.stringify(realPath)}`, { stdio: 'ignore' });
+      } catch {
+        console.error(`Warning: ${envVarName} rejects untracked/gitignored file: ${relPath}`);
+        continue;
+      }
+      const fileContents = fs.readFileSync(realPath, 'utf8');
+      docs += `\n--- ${relPath} ---\n${fileContents}\n`;
     } catch {
       // DOCS_DENYLIST (incl. *.secret/*.token/*.credentials) + realpathSync + regex guard against secret file leakage
       console.error(`Warning: ${envVarName} could not read file: ${relPath}`);
