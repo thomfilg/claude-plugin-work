@@ -156,6 +156,9 @@ describe('unsafe git commands → exit 2 (block)', () => {
     ['destructive after safe (&&)', 'git diff --staged && git reset --soft HEAD~1'],
     ['destructive after safe (;)', 'git log --oneline; git rebase main'],
     ['git add hidden in chain', 'git commit -m "test" && git add .'],
+    ['safe git + non-git (&&)', 'git status && rm -rf /'],
+    ['safe git + non-git (;)', 'git push origin main; echo pwned'],
+    ['safe git + non-git (|)', 'git log | head -5'],
   ];
 
   for (const [name, cmd] of unsafeCommands) {
@@ -223,6 +226,11 @@ describe('edge cases', () => {
   it('should allow git command with leading whitespace', () => {
     const r = execHook({ tool_name: 'Bash', tool_input: { command: '  git status' } });
     assert.strictEqual(r.exitCode, 0);
+  });
+
+  it('should allow git log with --grep containing destructive keyword', () => {
+    const r = execHook({ tool_name: 'Bash', tool_input: { command: 'git log --grep="git reset"' } });
+    assert.strictEqual(r.exitCode, 0, `Should not false-positive on argument content. stderr: ${r.stderr}`);
   });
 
   it('should produce no stdout on allow (clean exit)', () => {
