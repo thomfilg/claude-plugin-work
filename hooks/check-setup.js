@@ -256,6 +256,11 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
         console.error(`Warning: ${envVarName} path is not a file: ${relPath}`);
         continue;
       }
+      const MAX_DOC_BYTES = 256 * 1024; // 256 KB cap — prevent injecting huge files into agent prompts
+      if (stat.size > MAX_DOC_BYTES) {
+        console.error(`Warning: ${envVarName} file too large (${stat.size} bytes, max ${MAX_DOC_BYTES}): ${relPath}`);
+        continue;
+      }
       docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
     } catch {
       // DOCS_DENYLIST (incl. *.secret/*.token/*.credentials) + realpathSync + regex guard against secret file leakage
