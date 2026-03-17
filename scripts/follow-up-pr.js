@@ -605,10 +605,26 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
         }
       }
       if (reviews.nonBlocking.length > 0) {
-        lines.push(c.dim(`  + ${reviews.nonBlocking.length} non-blocking (nitpick/low priority — ignored)`));
+        lines.push(`  + ${reviews.nonBlocking.length} non-blocking (nitpick/low — assess whether to address):`);
+        for (const item of reviews.nonBlocking) {
+          const loc = item.path ? ` ${c.dim(item.path + (item.line ? ':' + item.line : ''))}` : '';
+          lines.push(`  ${c.dim('○')} ${c.cyan('@' + item.author)} ${c.dim('[LOW]')}${loc}`);
+          if (item.body) {
+            const preview = item.body.length > 80 ? item.body.slice(0, 77) + '...' : item.body;
+            lines.push(`    ${c.dim('"' + preview + '"')}`);
+          }
+        }
       }
     } else if (reviews.nonBlocking.length > 0) {
-      lines.push(c.green(`Reviews: CLEAR (${reviews.nonBlocking.length} non-blocking nitpicks — ignored)`));
+      lines.push(c.green(`Reviews: CLEAR`) + ` (${reviews.nonBlocking.length} non-blocking — assess whether to address):`);
+      for (const item of reviews.nonBlocking) {
+        const loc = item.path ? ` ${c.dim(item.path + (item.line ? ':' + item.line : ''))}` : '';
+        lines.push(`  ${c.dim('○')} ${c.cyan('@' + item.author)} ${c.dim('[LOW]')}${loc}`);
+        if (item.body) {
+          const preview = item.body.length > 80 ? item.body.slice(0, 77) + '...' : item.body;
+          lines.push(`    ${c.dim('"' + preview + '"')}`);
+        }
+      }
     } else {
       lines.push(c.green('Reviews: CLEAR'));
     }
