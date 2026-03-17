@@ -183,7 +183,7 @@ Task(qa-feature-tester):
   IMPORTANT: Apply these project-specific testing rules when evaluating coverage.
 
   ${TEST_DOCS}
-  ` : ''}
+  ` : ''  /* TEST_DOCS loaded from READ_DOCS_ON_TEST in Step 0 (lines 32-44) */}
 
   ## Edge Case Categories
 

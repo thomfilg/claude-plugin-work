@@ -246,7 +246,7 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
         continue;
       }
       docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
-    } catch {
+    } catch { // fs.realpathSync above resolves symlinks to prevent symlink-based path traversal
       console.error(`Warning: ${envVarName} file not found: ${relPath}`);
     }
   }

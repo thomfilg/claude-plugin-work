@@ -381,7 +381,7 @@ ${E2E_DOCS ? `
 IMPORTANT: Apply these E2E testing rules when writing and running E2E tests.
 
 ${E2E_DOCS}
-` : ''}
+` : ''  /* E2E_DOCS loaded from options.e2eDocs (line 56) */}
 ")
 ```
 

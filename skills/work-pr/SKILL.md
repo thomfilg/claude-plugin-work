@@ -140,7 +140,7 @@ Task(pr-generator):
   IMPORTANT: Apply these project-specific rules when creating/updating the PR description.
 
   ${PR_DOCS}
-  ` : ''}
+  ` : ''  /* PR_DOCS loaded from READ_DOCS_ON_PR in Step 2_setup (lines 100-112) */}
 
   IMPORTANT: After completion, confirm success by outputting:
   "PR_UPDATE_RESULT: SUCCESS" or "PR_UPDATE_RESULT: FAILED"
