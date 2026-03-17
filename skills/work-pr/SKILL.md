@@ -106,9 +106,14 @@ if [ -n "${READ_DOCS_ON_PR:-}" ]; then
     doc_path=$(echo "$doc_path" | xargs)  # trim whitespace
     [ -z "$doc_path" ] && continue
     [[ "$doc_path" = /* ]] && continue  # reject absolute paths
-    resolved=$(realpath -m "$REPO_ROOT/$doc_path" 2>/dev/null)
-    [[ "$resolved" != "$REPO_ROOT"/* ]] && continue  # reject path traversal
-    [ -f "$resolved" ] && PR_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$PR_DOCS" "$doc_path" "$(cat "$resolved")")"
+    # Denylist: skip sensitive files by name
+    case "$(basename "$doc_path")" in .env|.env.*|*.pem|*.key|*.pfx|id_rsa|id_ed25519|credentials.json|service-account.json) continue ;; esac
+    # Portable path resolution (no realpath -m — GNU-only): resolve only if file exists
+    full_path="$REPO_ROOT/$doc_path"
+    [ -f "$full_path" ] || continue
+    resolved=$(cd "$(dirname "$full_path")" && pwd)/$(basename "$full_path")
+    [[ "$resolved" != "$REPO_ROOT"/* ]] && continue  # reject path traversal/symlink escape
+    PR_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$PR_DOCS" "$doc_path" "$(cat "$resolved")")"
   done
 fi
 ```

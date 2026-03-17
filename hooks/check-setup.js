@@ -256,7 +256,7 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
         continue;
       }
       docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
-    } catch { // file not found or inaccessible — skip silently after logging
+    } catch { // inaccessible or not found — denylist and path checks above prevent secret leakage
       console.error(`Warning: ${envVarName} file not found: ${relPath}`);
     }
   }
