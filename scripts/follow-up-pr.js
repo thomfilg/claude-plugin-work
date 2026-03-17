@@ -304,7 +304,7 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
   const resolved = new Set();
   try {
     const [owner, name] = repo.split('/');
-    const query = `query($owner:String!,$name:String!,$pr:Int!,$cursor:String){repository(owner:$owner,name:$name){pullRequest(number:$pr){reviewThreads(first:100,after:$cursor){pageInfo{hasNextPage endCursor}nodes{isResolved isOutdated comments(first:100){pageInfo{hasNextPage endCursor}nodes{databaseId}}}}}}}`;
+    const query = `query($owner:String!,$name:String!,$pr:Int!,$cursor:String){repository(owner:$owner,name:$name){pullRequest(number:$pr){reviewThreads(first:100,after:$cursor){pageInfo{hasNextPage endCursor}nodes{isResolved isOutdated comments(first:100){nodes{databaseId}}}}}}}`;
     let cursor = null;
     do {
       const args = [
@@ -331,33 +331,14 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
           for (const comment of (thread.comments?.nodes || [])) {
             if (comment?.databaseId) resolved.add(comment.databaseId);
           }
-          // Paginate comments if the thread has more than 100
-          let commentPageInfo = thread.comments?.pageInfo;
-          while (commentPageInfo?.hasNextPage) {
-            const commentQuery = `query($owner:String!,$name:String!,$pr:Int!,$threadCursor:String,$commentCursor:String!){repository(owner:$owner,name:$name){pullRequest(number:$pr){reviewThreads(first:1,after:$threadCursor){nodes{comments(first:100,after:$commentCursor){pageInfo{hasNextPage endCursor}nodes{databaseId}}}}}}}`;
-            const commentArgs = [
-              'api', 'graphql',
-              '-f', `query=${commentQuery}`,
-              '-f', `owner=${owner}`,
-              '-f', `name=${name}`,
-              '-F', `pr=${prNumber}`,
-              '-f', `commentCursor=${commentPageInfo.endCursor}`,
-            ];
-            const commentResult = execFn(commentArgs);
-            if (commentResult?.errors?.length && !commentResult?.data) break;
-            const nextComments = commentResult?.data?.repository?.pullRequest?.reviewThreads?.nodes?.[0]?.comments;
-            for (const comment of (nextComments?.nodes || [])) {
-              if (comment?.databaseId) resolved.add(comment.databaseId);
-            }
-            commentPageInfo = nextComments?.pageInfo;
-          }
         }
       }
       const pageInfo = threadData?.pageInfo;
       cursor = pageInfo?.hasNextPage ? pageInfo.endCursor : null;
     } while (cursor);
   } catch {
-    // Non-critical — fall back to REST-only filtering
+    // Non-critical — clear partial results and fall back to REST-only filtering
+    resolved.clear();
   }
   return resolved;
 }

@@ -271,38 +271,19 @@ describe('getResolvedCommentIds', () => {
     assert.equal(hasCursorArg, false);
   });
 
-  it('paginates comments within a thread when hasNextPage is true', () => {
+  it('clears partial results on mid-pagination failure', () => {
     let callCount = 0;
-    const exec = (args) => {
+    const exec = () => {
       callCount++;
-      const queryArg = args.find((a) => a.startsWith('query=')) || '';
       if (callCount === 1) {
-        // First call: thread query — thread with paginated comments
-        return makeGraphQLResponse([
-          {
-            isResolved: true, isOutdated: false,
-            comments: { pageInfo: { hasNextPage: true, endCursor: 'cmt-cursor' }, nodes: [{ databaseId: 50 }] },
-          },
-        ]);
+        return makeGraphQLResponse(
+          [{ isResolved: true, isOutdated: false, comments: makeComments([10]) }],
+          true, 'cursor-abc',
+        );
       }
-      // Second call: comment pagination query
-      return {
-        data: {
-          repository: {
-            pullRequest: {
-              reviewThreads: {
-                nodes: [{
-                  comments: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ databaseId: 51 }] },
-                }],
-              },
-            },
-          },
-        },
-      };
+      throw new Error('Network error mid-pagination');
     };
     const ids = getResolvedCommentIds('owner/repo', 1, exec);
-    assert.equal(ids.has(50), true);
-    assert.equal(ids.has(51), true);
-    assert.equal(callCount, 2);
+    assert.equal(ids.size, 0, 'should return empty set on partial failure');
   });
 });
