@@ -43,7 +43,7 @@ if [ -n "${READ_DOCS_ON_TEST:-}" ]; then
     # Portable path resolution (no realpath -m — GNU-only): resolve only if file exists
     full_path="$REPO_ROOT/$doc_path"
     [ -f "$full_path" ] || continue
-    resolved=$(cd "$(dirname "$full_path")" && pwd)/$(basename "$full_path")
+    resolved=$(cd "$(dirname "$full_path")" && pwd -P)/$(basename "$full_path")  # pwd -P resolves symlinks
     [[ "$resolved" != "$REPO_ROOT"/* ]] && continue  # reject path traversal/symlink escape
     TEST_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$TEST_DOCS" "$doc_path" "$(cat "$resolved")")"
   done

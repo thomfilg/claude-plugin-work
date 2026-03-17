@@ -231,9 +231,9 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
       console.error(`Warning: ${envVarName} rejects absolute path: ${relPath}`);
       continue;
     }
-    // Reject secret/sensitive files by name
+    // Reject secret/sensitive files by name (denylist + pattern match)
     const basename = path.basename(relPath);
-    if (DOCS_DENYLIST.includes(basename) || /\.(pem|key|pfx|p12)$/i.test(basename)) {
+    if (DOCS_DENYLIST.includes(basename) || /^\.env(\.|$)/i.test(basename) || /\.(pem|key|pfx|p12)$/i.test(basename)) {
       console.error(`Warning: ${envVarName} rejects sensitive file: ${relPath}`);
       continue;
     }
@@ -256,8 +256,8 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
         continue;
       }
       docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
-    } catch { // DOCS_DENYLIST + realpathSync above guard against secret leakage; skip unreadable files
-      console.error(`Warning: ${envVarName} file not found: ${relPath}`);
+    } catch { // DOCS_DENYLIST + realpathSync guards above prevent secret leakage
+      console.error(`Warning: ${envVarName} could not read file: ${relPath}`);
     }
   }
   return docs;
