@@ -318,8 +318,11 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
         args.push('-f', `cursor=${cursor}`);
       }
       const graphqlResult = execFn(args);
-      if (graphqlResult?.errors?.length && !graphqlResult?.data) {
-        throw new Error(graphqlResult.errors[0].message || 'GraphQL error');
+      if (graphqlResult?.errors?.length) {
+        if (!graphqlResult?.data) {
+          throw new Error(graphqlResult.errors[0].message || 'GraphQL error');
+        }
+        console.error(c.dim(`  ⚠ GraphQL partial error: ${graphqlResult.errors[0].message || 'unknown'} — continuing with available data`));
       }
       const threadData = graphqlResult?.data?.repository?.pullRequest?.reviewThreads;
       const threads = threadData?.nodes || [];
