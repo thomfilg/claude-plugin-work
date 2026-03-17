@@ -52,8 +52,8 @@ const CHANGES_HASH = options.changesHash || 'NO_HASH';
 const SCREENSHOTS_FOLDER = options.screenshotsFolder || `${TASK_FOLDER}/screenshots/{APP_NAME}`;
 const AFFECTED_FILES = options.affectedFiles || [];
 const AFFECTED_PACKAGES = options.affectedPackages || [];
-const QA_DOCS = options.qaDocs || '';
-const E2E_DOCS = options.e2eDocs || '';
+const QA_DOCS = options.qaDocs || '';   // from READ_DOCS_ON_QA via check-setup.js
+const E2E_DOCS = options.e2eDocs || ''; // from READ_DOCS_ON_E2E via check-setup.js
 
 // Default URLs
 const APP_URL = options.appUrl || {
