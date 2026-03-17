@@ -32,15 +32,72 @@ function block(msg) {
   process.exit(2);
 }
 
+/**
+ * Quote-aware shell segment splitter.
+ * Splits on && || ; | \n and single & (background) but only outside single/double quotes.
+ */
+function shellSplitSegments(command) {
+  const segments = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; current += ch; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; current += ch; continue; }
+    if (inSingle || inDouble) { current += ch; continue; }
+
+    // Outside quotes — check for operators
+    if (ch === '&' && command[i + 1] === '&') { segments.push(current); current = ''; i++; continue; }
+    if (ch === '|' && command[i + 1] === '|') { segments.push(current); current = ''; i++; continue; }
+    if (ch === ';' || ch === '\n') { segments.push(current); current = ''; continue; }
+    if (ch === '|') { segments.push(current); current = ''; continue; }
+    if (ch === '&') { segments.push(current); current = ''; continue; } // single & (background)
+    current += ch;
+  }
+  if (current.trim()) segments.push(current);
+  return segments.map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Quote-aware metacharacter check.
+ * Returns true if >, <, backtick, $( or single & appears outside quotes.
+ * Allows safe redirections to /dev/null (e.g. 2>/dev/null, >/dev/null).
+ */
+function hasUnsafeMetachars(s) {
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+
+    // Allow 2>/dev/null or >/dev/null (safe stderr/stdout suppression)
+    if ((ch === '>' || (ch >= '0' && ch <= '9' && s[i + 1] === '>')) && /^[0-9]?>\s*\/dev\/null/.test(s.slice(i))) {
+      i = s.indexOf('/dev/null', i) + 8; // skip past /dev/null
+      continue;
+    }
+    if (ch === '>' || ch === '<') return true;
+    if (ch === '`') return true;
+    if (ch === '$' && s[i + 1] === '(') return true;
+    if (ch === '&' && s[i - 1] !== '&' && s[i + 1] !== '&') return true;
+  }
+  return false;
+}
+
 function checkSegment(segment) {
   const s = segment.trim();
   if (!s) return; // skip empty segments from splits
 
-  // ── Pre-check: reject shell metacharacters before any command matching ──
+  // ── Pre-check: reject shell metacharacters outside quotes ──
   // Block: redirections (> <), command substitution ($() or backtick), single & (background).
-  // Note: && is safe (handled by command splitting); single & is split out separately above.
-  if (/[><`]|\$\(/.test(s) || /(?<![&])&(?!&)/.test(s)) {
-    block(`Shell metacharacters (>, <, \`, $(), &) are forbidden. Blocked: ${s.slice(0, 100)}`);
+  // Quote-aware: characters inside single/double quotes are safe (e.g. grep patterns).
+  // Allows safe redirections to /dev/null (e.g. 2>/dev/null).
+  if (hasUnsafeMetachars(s)) {
+    block(`Shell metacharacters (>, <, \`, $(), &) outside quotes are forbidden. Blocked: ${s.slice(0, 100)}`);
   }
 
   // ── git commands ──────────────────────────────────────────────────────────
@@ -181,11 +238,8 @@ async function main() {
     const command = (hookData.tool_input?.command || '').trim();
     if (!command) block('Empty command.');
 
-    // Split on all shell separators: &&, ||, ;, |, newline, and single & (background operator)
-    const segments = command
-      .split(/&&|\|\||;|\||\n|(?<![&])&(?!&)/)
-      .map(s => s.trim())
-      .filter(Boolean);
+    // Quote-aware split on shell separators: &&, ||, ;, |, newline, single & (background)
+    const segments = shellSplitSegments(command);
 
     if (segments.length === 0) block('Empty command after parsing.');
 
