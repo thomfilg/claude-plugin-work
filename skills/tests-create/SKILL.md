@@ -211,7 +211,7 @@ Task(${AGENT_TYPE}):
   IMPORTANT: Apply these project-specific testing rules when writing tests.
 
   ${TEST_DOCS}
-  ` : ''  /* TEST_DOCS loaded from READ_DOCS_ON_TEST in Step 0 */}
+  ` : ''  /* TEST_DOCS defined in Step 0 above from READ_DOCS_ON_TEST */}
 
   ## Instructions
 
