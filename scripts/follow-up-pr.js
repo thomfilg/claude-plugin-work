@@ -304,7 +304,7 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
   const resolved = new Set();
   try {
     const [owner, name] = repo.split('/');
-    const query = `query($owner:String!,$name:String!,$pr:Int!,$cursor:String){repository(owner:$owner,name:$name){pullRequest(number:$pr){reviewThreads(first:100,after:$cursor){pageInfo{hasNextPage endCursor}nodes{isResolved isOutdated comments(first:100){nodes{databaseId}}}}}}}`;
+    const query = `query($owner:String!,$name:String!,$pr:Int!,$cursor:String){repository(owner:$owner,name:$name){pullRequest(number:$pr){reviewThreads(first:100,after:$cursor){pageInfo{hasNextPage endCursor}nodes{isResolved isOutdated comments(first:100){totalCount nodes{databaseId}}}}}}}`;
     let cursor = null;
     do {
       const args = [
@@ -328,8 +328,13 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
       const threads = threadData?.nodes || [];
       for (const thread of threads) {
         if (thread.isResolved || thread.isOutdated) {
-          for (const comment of (thread.comments?.nodes || [])) {
+          const comments = thread.comments || {};
+          const nodes = comments.nodes || [];
+          for (const comment of nodes) {
             if (comment?.databaseId) resolved.add(comment.databaseId);
+          }
+          if (comments.totalCount > nodes.length) {
+            console.error(c.dim(`  ⚠ Resolved thread has ${comments.totalCount} comments (fetched ${nodes.length}) — some may not be filtered`));
           }
         }
       }
@@ -521,6 +526,18 @@ function initState(prInfo) {
 
 // ── Report Formatting ───────────────────────────────────────────────────────
 
+function formatNonBlockingItems(items, lines) {
+  for (const item of items) {
+    const loc = item.path ? ` ${c.dim(item.path + (item.line ? ':' + item.line : ''))}` : '';
+    lines.push(`  ${c.dim('○')} ${c.cyan('@' + item.author)} ${c.dim('[LOW]')}${loc}`);
+    if (item.body) {
+      const normalized = item.body.replace(/\s+/g, ' ');
+      const preview = normalized.length > 80 ? normalized.slice(0, 77) + '...' : normalized;
+      lines.push(`    ${c.dim('"' + preview + '"')}`);
+    }
+  }
+}
+
 function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
   const lines = [];
 
@@ -605,31 +622,18 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
         const loc = item.path ? ` ${c.dim(item.path + (item.line ? ':' + item.line : ''))}` : '';
         lines.push(`  ${c.red('✗')} ${c.cyan('@' + item.author)} ${priorityTag}${loc}`);
         if (item.body) {
-          const preview = item.body.length > 80 ? item.body.slice(0, 77) + '...' : item.body;
+          const normalized = item.body.replace(/\s+/g, ' ');
+          const preview = normalized.length > 80 ? normalized.slice(0, 77) + '...' : normalized;
           lines.push(`    ${c.dim('"' + preview + '"')}`);
         }
       }
       if (reviews.nonBlocking.length > 0) {
         lines.push(`  + ${reviews.nonBlocking.length} non-blocking (nitpick/low — assess whether to address):`);
-        for (const item of reviews.nonBlocking) {
-          const loc = item.path ? ` ${c.dim(item.path + (item.line ? ':' + item.line : ''))}` : '';
-          lines.push(`  ${c.dim('○')} ${c.cyan('@' + item.author)} ${c.dim('[LOW]')}${loc}`);
-          if (item.body) {
-            const preview = item.body.length > 80 ? item.body.slice(0, 77) + '...' : item.body;
-            lines.push(`    ${c.dim('"' + preview + '"')}`);
-          }
-        }
+        formatNonBlockingItems(reviews.nonBlocking, lines);
       }
     } else if (reviews.nonBlocking.length > 0) {
       lines.push(c.green(`Reviews: CLEAR`) + ` (${reviews.nonBlocking.length} non-blocking — assess whether to address):`);
-      for (const item of reviews.nonBlocking) {
-        const loc = item.path ? ` ${c.dim(item.path + (item.line ? ':' + item.line : ''))}` : '';
-        lines.push(`  ${c.dim('○')} ${c.cyan('@' + item.author)} ${c.dim('[LOW]')}${loc}`);
-        if (item.body) {
-          const preview = item.body.length > 80 ? item.body.slice(0, 77) + '...' : item.body;
-          lines.push(`    ${c.dim('"' + preview + '"')}`);
-        }
-      }
+      formatNonBlockingItems(reviews.nonBlocking, lines);
     } else {
       lines.push(c.green('Reviews: CLEAR'));
     }
