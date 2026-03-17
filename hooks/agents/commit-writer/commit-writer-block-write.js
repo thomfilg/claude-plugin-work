@@ -36,11 +36,11 @@ function checkSegment(segment) {
   const s = segment.trim();
   if (!s) return; // skip empty segments from splits
 
-  // ── Pre-check: reject shell injection features in ALL segments ────────────
-  // Block command substitution ($(...), `...`), redirections (>, >>, <, <<), and
-  // process substitution (<(...), >(...)) that could execute or write despite an "allowed" prefix
-  if (/\$\(|`|>>|<<|>\(|<\(/.test(s) || /(?:^|[^-])>(?!\()/.test(s) || /(?:^|[^<])<(?!\()/.test(s)) {
-    block(`Shell injection features (redirections, command/process substitution) are forbidden. Blocked: ${s.slice(0, 100)}`);
+  // ── Pre-check: reject ALL shell injection features before any command matching ──
+  // Block: redirections (any > or <), command substitution ($(...) or `...`),
+  // process substitution, and background operator (&)
+  if (/[><`]|\$\(/.test(s)) {
+    block(`Shell metacharacters (>, <, \`, $()) are forbidden in all commands. Blocked: ${s.slice(0, 100)}`);
   }
 
   // ── git commands ──────────────────────────────────────────────────────────
@@ -64,10 +64,10 @@ function checkSegment(segment) {
       return; // allowed: commit staged files with -m
     }
 
-    // git push — allowed (shell injection [$(), `, >, <] already rejected by pre-check above)
+    // git push — allowed (shell metacharacters already rejected by pre-check above)
     if (sub === 'push') {
-      if (/--force\b|--force-with-lease\b|-f\b/.test(s)) block(`'git push --force' is not allowed. Blocked: ${s.slice(0, 100)}`);
-      return;
+      if (/--force\b|--force-with-lease\b|\s-f\b/.test(s)) block(`'git push --force' is not allowed. Blocked: ${s.slice(0, 100)}`);
+      return; // safe: pre-check blocks >, <, `, $() before we reach here
     }
 
     // git tag — only listing (no -d, -a, -m, no creation)
@@ -113,9 +113,10 @@ function checkSegment(segment) {
       return; // allowed: --get, --list, or single-key read query
     }
 
-    // All other allowed read-only subcommands
+    // All other allowed read-only subcommands — block write-to-file flags
     if (ALLOWED_GIT_READ.has(sub)) {
-      return; // allowed
+      if (/\s--output[\s=]/.test(s)) block(`'git ${sub} --output' writes to files — not allowed. Blocked: ${s.slice(0, 100)}`);
+      return;
     }
 
     // Everything else (reset, rebase, checkout, fetch, pull, add, rm, stash, merge, etc.) — BLOCKED
@@ -180,9 +181,9 @@ async function main() {
     const command = (hookData.tool_input?.command || '').trim();
     if (!command) block('Empty command.');
 
-    // Split on all shell separators including newlines
+    // Split on all shell separators: &&, ||, ;, |, newline, and single & (background operator)
     const segments = command
-      .split(/&&|\|\||[;|\n]/)
+      .split(/&&|\|\||;|\||\n|(?<![&])&(?!&)/)
       .map(s => s.trim())
       .filter(Boolean);
 

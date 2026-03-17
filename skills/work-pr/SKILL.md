@@ -127,7 +127,7 @@ if [ -n "${READ_DOCS_ON_PR:-}" ]; then
     # Guard: reject untracked/gitignored — use resolved path (repo-relative) so symlink targets are also checked
     resolved_rel="${resolved#"$REPO_ROOT"/}"
     git -C "$REPO_ROOT" ls-files --error-unmatch -- "$resolved_rel" >/dev/null 2>&1 || continue
-    PR_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$PR_DOCS" "$doc_path" "$(cat "$resolved")")"
+    PR_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$PR_DOCS" "$doc_path" "$(cat "$resolved")")"  # pwd -P resolves dir symlinks; readlink resolves file symlinks; git-ls-files ensures tracked
   done
 fi
 ```

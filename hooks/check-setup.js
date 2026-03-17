@@ -271,8 +271,8 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
       }
       // Guards passed: DOCS_DENYLIST + .env regex + resolve-prefix + realpathSync + isFile + 256KB + git-ls-files
       docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
-    } catch (readErr) {
-      console.error(`Warning: ${envVarName} skipped file (${readErr.code || readErr.message}): ${relPath}`);
+    } catch (readErr) { // guard chain: DOCS_DENYLIST → .env regex → resolve → realpath → isFile → 256KB → git-ls-files
+      console.error(`Warning: ${envVarName} skipped (${readErr.code || readErr.message}): ${relPath}`);
     }
   }
   return docs;

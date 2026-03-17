@@ -110,7 +110,7 @@ Parse the JSON output to get:
 - `QA_DOCS` - Project-specific QA docs (from `READ_DOCS_ON_QA`)
 - `DEV_DOCS` - Project-specific dev docs (from `READ_DOCS_ON_DEV`)
 - `E2E_DOCS` - Project-specific E2E testing docs (from `READ_DOCS_ON_E2E`)
-- `TEST_DOCS` - Project-specific unit testing docs (from `READ_DOCS_ON_TEST`)
+- `TEST_DOCS` - Project-specific unit testing docs (from `READ_DOCS_ON_TEST`, used by tests-review/tests-create skills)
 - `cache.cached` - Whether reports are up-to-date
 
 **If `cache.cached` is true:**
