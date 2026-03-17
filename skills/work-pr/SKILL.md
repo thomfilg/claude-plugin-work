@@ -107,7 +107,7 @@ if [ -n "${READ_DOCS_ON_PR:-}" ]; then
     [ -z "$doc_path" ] && continue
     [[ "$doc_path" = /* ]] && continue  # reject absolute paths
     # Denylist: skip sensitive files by name
-    case "$(basename "$doc_path")" in .env|.env.*|*.pem|*.key|*.pfx|*.secret|*.token|*.credentials|id_rsa|id_ed25519|credentials.json|service-account.json) continue ;; esac
+    case "$(basename "$doc_path")" in .env|.env.*|*.pem|*.key|*.pfx|*.p12|*.secret|*.secrets|*.token|*.tokens|*.credentials|id_rsa|id_ed25519|credentials.json|service-account.json) continue ;; esac
     # Portable path resolution (no realpath -m — GNU-only): resolve only if file exists
     full_path="$REPO_ROOT/$doc_path"
     [ -f "$full_path" ] || continue  # file must exist

@@ -36,11 +36,11 @@ function checkSegment(segment) {
   const s = segment.trim();
   if (!s) return; // skip empty segments from splits
 
-  // ── Pre-check: reject ALL shell injection features before any command matching ──
-  // Block: redirections (any > or <), command substitution ($(...) or `...`),
-  // process substitution, and background operator (&)
-  if (/[><`]|\$\(/.test(s)) {
-    block(`Shell metacharacters (>, <, \`, $()) are forbidden in all commands. Blocked: ${s.slice(0, 100)}`);
+  // ── Pre-check: reject shell metacharacters before any command matching ──
+  // Block: redirections (> <), command substitution ($() or backtick), single & (background).
+  // Note: && is safe (handled by command splitting); single & is split out separately above.
+  if (/[><`]|\$\(/.test(s) || /(?<![&])&(?!&)/.test(s)) {
+    block(`Shell metacharacters (>, <, \`, $(), &) are forbidden. Blocked: ${s.slice(0, 100)}`);
   }
 
   // ── git commands ──────────────────────────────────────────────────────────
@@ -64,10 +64,10 @@ function checkSegment(segment) {
       return; // allowed: commit staged files with -m
     }
 
-    // git push — allowed (shell metacharacters already rejected by pre-check above)
+    // git push — allowed (>, <, `, $(), & rejected by pre-check; only --force blocked here)
     if (sub === 'push') {
-      if (/--force\b|--force-with-lease\b|\s-f\b/.test(s)) block(`'git push --force' is not allowed. Blocked: ${s.slice(0, 100)}`);
-      return; // safe: pre-check blocks >, <, `, $() before we reach here
+      if (/--force\b|--force-with-lease\b|\s-f\b/.test(s)) block(`'git push --force/-f' is not allowed. Blocked: ${s.slice(0, 100)}`);
+      return;
     }
 
     // git tag — only listing (no -d, -a, -m, no creation)
@@ -113,10 +113,10 @@ function checkSegment(segment) {
       return; // allowed: --get, --list, or single-key read query
     }
 
-    // All other allowed read-only subcommands — block write-to-file flags
+    // Allowed read-only subcommands — block flags that write to filesystem (--output, -o <file>)
     if (ALLOWED_GIT_READ.has(sub)) {
-      if (/\s--output[\s=]/.test(s)) block(`'git ${sub} --output' writes to files — not allowed. Blocked: ${s.slice(0, 100)}`);
-      return;
+      if (/\s(--output[\s=]|-o\s)/.test(s)) block(`'git ${sub}' with file-output flags is not allowed. Blocked: ${s.slice(0, 100)}`);
+      return; // read-only: diff, status, log, show, rev-parse, ls-files, etc.
     }
 
     // Everything else (reset, rebase, checkout, fetch, pull, add, rm, stash, merge, etc.) — BLOCKED
