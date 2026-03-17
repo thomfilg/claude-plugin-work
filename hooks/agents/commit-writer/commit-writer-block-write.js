@@ -64,12 +64,10 @@ function checkSegment(segment) {
       return; // allowed: commit staged files with -m
     }
 
-    // git push — allowed, but never --force, --force-with-lease, or -f (shell injection caught by pre-check above)
+    // git push — allowed (shell injection [$(), `, >, <] already rejected by pre-check above)
     if (sub === 'push') {
-      if (/--force\b|--force-with-lease\b|-f\b/.test(s)) {
-        block(`'git push --force' is not allowed. Blocked: ${s.slice(0, 100)}`);
-      }
-      return; // allowed: push to remote (redirections/substitution already blocked by pre-check at line 42)
+      if (/--force\b|--force-with-lease\b|-f\b/.test(s)) block(`'git push --force' is not allowed. Blocked: ${s.slice(0, 100)}`);
+      return;
     }
 
     // git tag — only listing (no -d, -a, -m, no creation)
