@@ -739,7 +739,7 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
     return { action: 'exit-success', finalStatus: 'ready' };
   }
 
-  // Continue polling — determine why
+  // Continue polling — collect reasons for waiting
   const reasons = [];
   if (!ciPassed) reasons.push('CI checks pending');
   if (!noReviews && reviews.pendingBots.length > 0) reasons.push('bot reviews pending');

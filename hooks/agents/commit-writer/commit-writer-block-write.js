@@ -64,7 +64,7 @@ function checkSegment(segment) {
       return; // allowed: commit staged files with -m
     }
 
-    // git push — allowed (>, <, `, $(), & rejected by pre-check; only --force blocked here)
+    // git push — shell metacharacters already rejected by pre-check above; only force-push blocked here
     if (sub === 'push') {
       if (/--force\b|--force-with-lease\b|\s-f\b/.test(s)) block(`'git push --force/-f' is not allowed. Blocked: ${s.slice(0, 100)}`);
       return;
@@ -113,7 +113,7 @@ function checkSegment(segment) {
       return; // allowed: --get, --list, or single-key read query
     }
 
-    // Allowed read-only subcommands — block flags that write to filesystem (--output, -o <file>)
+    // Read-only subcommands — block --output/-o that could write files to the filesystem
     if (ALLOWED_GIT_READ.has(sub)) {
       if (/\s(--output[\s=]|-o\s)/.test(s)) block(`'git ${sub}' with file-output flags is not allowed. Blocked: ${s.slice(0, 100)}`);
       return; // read-only: diff, status, log, show, rev-parse, ls-files, etc.
