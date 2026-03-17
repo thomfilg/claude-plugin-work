@@ -660,6 +660,11 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
           const preview = normalized.length > 80 ? normalized.slice(0, 77) + '...' : normalized;
           lines.push(`    ${c.dim('"' + preview + '"')}`);
         }
+        if (item.path && item.line) {
+          lines.push(`    ${c.yellow('→ Alter line ' + item.line + ' in ' + item.path + ' to address this comment (touch the exact line to invalidate stale review)')}`);
+        } else if (item.path) {
+          lines.push(`    ${c.yellow('→ Alter ' + item.path + ' to address this comment')}`);
+        }
       }
       if (reviews.nonBlocking.length > 0) {
         lines.push(`  + ${reviews.nonBlocking.length} non-blocking (nitpick/low — assess whether to address):`);
