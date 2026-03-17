@@ -271,8 +271,9 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
       const fileContents = fs.readFileSync(realPath, 'utf8');
       docs += `\n--- ${relPath} ---\n${fileContents}\n`;
     } catch (readErr) {
-      // Protections applied before this point: denylist, .env regex, realpathSync, isFile, size cap, git ls-files
-      console.error(`Warning: ${envVarName} could not read file (${readErr.code || readErr.message}): ${relPath}`);
+      // Guard chain before this point: denylist → .env regex → path.resolve prefix → realpathSync → isFile → 256KB cap → git ls-files
+      console.error(`Warning: ${envVarName} skipped unreadable file (${readErr.code || readErr.message}): ${relPath}`);
+      continue; // explicit continue — all errors skip to next doc path
     }
   }
   return docs;

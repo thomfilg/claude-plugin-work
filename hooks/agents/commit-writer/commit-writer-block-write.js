@@ -91,9 +91,11 @@ function checkSegment(segment) {
       if (/\s(--add|--unset|--unset-all|--remove-section|--rename-section|--global|--system|--worktree|--local|--file|--blob)\b/.test(s)) {
         block(`'git config' write flags are not allowed. Blocked: ${s.slice(0, 100)}`);
       }
-      // Block write form: git config <key> <value> (two or more positional non-flag args)
-      const configParts = s.replace(/^git\s+config/, '').trim().split(/\s+/).filter((a) => a && !a.startsWith('-'));
-      if (configParts.length >= 2) {
+      // Block write form: 2+ positional (non-flag) args means a value is being set
+      // e.g. "git config user.email foo@bar.com" → ["user.email","foo@bar.com"] → blocked
+      // e.g. "git config user.email"             → ["user.email"]              → allowed (read)
+      const positionalArgs = s.replace(/^git\s+config/, '').trim().split(/\s+/).filter((a) => a && !a.startsWith('-'));
+      if (positionalArgs.length >= 2) {
         block(`'git config <key> <value>' (write form) is not allowed. Blocked: ${s.slice(0, 100)}`);
       }
       return; // allowed: --get, --list, or single-key read query
@@ -108,10 +110,10 @@ function checkSegment(segment) {
     block(`'git ${sub}' is not allowed. commit-writer only does: git commit, git push, and read-only git commands. Blocked: ${s.slice(0, 100)}`);
   }
 
-  // ── grep — only for commitlint/cz setup detection in known config files ─────
+  // ── grep — commitlint/cz setup detection only (package.json or .commitlintrc) ──
   if (/^grep\b/.test(s)) {
-    // Allow only: grep <pattern> package.json  OR  any grep mentioning .commitlintrc
-    // Require package.json to appear at the end (as the target file, not just mentioned anywhere)
+    // package.json must appear as a standalone word (file target), not just mentioned in a pattern
+    // .commitlintrc is allowed anywhere since it's specific enough to not be abusable
     if (/(?:^|\s)package\.json(\s|$)/.test(s) || /\.commitlintrc/.test(s)) {
       return; // allowed
     }
@@ -123,7 +125,7 @@ function checkSegment(segment) {
     if (/commitlintrc/.test(s)) {
       return; // allowed
     }
-    block(`ls is only allowed for commitlintrc detection. Blocked: ${s.slice(0, 100)}`);
+    block(`'ls' is only permitted for commitlintrc file detection. Blocked: ${s.slice(0, 100)}`);
   }
 
   // ── echo — only harmless informational output (no redirections or pipes) ─────
@@ -143,7 +145,7 @@ async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
 
-  let hookData;
+  let hookData; // parsed JSON from Claude Code hook system (contains tool_name + tool_input)
   try {
     hookData = JSON.parse(input);
   } catch (err) {

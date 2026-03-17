@@ -54,9 +54,9 @@ if [ -n "${READ_DOCS_ON_TEST:-}" ]; then
       [[ "$real_target" != "$REPO_ROOT"/* ]] && continue  # reject file-level symlink traversal
       resolved="$real_target"
     fi
-    # Size cap: skip files larger than 256 KB to prevent injecting huge files into prompts
+    # Guard: 256 KB size cap — prevents injecting large files into agent prompts
     file_size=$(wc -c < "$resolved" 2>/dev/null || echo 0)
-    [ "$file_size" -gt 262144 ] && continue
+    [ "$file_size" -gt 262144 ] && continue  # 256 * 1024 = 262144
     TEST_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$TEST_DOCS" "$doc_path" "$(cat "$resolved")")"  # resolved: dir symlinks via pwd -P + file symlinks via readlink -f
   done
 fi
