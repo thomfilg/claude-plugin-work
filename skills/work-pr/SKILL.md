@@ -97,9 +97,9 @@ CURRENT_SHA=$(git rev-parse HEAD)
 mkdir -p "$TASKS_DIR"
 
 # Load PR_DOCS from READ_DOCS_ON_PR env var (comma-separated relative paths)
-# Note: Claude Code exports .env vars to subprocesses automatically; for manual use: export READ_DOCS_ON_PR=<paths>
+# Note: READ_DOCS_ON_PR is sourced from .env by Claude Code automatically; for manual use: export READ_DOCS_ON_PR=<paths>
 PR_DOCS=""
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)  # use feature branch root, not main worktree
 if [ -n "${READ_DOCS_ON_PR:-}" ]; then
   IFS=',' read -ra DOC_PATHS <<< "$READ_DOCS_ON_PR"
   for doc_path in "${DOC_PATHS[@]}"; do
@@ -107,16 +107,16 @@ if [ -n "${READ_DOCS_ON_PR:-}" ]; then
     [ -z "$doc_path" ] && continue
     [[ "$doc_path" = /* ]] && continue  # reject absolute paths
     # Denylist: skip sensitive files by name
-    case "$(basename "$doc_path")" in .env|.env.*|*.pem|*.key|*.pfx|id_rsa|id_ed25519|credentials.json|service-account.json) continue ;; esac
+    case "$(basename "$doc_path")" in .env|.env.*|*.pem|*.key|*.pfx|*.secret|*.token|*.credentials|id_rsa|id_ed25519|credentials.json|service-account.json) continue ;; esac
     # Portable path resolution (no realpath -m — GNU-only): resolve only if file exists
     full_path="$REPO_ROOT/$doc_path"
     [ -f "$full_path" ] || continue
     resolved=$(cd "$(dirname "$full_path")" && pwd -P)/$(basename "$full_path")
-    [[ "$resolved" != "$REPO_ROOT"/* ]] && continue  # reject directory path traversal
+    [[ "$resolved" != "$REPO_ROOT"/* ]] && continue  # reject directory path traversal (pwd -P resolves dir symlinks)
     # Also reject if the file itself is a symlink pointing outside repo (file-level symlink check)
     if [ -L "$resolved" ]; then
       real_target=$(readlink -f "$resolved" 2>/dev/null); [ -z "$real_target" ] && continue
-      [[ "$real_target" != "$REPO_ROOT"/* ]] && continue
+      [[ "$real_target" != "$REPO_ROOT"/* ]] && continue  # reject file-level symlink traversal
       resolved="$real_target"
     fi
     PR_DOCS="$(printf '%s\n--- %s ---\n%s\n' "$PR_DOCS" "$doc_path" "$(cat "$resolved")")"

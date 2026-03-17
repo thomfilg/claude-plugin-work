@@ -217,7 +217,8 @@ function getAffectedFiles() {
  */
 // Denylist of filename patterns that should never be injected into agent prompts
 const DOCS_DENYLIST = ['.env', '.env.local', '.env.production', '.env.staging',
-  'id_rsa', 'id_ed25519', 'credentials.json', 'service-account.json'];
+  'id_rsa', 'id_ed25519', 'credentials.json', 'service-account.json',
+  '.secrets', '.tokens'];
 
 function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
   const docPaths = (csvPaths || '').split(',').map(p => p.trim()).filter(Boolean);
@@ -233,7 +234,7 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
     }
     // Reject secret/sensitive files by name (denylist + pattern match)
     const basename = path.basename(relPath);
-    if (DOCS_DENYLIST.includes(basename) || /^\.env(\.|$)/i.test(basename) || /\.(pem|key|pfx|p12)$/i.test(basename)) {
+    if (DOCS_DENYLIST.includes(basename) || /^\.env(\.|$)/i.test(basename) || /\.(pem|key|pfx|p12|secret|token|credentials)$/i.test(basename)) {
       console.error(`Warning: ${envVarName} rejects sensitive file: ${relPath}`);
       continue;
     }
@@ -256,7 +257,8 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
         continue;
       }
       docs += `\n--- ${relPath} ---\n${fs.readFileSync(realPath, 'utf8')}\n`;
-    } catch { // DOCS_DENYLIST + realpathSync + regex pattern guard against secret file leakage
+    } catch {
+      // DOCS_DENYLIST (incl. *.secret/*.token/*.credentials) + realpathSync + regex guard against secret file leakage
       console.error(`Warning: ${envVarName} could not read file: ${relPath}`);
     }
   }

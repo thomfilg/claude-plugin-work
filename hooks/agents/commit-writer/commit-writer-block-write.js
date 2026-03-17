@@ -7,9 +7,11 @@
  *
  * Allowed Bash commands (per segment after splitting on && || ; | newline):
  *   WRITE: git commit, git push (no --force/-f)
- *   READ:  git diff, git status, git log, git show, git rev-parse, git branch,
- *          git remote, git config, git ls-files, git cat-file, git describe,
+ *   READ:  git diff, git status, git log, git show, git rev-parse,
+ *          git ls-files, git cat-file, git describe,
  *          git shortlog, git name-rev, git for-each-ref, git tag (list only)
+ *          git branch (list only: no -d/-D/-m/-M/-c/-C), git remote (show/get-url/v only),
+ *          git config (read-only: --get/--list/--get-all only, never --global/--system/--add/--unset)
  *   SETUP: grep (package.json / commitlintrc check only), ls (commitlintrc check only)
  *
  * Uses exit codes:
@@ -17,12 +19,13 @@
  *   exit 2 = block (stderr message fed back to Claude)
  */
 
-// Allowed git subcommands (read-only) — no mutation, no syncing, no staging
+// Allowed git subcommands that are purely read-only and require no further scrutiny
 const ALLOWED_GIT_READ = new Set([
-  'diff', 'status', 'log', 'show', 'rev-parse', 'branch',
-  'remote', 'config', 'ls-files', 'cat-file', 'describe',
+  'diff', 'status', 'log', 'show', 'rev-parse',
+  'ls-files', 'cat-file', 'describe',
   'shortlog', 'name-rev', 'for-each-ref',
 ]);
+// Note: branch, remote, config are handled separately below with flag restrictions
 
 function block(msg) {
   process.stderr.write(`COMMIT-WRITER GUARD: ${msg}\n`);
@@ -60,6 +63,34 @@ function checkSegment(segment) {
     if (sub === 'tag') {
       if (!/^git\s+tag\s*(-l|--list)?(\s|$)/.test(s)) {
         block(`'git tag' only allowed for listing. Blocked: ${s.slice(0, 100)}`);
+      }
+      return; // allowed
+    }
+
+    // git branch — listing only; block mutation flags (-d/-D/-m/-M/-c/-C/--set-upstream/--delete)
+    if (sub === 'branch') {
+      if (/\s(-d|-D|-m|-M|-c|-C|--delete|--move|--copy|--set-upstream|--unset-upstream)\b/.test(s)) {
+        block(`'git branch' mutation flags are not allowed. Blocked: ${s.slice(0, 100)}`);
+      }
+      return; // allowed (list only)
+    }
+
+    // git remote — read-only queries only (show, get-url, -v/--verbose); block add/remove/set-url
+    if (sub === 'remote') {
+      if (/\s(add|remove|rm|rename|set-url|set-head|set-branches|prune)\b/.test(s)) {
+        block(`'git remote' mutation subcommands are not allowed. Blocked: ${s.slice(0, 100)}`);
+      }
+      return; // allowed (show, get-url, -v, etc.)
+    }
+
+    // git config — read-only (--get/--list/--get-all/--get-regexp); block any write flags
+    if (sub === 'config') {
+      if (/\s(--add|--unset|--unset-all|--remove-section|--rename-section|--global|--system|--worktree)\b/.test(s) ||
+          !/\s(--get\b|--list\b|-l\b|--get-all\b|--get-regexp\b|--get-urlmatch\b)/.test(s)) {
+        // Only allow if it explicitly uses a read flag; anything else could be a write
+        if (!/^git\s+config\s+(--get\b|--list\b|-l\b|--get-all\b|--get-regexp\b|--get-urlmatch\b)/.test(s)) {
+          block(`'git config' is only allowed for reading (--get, --list). Blocked: ${s.slice(0, 100)}`);
+        }
       }
       return; // allowed
     }
