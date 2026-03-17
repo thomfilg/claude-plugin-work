@@ -97,7 +97,7 @@ CURRENT_SHA=$(git rev-parse HEAD)
 mkdir -p "$TASKS_DIR"
 
 # Load PR_DOCS from READ_DOCS_ON_PR env var (comma-separated relative paths)
-# Note: Claude Code auto-exports .env file vars to subprocesses; for standalone use, export READ_DOCS_ON_PR first
+# Note: Claude Code auto-exports .env vars to subprocesses; to use standalone, run: export READ_DOCS_ON_PR=<paths>
 PR_DOCS=""
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 if [ -n "${READ_DOCS_ON_PR:-}" ]; then
@@ -147,7 +147,6 @@ Task(pr-generator):
 
   ${PR_DOCS}
   ` : ''  /* PR_DOCS: set in Step 2_setup from READ_DOCS_ON_PR; empty string when unset */}
-
   IMPORTANT: After completion, confirm success by outputting:
   "PR_UPDATE_RESULT: SUCCESS" or "PR_UPDATE_RESULT: FAILED"
 ```

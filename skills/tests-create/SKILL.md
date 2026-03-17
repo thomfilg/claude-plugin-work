@@ -217,7 +217,6 @@ Task(${AGENT_TYPE}):
 
   ${TEST_DOCS}
   ` : ''  /* TEST_DOCS: set in Step 0 from READ_DOCS_ON_TEST; empty string when unset */}
-
   ## Instructions
 
   1. Read source file to understand what needs testing
