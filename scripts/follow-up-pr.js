@@ -358,9 +358,9 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
 
 /**
  * Resolve outdated review threads on GitHub via GraphQL mutation.
- * Only called when ENABLE_DISMISS_OUTDATED_COMMENTS=true.
+ * Only called when ENABLE_RESOLVE_OUTDATED_COMMENTS=true.
  */
-function dismissOutdatedThreads(threadIds, execFn = ghExec) {
+function resolveOutdatedThreads(threadIds, execFn = ghExec) {
   let dismissed = 0;
   for (const threadId of threadIds) {
     try {
@@ -410,8 +410,8 @@ function getReviews(prNumber) {
     const { resolved: resolvedCommentIds, outdatedThreadIds } = getResolvedCommentIds(repo, prNumber);
 
     // Optionally resolve outdated threads on GitHub
-    if (process.env.ENABLE_DISMISS_OUTDATED_COMMENTS === 'true' && outdatedThreadIds.length > 0) {
-      dismissOutdatedThreads(outdatedThreadIds);
+    if (process.env.ENABLE_RESOLVE_OUTDATED_COMMENTS === 'true' && outdatedThreadIds.length > 0) {
+      resolveOutdatedThreads(outdatedThreadIds);
     }
 
     const isActiveComment = (cm) => {
@@ -673,16 +673,14 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
     }
   }
 
-  // Action hint
+  // Action hint — order matches fail-fast exit priority
   lines.push('');
   if (ci.status === 'failing') {
     lines.push(`→ Fix the failure, push, then re-run: ${c.dim('node scripts/follow-up-pr.js')}`);
-  } else if (ci.status === 'passing' && !opts.noReviews && reviews.hasBlocking) {
-    lines.push(`→ Address blocking reviews, push, then re-run: ${c.dim('node scripts/follow-up-pr.js')}`);
   } else if (isConflicting) {
     lines.push(`→ Resolve conflicts, push, then re-run: ${c.dim('node scripts/follow-up-pr.js')}`);
-  } else if (!isMergeReady) {
-    lines.push(`→ Merge status not ready (${prInfo.mergeable || 'UNKNOWN'}). Waiting...`);
+  } else if (!opts.noReviews && reviews.hasBlocking) {
+    lines.push(`→ Address blocking reviews, push, then re-run: ${c.dim('node scripts/follow-up-pr.js')}`);
   } else if (ci.status === 'passing' && (!reviews.hasBlocking || opts.noReviews) && reviews.pendingBots.length === 0 && isMergeReady) {
     lines.push(c.green('═══════════════════════════════════════'));
     lines.push(c.green('  PR READY TO REVIEW'));
@@ -694,6 +692,8 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
     lines.push(`→ Waiting ${opts.interval}s for checks... (attempt ${attempt}/${maxAttempts})`);
   } else if (!opts.noReviews && reviews.pendingBots.length > 0) {
     lines.push(`→ Waiting ${opts.interval}s for bot reviews... (attempt ${attempt}/${maxAttempts})`);
+  } else if (!isMergeReady) {
+    lines.push(`→ Merge status not ready (${prInfo.mergeable || 'UNKNOWN'}). Waiting...`);
   }
 
   return lines.join('\n');
@@ -792,6 +792,8 @@ async function main() {
   });
 
   const maxAttempts = opts.once ? 1 : opts.maxAttempts;
+  let ci;
+  let reviews = { all: [], comments: [], actionable: [], blocking: [], nonBlocking: [], pendingBots: [], hasBlocking: false, hasActionable: false };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // Refresh PR info each attempt (mergeable status may change)
@@ -802,7 +804,6 @@ async function main() {
     }
 
     // Check CI
-    let ci;
     try {
       ci = checkCI(prInfo.number);
     } catch (err) {
@@ -811,7 +812,7 @@ async function main() {
     }
 
     // Check reviews (unless --no-reviews)
-    let reviews = { all: [], comments: [], actionable: [], blocking: [], nonBlocking: [], pendingBots: [], hasBlocking: false, hasActionable: false };
+    reviews = { all: [], comments: [], actionable: [], blocking: [], nonBlocking: [], pendingBots: [], hasBlocking: false, hasActionable: false };
     if (!opts.noReviews) {
       try {
         reviews = getReviews(prInfo.number);
@@ -874,4 +875,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { classifyCommentPriority, isBlockingPriority, getResolvedCommentIds, dismissOutdatedThreads, decideNextAction };
+module.exports = { classifyCommentPriority, isBlockingPriority, getResolvedCommentIds, resolveOutdatedThreads, decideNextAction };

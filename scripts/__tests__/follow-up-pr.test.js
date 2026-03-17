@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { classifyCommentPriority, isBlockingPriority, getResolvedCommentIds, dismissOutdatedThreads, decideNextAction } = require('../follow-up-pr.js');
+const { classifyCommentPriority, isBlockingPriority, getResolvedCommentIds, resolveOutdatedThreads, decideNextAction } = require('../follow-up-pr.js');
 
 describe('classifyCommentPriority', () => {
   describe('Copilot (copilot-pull-request-reviewer)', () => {
@@ -300,14 +300,14 @@ describe('getResolvedCommentIds', () => {
   });
 });
 
-describe('dismissOutdatedThreads', () => {
+describe('resolveOutdatedThreads', () => {
   it('calls resolveReviewThread mutation for each thread ID', () => {
     const calls = [];
     const exec = (args) => {
       calls.push(args);
       return { data: { resolveReviewThread: { thread: { isResolved: true } } } };
     };
-    const dismissed = dismissOutdatedThreads(['PRRT_1', 'PRRT_2'], exec);
+    const dismissed = resolveOutdatedThreads(['PRRT_1', 'PRRT_2'], exec);
     assert.equal(dismissed, 2);
     assert.equal(calls.length, 2);
     assert.ok(calls[0].includes('threadId=PRRT_1'));
@@ -316,7 +316,7 @@ describe('dismissOutdatedThreads', () => {
 
   it('returns 0 for empty array', () => {
     const exec = () => { throw new Error('should not be called'); };
-    const dismissed = dismissOutdatedThreads([], exec);
+    const dismissed = resolveOutdatedThreads([], exec);
     assert.equal(dismissed, 0);
   });
 
@@ -327,7 +327,7 @@ describe('dismissOutdatedThreads', () => {
       if (callCount === 2) throw new Error('Permission denied');
       return { data: { resolveReviewThread: { thread: { isResolved: true } } } };
     };
-    const dismissed = dismissOutdatedThreads(['PRRT_1', 'PRRT_2', 'PRRT_3'], exec);
+    const dismissed = resolveOutdatedThreads(['PRRT_1', 'PRRT_2', 'PRRT_3'], exec);
     assert.equal(dismissed, 2);
     assert.equal(callCount, 3);
   });
