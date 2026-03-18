@@ -314,7 +314,7 @@ function recordTddEvidence(ticketId, stepId, flags) {
     }
     evidence = {
       step: stepId,
-      targetedTestCommand: flags.cmd,
+      targetedTestCommand: flags.cmd.trim(),
       redConfirmed: true,
       greenConfirmed: true,
       testFilesChanged: testFiles,
