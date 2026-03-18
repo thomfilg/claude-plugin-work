@@ -770,6 +770,37 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
   };
 }
 
+// ── Adaptive Polling ────────────────────────────────────────────────────────
+
+/**
+ * Compute poll interval based on attempt number and CI completion progress.
+ *
+ * Strategy:
+ *   - Attempt 1: 10s (quick check for obvious issues like conflicts)
+ *   - Until ~80% of CI steps complete:
+ *       >5 total steps → 60s polls
+ *       ≤5 total steps → 30s polls
+ *   - After 80% completion: 20s polls (finish line)
+ *
+ * Returns interval in seconds.
+ */
+function getAdaptiveInterval(attempt, ci) {
+  // First poll: quick sanity check
+  if (attempt === 1) return 10;
+
+  const total = ci.total || 0;
+  const completed = (ci.passed ? ci.passed.length : 0)
+    + (ci.failed ? ci.failed.length : 0)
+    + (ci.cancelled ? ci.cancelled.length : 0);
+  const completionRatio = total > 0 ? completed / total : 0;
+
+  // Finish line — most steps done, poll faster
+  if (completionRatio >= 0.8) return 20;
+
+  // Bulk wait — longer polls for many steps, shorter for few
+  return total > 5 ? 60 : 30;
+}
+
 // ── Sleep ───────────────────────────────────────────────────────────────────
 
 function sleep(seconds) {
@@ -860,9 +891,12 @@ async function main() {
     });
     saveState(state);
 
+    // Compute adaptive poll interval for this attempt
+    const interval = getAdaptiveInterval(attempt, ci);
+
     // Print report
     console.log('');
-    console.log(formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval: opts.interval }));
+    console.log(formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval }));
     console.log('');
 
     // Decide next action using extracted pure function
@@ -880,9 +914,9 @@ async function main() {
       process.exit(0);
     }
 
-    // Continue polling
+    // Continue polling with adaptive interval
     if (attempt < maxAttempts) {
-      await sleep(opts.interval);
+      await sleep(interval);
     }
   }
 
@@ -902,4 +936,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { classifyCommentPriority, isBlockingPriority, getResolvedCommentIds, resolveOutdatedThreads, decideNextAction };
+module.exports = { classifyCommentPriority, isBlockingPriority, getResolvedCommentIds, resolveOutdatedThreads, decideNextAction, getAdaptiveInterval };
