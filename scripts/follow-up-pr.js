@@ -484,7 +484,11 @@ function getReviews(prNumber) {
   // - COMMENTED with body: actionable for humans, but bot COMMENTED reviews
   //   are typically informational summaries (not action items) — skip them.
   // - Also detect bot reviews by HTML comment markers (e.g. <!-- BUGBOT_REVIEW -->)
-  const isBotAuthor = (author) => botReviewers.includes(author);
+  const botReviewersLower = botReviewers.map((b) => b.toLowerCase());
+  const isBotAuthor = (author) => {
+    const lower = (author || '').toLowerCase();
+    return botReviewersLower.some((bot) => lower === bot || lower.includes(bot.replace('[bot]', '')));
+  };
   const isBotReview = (r) => isBotAuthor(r.author) || /<!--\s*(BUGBOT_REVIEW|COPILOT_REVIEW)\s*-->/.test(r.body || '');
   const actionable = reviews.filter(
     (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body && !isBotReview(r))
@@ -721,12 +725,15 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
 function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
   const isConflicting = prInfo.mergeable === 'CONFLICTING' || prInfo.mergeStateStatus === 'DIRTY';
   const isMergeReady = prInfo.mergeable === 'MERGEABLE' && (!prInfo.mergeStateStatus || prInfo.mergeStateStatus === 'CLEAN' || prInfo.mergeStateStatus === 'HAS_HOOKS' || prInfo.mergeStateStatus === 'UNSTABLE');
-  const ciPassed = ciStatus === 'passing';
+  // CI is "acceptable" when passing or when there are no checks configured
+  const ciAcceptable = ciStatus === 'passing' || ciStatus === 'no-checks';
+  // CI is "finished" when it won't change anymore (not pending)
+  const ciFinished = ciAcceptable || ciStatus === 'cancelled';
   const reviewsClear = noReviews || (!reviews.hasBlocking && reviews.pendingBots.length === 0);
 
   // Fail-fast exits (ordered by priority)
-  // Only CI failures and conflicts cause immediate exit.
-  // Reviews never cause fail-fast — wait for CI to finish first,
+  // Only CI failures, conflicts, and cancelled CI cause immediate exit.
+  // Reviews never cause fail-fast while CI is pending — wait for CI to finish first,
   // since stale/outdated comments may be invalidated by new pushes.
   if (ciStatus === 'failing') {
     return { action: 'exit-fail', finalStatus: 'ci-failing' };
@@ -734,22 +741,24 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
   if (isConflicting) {
     return { action: 'exit-fail', finalStatus: 'conflicting' };
   }
+  if (ciStatus === 'cancelled') {
+    return { action: 'exit-fail', finalStatus: 'ci-cancelled' };
+  }
   // Only exit on blocking reviews AFTER CI has fully completed (not pending).
   // When CI is still running, stale review comments may become outdated.
   // When bots are still reviewing, old blocking comments may become stale after the new review.
-  const ciFinished = ciStatus === 'passing' || ciStatus === 'no-checks' || ciStatus === 'cancelled';
   if (!noReviews && reviews.hasBlocking && reviews.pendingBots.length === 0 && ciFinished) {
     return { action: 'exit-fail', finalStatus: 'reviews-blocking' };
   }
 
-  // Success
-  if (ciPassed && reviewsClear && isMergeReady) {
+  // Success — CI acceptable (passing or no-checks), reviews clear, merge ready
+  if (ciAcceptable && reviewsClear && isMergeReady) {
     return { action: 'exit-success', finalStatus: 'ready' };
   }
 
   // Still polling — build list of reasons (tested in follow-up-pr.test.js)
   const reasons = [];
-  if (!ciPassed) reasons.push('CI checks pending');
+  if (!ciFinished) reasons.push('CI checks pending');
   if (!noReviews && reviews.pendingBots.length > 0) reasons.push('bot reviews pending');
   if (!noReviews && reviews.hasBlocking && !ciFinished) reasons.push('waiting for CI to finish before evaluating reviews');
   if (!noReviews && reviews.hasBlocking && reviews.pendingBots.length > 0) reasons.push('blocking reviews may become stale after bot review');

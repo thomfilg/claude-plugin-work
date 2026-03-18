@@ -371,6 +371,24 @@ describe('decideNextAction', () => {
     assert.equal(result.finalStatus, 'reviews-blocking');
   });
 
+  it('returns exit-fail with ci-cancelled when CI is cancelled', () => {
+    const result = decideNextAction('cancelled', mergeReady, noReviews, false);
+    assert.equal(result.action, 'exit-fail');
+    assert.equal(result.finalStatus, 'ci-cancelled');
+  });
+
+  it('returns exit-success when CI has no checks, reviews clear, merge ready', () => {
+    const result = decideNextAction('no-checks', mergeReady, noReviews, false);
+    assert.equal(result.action, 'exit-success');
+    assert.equal(result.finalStatus, 'ready');
+  });
+
+  it('returns exit-fail with reviews-blocking when no-checks CI and blocking reviews', () => {
+    const result = decideNextAction('no-checks', mergeReady, blockingReviews, false);
+    assert.equal(result.action, 'exit-fail');
+    assert.equal(result.finalStatus, 'reviews-blocking');
+  });
+
   it('skips review check when noReviews is true', () => {
     const result = decideNextAction('passing', mergeReady, blockingReviews, true);
     assert.equal(result.action, 'exit-success');
