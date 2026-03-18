@@ -304,12 +304,16 @@ function recordTddEvidence(ticketId, stepId, flags) {
     if (!flags.green) return { error: 'missing_flag', message: '--green is required in normal TDD mode' };
     if (!flags.files) return { error: 'missing_flag', message: '--files is required in normal TDD mode' };
 
+    const testFiles = String(flags.files).split(',').map(f => f.trim()).filter(Boolean);
+    if (testFiles.length === 0) {
+      return { error: 'invalid_files', message: '--files must list at least one test file in normal TDD mode' };
+    }
     evidence = {
       step: stepId,
       targetedTestCommand: flags.cmd,
       redConfirmed: true,
       greenConfirmed: true,
-      testFilesChanged: flags.files.split(',').map(f => f.trim()).filter(Boolean),
+      testFilesChanged: testFiles,
       exceptionReason: '',
     };
   }

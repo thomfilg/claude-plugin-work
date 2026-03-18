@@ -70,7 +70,11 @@ function getStatePath(ticketId) {
 function loadState(ticketId) {
   const statePath = getStatePath(ticketId);
   if (fs.existsSync(statePath)) {
-    return JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    try {
+      return JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    } catch {
+      return null;
+    }
   }
   return null;
 }

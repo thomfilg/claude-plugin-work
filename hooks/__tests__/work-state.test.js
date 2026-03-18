@@ -89,6 +89,20 @@ describe('work-state.js', () => {
       ];
       assert.deepEqual(steps, expectedSteps);
     });
+
+    it('should recover from corrupt state file on init', async () => {
+      const TICKET_CORRUPT = 'TEST-INIT-CORRUPT';
+      const stateDir = path.join(TEMP_TASKS_BASE, TICKET_CORRUPT);
+      fs.mkdirSync(stateDir, { recursive: true });
+      fs.writeFileSync(path.join(stateDir, '.work-state.json'), '{corrupt!!!');
+
+      const { result, code } = await runWorkState(['init', TICKET_CORRUPT]);
+      assert.equal(code, 0);
+      assert.ok(result);
+      assert.equal(result.stepStatus['1_ticket'], 'pending');
+
+      cleanupTempWorkState(TICKET_CORRUPT);
+    });
   });
 
   describe('get', () => {

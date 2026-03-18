@@ -645,6 +645,15 @@ describe('TDD enforcement', () => {
       assert.ok(stderr.includes('--cmd') || stderr.includes('missing_flag'));
     });
 
+    it('record-tdd with empty --files (comma-only) returns error', async () => {
+      const { code, stderr } = await runOrchestrator(
+        ['record-tdd', 'TEST-EMPTY', '3_implement', '--cmd', 'pnpm test', '--red', '--green', '--files', ','],
+        { env: baseEnv() },
+      );
+      assert.equal(code, 1);
+      assert.ok(stderr.includes('at least one test file'));
+    });
+
     it('calling record-tdd twice overwrites previous evidence cleanly', async () => {
       // First call
       await runOrchestrator(
