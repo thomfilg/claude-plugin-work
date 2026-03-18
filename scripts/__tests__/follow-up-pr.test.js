@@ -359,8 +359,14 @@ describe('decideNextAction', () => {
     assert.equal(result.finalStatus, 'conflicting');
   });
 
-  it('returns exit-fail with reviews-blocking when blocking reviews exist (even with pending CI)', () => {
+  it('returns poll (not exit-fail) when blocking reviews exist but CI is still pending', () => {
     const result = decideNextAction('pending', mergeReady, blockingReviews, false);
+    assert.equal(result.action, 'poll');
+    assert.match(result.waitReason, /waiting for CI to finish before evaluating reviews/);
+  });
+
+  it('returns exit-fail with reviews-blocking when blocking reviews exist and CI has passed', () => {
+    const result = decideNextAction('passing', mergeReady, blockingReviews, false);
     assert.equal(result.action, 'exit-fail');
     assert.equal(result.finalStatus, 'reviews-blocking');
   });

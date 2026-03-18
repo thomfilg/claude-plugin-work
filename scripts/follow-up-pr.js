@@ -483,9 +483,11 @@ function getReviews(prNumber) {
   // - CHANGES_REQUESTED: always actionable (human or bot)
   // - COMMENTED with body: actionable for humans, but bot COMMENTED reviews
   //   are typically informational summaries (not action items) — skip them.
+  // - Also detect bot reviews by HTML comment markers (e.g. <!-- BUGBOT_REVIEW -->)
   const isBotAuthor = (author) => botReviewers.includes(author);
+  const isBotReview = (r) => isBotAuthor(r.author) || /<!--\s*(BUGBOT_REVIEW|COPILOT_REVIEW)\s*-->/.test(r.body || '');
   const actionable = reviews.filter(
-    (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body && !isBotAuthor(r.author))
+    (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body && !isBotReview(r))
   ).map((r) => {
     const priority = classifyCommentPriority(r.author, r.body);
     // CHANGES_REQUESTED is always at least medium (blocking), regardless of severity tags
@@ -723,15 +725,20 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
   const reviewsClear = noReviews || (!reviews.hasBlocking && reviews.pendingBots.length === 0);
 
   // Fail-fast exits (ordered by priority)
+  // Only CI failures and conflicts cause immediate exit.
+  // Reviews never cause fail-fast — wait for CI to finish first,
+  // since stale/outdated comments may be invalidated by new pushes.
   if (ciStatus === 'failing') {
     return { action: 'exit-fail', finalStatus: 'ci-failing' };
   }
   if (isConflicting) {
     return { action: 'exit-fail', finalStatus: 'conflicting' };
   }
-  // Only fail-fast on blocking reviews when no bot reviews are pending.
+  // Only exit on blocking reviews AFTER CI has fully completed (not pending).
+  // When CI is still running, stale review comments may become outdated.
   // When bots are still reviewing, old blocking comments may become stale after the new review.
-  if (!noReviews && reviews.hasBlocking && reviews.pendingBots.length === 0) {
+  const ciFinished = ciStatus === 'passing' || ciStatus === 'no-checks' || ciStatus === 'cancelled';
+  if (!noReviews && reviews.hasBlocking && reviews.pendingBots.length === 0 && ciFinished) {
     return { action: 'exit-fail', finalStatus: 'reviews-blocking' };
   }
 
@@ -744,6 +751,7 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
   const reasons = [];
   if (!ciPassed) reasons.push('CI checks pending');
   if (!noReviews && reviews.pendingBots.length > 0) reasons.push('bot reviews pending');
+  if (!noReviews && reviews.hasBlocking && !ciFinished) reasons.push('waiting for CI to finish before evaluating reviews');
   if (!noReviews && reviews.hasBlocking && reviews.pendingBots.length > 0) reasons.push('blocking reviews may become stale after bot review');
   if (!isMergeReady && !isConflicting) reasons.push(`merge status: ${prInfo.mergeStateStatus || 'UNKNOWN'}`);
 
