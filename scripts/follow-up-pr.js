@@ -40,7 +40,7 @@ function parseArgs(argv = process.argv.slice(2)) {
   const args = {
     pr: null,
     maxAttempts: 10,
-    interval: 60,
+    interval: null, // null = adaptive (auto); set explicitly via --interval to override
     once: false,
     noReviews: false,
   };
@@ -81,7 +81,7 @@ function parseArgs(argv = process.argv.slice(2)) {
 Options:
   --pr <number>         PR number (default: auto-detect from branch)
   --max-attempts <n>    Max polling attempts (default: 10)
-  --interval <seconds>  Wait between attempts (default: 60)
+  --interval <seconds>  Fixed wait between attempts (default: adaptive)
   --once                Single check, no loop (for manual debugging only)
   --no-reviews          Skip review polling
   -h, --help            Show this help`);
@@ -484,15 +484,19 @@ function getReviews(prNumber) {
   // - COMMENTED with body: actionable for humans, but bot COMMENTED reviews
   //   are typically informational summaries (not action items) — skip them.
   // - Also detect bot reviews by HTML comment markers (e.g. <!-- BUGBOT_REVIEW -->)
-  // Known bot aliases that may appear as review authors (case-insensitive)
-  const BOT_ALIASES = ['copilot', 'cursor'];
+  // Bot author detection: match configured bot reviewers (case-insensitive) and
+  // known bot login variants used by classifyCommentPriority (Copilot, cursor-ai[bot]).
   const botReviewersLower = botReviewers.map((b) => b.toLowerCase());
+  const BOT_BODY_MARKERS = /<!--\s*(BUGBOT_REVIEW|COPILOT_REVIEW)\s*-->/;
   const isBotAuthor = (author) => {
     const lower = (author || '').toLowerCase();
-    if (BOT_ALIASES.includes(lower)) return true;
-    return botReviewersLower.some((bot) => lower === bot || lower.includes(bot.replace('[bot]', '')));
+    // Exact match against configured bot reviewers (case-insensitive)
+    if (botReviewersLower.includes(lower)) return true;
+    // Match known aliases used by classifyCommentPriority
+    if (lower === 'copilot' || lower === 'cursor-ai[bot]') return true;
+    // Fuzzy match: strip [bot] suffix from configured names
+    return botReviewersLower.some((bot) => bot.includes('[bot]') && lower === bot.replace('[bot]', ''));
   };
-  const BOT_BODY_MARKERS = /<!--\s*(BUGBOT_REVIEW|COPILOT_REVIEW)\s*-->/;
   const isBotReview = (r) => isBotAuthor(r.author) || BOT_BODY_MARKERS.test(r.body || '');
   const isActionableReview = (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body && !isBotReview(r));
   const actionable = reviews.filter(isActionableReview).map((r) => {
@@ -905,8 +909,8 @@ async function main() {
     });
     saveState(state);
 
-    // Compute adaptive poll interval for this attempt
-    const interval = getAdaptiveInterval(attempt, ci);
+    // Use explicit --interval if set, otherwise compute adaptive interval
+    const interval = opts.interval !== null ? opts.interval : getAdaptiveInterval(attempt, ci);
 
     // Print report
     console.log('');
