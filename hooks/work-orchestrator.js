@@ -255,6 +255,10 @@ function validateTddEvidence(evidence, expectedStepId) {
   if (!Array.isArray(evidence.testFilesChanged)) return { valid: false, reason: 'testFilesChanged must be an array' };
 
   const hasException = typeof evidence.exceptionReason === 'string' && evidence.exceptionReason.trim() !== '';
+  // In normal TDD mode, at least one test file must be listed
+  if (!hasException && evidence.testFilesChanged.length === 0) {
+    return { valid: false, reason: 'testFilesChanged must contain at least one file when no exceptionReason' };
+  }
   if (!hasException) {
     const targetedCmd = typeof evidence.targetedTestCommand === 'string'
       ? evidence.targetedTestCommand.trim()
@@ -840,6 +844,8 @@ function main() {
       }
       const ticket = rest[0].toUpperCase();
       const stepId = rest[1];
+      // Parse flags — missing values for --cmd/--files/--exception fall through
+      // to recordTddEvidence() validation which returns clear error messages.
       const flags = {};
       for (let i = 2; i < rest.length; i++) {
         if (rest[i] === '--cmd' && rest[i + 1]) { flags.cmd = rest[++i]; }

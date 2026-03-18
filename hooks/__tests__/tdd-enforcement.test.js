@@ -410,6 +410,26 @@ describe('TDD enforcement', () => {
       assert.match(result.message, /targetedTestCommand/i);
     });
 
+    it('evidence with empty testFilesChanged and no exception -> BLOCKED', async () => {
+      await transitionTo(TICKET, '3_implement', { WORK_TDD_ENFORCE: '1' });
+      const evidencePath = path.join(tempTasksBase, TICKET, '.tdd-evidence-3_implement.json');
+      fs.writeFileSync(evidencePath, JSON.stringify({
+        step: '3_implement',
+        targetedTestCommand: 'pnpm test',
+        redConfirmed: true,
+        greenConfirmed: true,
+        testFilesChanged: [],
+        exceptionReason: '',
+      }));
+
+      const { result } = await runOrchestrator(
+        ['transition', TICKET, '4_quality'],
+        { env: baseEnv({ WORK_TDD_ENFORCE: '1' }) },
+      );
+      assert.equal(result.error, true);
+      assert.match(result.message, /testFilesChanged/i);
+    });
+
     it('evidence with greenConfirmed: false and no exceptionReason is BLOCKED', async () => {
       await transitionTo(TICKET, '3_implement', { WORK_TDD_ENFORCE: '1' });
       const evidencePath = path.join(tempTasksBase, TICKET, '.tdd-evidence-3_implement.json');

@@ -98,7 +98,8 @@ function saveState(ticketId, state) {
  * Initialize a new work state
  */
 function initState(ticketId, description = '') {
-  // Idempotent: return existing state if already initialized
+  // Idempotent: return existing state if already initialized.
+  // loadState() safely returns null on corrupt JSON (try-catch guarded).
   const existing = loadState(ticketId);
   if (existing) return existing;
 
