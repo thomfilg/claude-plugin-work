@@ -25,7 +25,7 @@ This keeps your context window lean: just plan JSON + transition outputs + agent
 
 ## TDD Execution Policy
 
-`/work` enforces TDD for all implementation work entering `3_implement` or `8_test_enhancement`.
+When `WORK_TDD_ENFORCE=1` is set, `/work` enforces TDD for all implementation work entering `3_implement` or `8_test_enhancement`.
 
 Delegated agents must follow this loop:
 

@@ -223,11 +223,21 @@ TDD protocol (mandatory for this step):
 `.trim();
 
 function getTddEvidencePath(ticketId, stepId) {
-  return path.join(TASKS_BASE, ticketId, `.tdd-evidence-${stepId}.json`);
+  const baseResolved = path.resolve(TASKS_BASE);
+  const evidencePath = path.resolve(baseResolved, ticketId, `.tdd-evidence-${stepId}.json`);
+  if (!evidencePath.startsWith(baseResolved + path.sep)) {
+    throw new Error(`Invalid ticket id for TDD evidence path: ${ticketId}`);
+  }
+  return evidencePath;
 }
 
 function readTddEvidence(ticketId, stepId) {
-  const p = getTddEvidencePath(ticketId, stepId);
+  let p;
+  try {
+    p = getTddEvidencePath(ticketId, stepId);
+  } catch {
+    return { exists: false, parseError: true, evidence: null };
+  }
   if (!fileExists(p)) return { exists: false, parseError: false, evidence: null };
   try {
     const evidence = JSON.parse(fs.readFileSync(p, 'utf-8'));
@@ -246,8 +256,14 @@ function validateTddEvidence(evidence, expectedStepId) {
 
   const hasException = typeof evidence.exceptionReason === 'string' && evidence.exceptionReason.trim() !== '';
   if (!hasException) {
-    if (typeof evidence.targetedTestCommand !== 'string' || evidence.targetedTestCommand === '') {
+    const targetedCmd = typeof evidence.targetedTestCommand === 'string'
+      ? evidence.targetedTestCommand.trim()
+      : evidence.targetedTestCommand;
+    if (typeof targetedCmd !== 'string' || targetedCmd === '') {
       return { valid: false, reason: 'targetedTestCommand must be a non-empty string when no exceptionReason' };
+    }
+    if (evidence.redConfirmed !== true) {
+      return { valid: false, reason: 'redConfirmed must be true when no exceptionReason' };
     }
     if (evidence.greenConfirmed !== true) {
       return { valid: false, reason: 'greenConfirmed must be true when no exceptionReason' };
@@ -649,7 +665,8 @@ function transitionStep(ticket, targetStep) {
   if (tddEnforce && TDD_GATED_STEPS.includes(currentStep) && currentStep !== targetStep) {
     const { exists, parseError, evidence } = readTddEvidence(ticket, currentStep);
     if (!exists || parseError) {
-      const msg = `Cannot leave ${currentStep} without TDD evidence. Record it via:\n  node hooks/work-orchestrator.js record-tdd ${ticket} ${currentStep} --cmd "<test command>" --red --green --files "<test files>"\nOr for exceptions:\n  node hooks/work-orchestrator.js record-tdd ${ticket} ${currentStep} --exception "<reason>"`;
+      const orchPath = path.resolve(__dirname, 'work-orchestrator.js');
+      const msg = `Cannot leave ${currentStep} without TDD evidence. Record it via:\n  node ${orchPath} record-tdd ${ticket} ${currentStep} --cmd "<test command>" --red --green --files "<test files>"\nOr for exceptions:\n  node ${orchPath} record-tdd ${ticket} ${currentStep} --exception "<reason>"`;
       return { error: true, message: msg };
     }
     const validation = validateTddEvidence(evidence, currentStep);
@@ -827,7 +844,13 @@ function main() {
         else if (rest[i] === '--files' && rest[i + 1]) { flags.files = rest[++i]; }
         else if (rest[i] === '--exception' && rest[i + 1]) { flags.exception = rest[++i]; }
       }
-      const result = recordTddEvidence(ticket, stepId, flags);
+      let result;
+      try {
+        result = recordTddEvidence(ticket, stepId, flags);
+      } catch (e) {
+        console.error(JSON.stringify({ error: 'invalid_path', message: e.message }));
+        process.exit(1);
+      }
       if (result.error) {
         console.error(JSON.stringify(result));
         process.exit(1);

@@ -140,20 +140,22 @@ describe('work-state.js', () => {
       assert.equal(getResult.currentStep, 3);
     });
 
-    it('should not update currentStep for invalid step name', async () => {
+    it('should reject invalid step name with exit code 1', async () => {
       const TICKET_INVALID = 'TEST-SETSTEP-INV';
-      after(() => { cleanupTempWorkState(TICKET_INVALID); });
 
       await runWorkState(['init', TICKET_INVALID]);
-      const { result: beforeResult } = await runWorkState(['get', TICKET_INVALID]);
-      const originalCurrentStep = beforeResult.currentStep;
 
-      await runWorkState(['set-step', TICKET_INVALID, 'nonexistent_step', 'in_progress']);
+      const { code, stderr } = await runWorkState(['set-step', TICKET_INVALID, 'nonexistent_step', 'in_progress']);
+      assert.equal(code, 1, 'Should exit with code 1 for invalid step');
+      assert.ok(stderr.includes('Invalid step name') || stderr.includes('nonexistent_step'),
+        'Error should mention the invalid step name');
 
+      // Verify invalid key is NOT persisted in state
       const { result: afterResult } = await runWorkState(['get', TICKET_INVALID]);
-      // Invalid step is stored in stepStatus but currentStep is not updated
-      assert.equal(afterResult.stepStatus['nonexistent_step'], 'in_progress');
-      assert.equal(afterResult.currentStep, originalCurrentStep);
+      assert.equal(afterResult.stepStatus['nonexistent_step'], undefined,
+        'Invalid step name must not be persisted in state');
+
+      cleanupTempWorkState(TICKET_INVALID);
     });
   });
 
@@ -261,7 +263,7 @@ describe('work-state.js', () => {
     const TICKET = 'TEST-IDEMPOTENT-001';
     after(() => { cleanupTempWorkState(TICKET); });
 
-    it('should overwrite existing state on second init (not idempotent)', async () => {
+    it('should be idempotent — second init preserves existing state', async () => {
       // First init
       await runWorkState(['init', TICKET]);
 
@@ -272,17 +274,18 @@ describe('work-state.js', () => {
       const { result: beforeSecondInit } = await runWorkState(['get', TICKET]);
       assert.equal(beforeSecondInit.stepStatus['3_implement'], 'in_progress');
 
-      // Second init -- overwrites because initState always creates fresh state
+      // Second init — should return existing state unchanged
       const { result: secondInitResult } = await runWorkState(['init', TICKET]);
       assert.equal(secondInitResult.status, 'in_progress');
-      assert.equal(Object.keys(secondInitResult.stepStatus).length, 13);
+      assert.equal(secondInitResult.stepStatus['3_implement'], 'in_progress',
+        'Second init should preserve existing step status');
 
-      // After second init, all steps are reset to pending
+      // Verify persistence is unchanged
       const { result: afterSecondInit } = await runWorkState(['get', TICKET]);
       assert.equal(
         afterSecondInit.stepStatus['3_implement'],
-        'pending',
-        'Second init overwrites existing state, resetting all steps to pending',
+        'in_progress',
+        'Second init must not reset existing state',
       );
     });
   });

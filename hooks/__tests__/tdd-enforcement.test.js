@@ -370,9 +370,48 @@ describe('TDD enforcement', () => {
       assert.match(result.message, /TDD evidence/i);
     });
 
+    it('evidence with redConfirmed: false, greenConfirmed: true, no exception -> BLOCKED', async () => {
+      await transitionTo(TICKET, '3_implement', { WORK_TDD_ENFORCE: '1' });
+      const evidencePath = path.join(tempTasksBase, TICKET, '.tdd-evidence-3_implement.json');
+      fs.writeFileSync(evidencePath, JSON.stringify({
+        step: '3_implement',
+        targetedTestCommand: 'pnpm test',
+        redConfirmed: false,
+        greenConfirmed: true,
+        testFilesChanged: ['a.test.ts'],
+        exceptionReason: '',
+      }));
+
+      const { result } = await runOrchestrator(
+        ['transition', TICKET, '4_quality'],
+        { env: baseEnv({ WORK_TDD_ENFORCE: '1' }) },
+      );
+      assert.equal(result.error, true);
+      assert.match(result.message, /redConfirmed/i);
+    });
+
+    it('evidence with whitespace-only targetedTestCommand -> BLOCKED', async () => {
+      await transitionTo(TICKET, '3_implement', { WORK_TDD_ENFORCE: '1' });
+      const evidencePath = path.join(tempTasksBase, TICKET, '.tdd-evidence-3_implement.json');
+      fs.writeFileSync(evidencePath, JSON.stringify({
+        step: '3_implement',
+        targetedTestCommand: '   ',
+        redConfirmed: true,
+        greenConfirmed: true,
+        testFilesChanged: ['a.test.ts'],
+        exceptionReason: '',
+      }));
+
+      const { result } = await runOrchestrator(
+        ['transition', TICKET, '4_quality'],
+        { env: baseEnv({ WORK_TDD_ENFORCE: '1' }) },
+      );
+      assert.equal(result.error, true);
+      assert.match(result.message, /targetedTestCommand/i);
+    });
+
     it('evidence with greenConfirmed: false and no exceptionReason is BLOCKED', async () => {
       await transitionTo(TICKET, '3_implement', { WORK_TDD_ENFORCE: '1' });
-      // Write malformed evidence directly
       const evidencePath = path.join(tempTasksBase, TICKET, '.tdd-evidence-3_implement.json');
       fs.writeFileSync(evidencePath, JSON.stringify({
         step: '3_implement',
@@ -626,6 +665,20 @@ describe('TDD enforcement', () => {
       const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf-8'));
       assert.equal(evidence.targetedTestCommand, 'pnpm test:new');
       assert.deepEqual(evidence.testFilesChanged, ['new.test.ts']);
+    });
+
+    it('record-tdd with path-traversal ticket ID returns error, no file outside tasks dir', async () => {
+      const { code, stderr } = await runOrchestrator(
+        ['record-tdd', '../../etc', '3_implement', '--exception', 'test'],
+        { env: baseEnv() },
+      );
+      assert.equal(code, 1);
+      assert.ok(stderr.includes('Invalid ticket id') || stderr.includes('invalid'),
+        'Should reject path-traversal ticket ID');
+
+      // Verify no file written outside tasks dir
+      const outsidePath = path.resolve(tempTasksBase, '../../etc', '.tdd-evidence-3_implement.json');
+      assert.ok(!fs.existsSync(outsidePath), 'No file should be written outside tasks dir');
     });
   });
 });
