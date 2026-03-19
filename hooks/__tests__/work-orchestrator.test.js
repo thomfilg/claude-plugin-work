@@ -442,7 +442,7 @@ describe('work-orchestrator.js', () => {
       assert.ok(completeStep.agentPrompt.includes('work-state.js'));
       assert.ok(completeStep.agentPrompt.includes('complete'));
       assert.ok(completeStep.agentPrompt.includes('session-guard.js'));
-      assert.ok(completeStep.agentPrompt.includes('reveal'));
+      assert.ok(completeStep.agentPrompt.includes('finish'));
     });
 
     it('should use Bash agent for 12_reports', async () => {

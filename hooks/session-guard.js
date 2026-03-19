@@ -12,6 +12,7 @@
  *   init <ticketId> <workflow>   — Create session with passphrase
  *   reveal <ticketId>            — Reveal passphrase (sets revealed=true)
  *   complete <ticketId>          — Remove session file (cleanup)
+ *   finish <ticketId>            — Atomic teardown: reveal + complete
  *   status [ticketId]            — Show session info
  *
  * Hook events (via CLAUDE_HOOK_TYPE env var):
@@ -36,6 +37,9 @@ if (isHookMode) {
   process.on('unhandledRejection', () => process.exit(0));
 }
 
+// Session files live in /tmp by default. Files are created with mode 0o600 and
+// ownership is verified before reading, but passphrases are stored in plaintext.
+// This is acceptable for a single-user local CLI tool — not for shared CI hosts.
 const SESSION_DIR = process.env.SESSION_GUARD_DIR || '/tmp';
 
 // NATO phonetic alphabet words for passphrase generation
@@ -194,6 +198,36 @@ function cmdComplete(ticketId) {
   process.exit(0);
 }
 
+/**
+ * Atomic teardown: reveal passphrase then remove session file.
+ * Replaces the fragile 3-step agent prompt with a single command.
+ * Fail-open: exits 0 if no session exists (guard may be disabled).
+ */
+function cmdFinish(ticketId) {
+  if (!ticketId) {
+    process.stderr.write('Usage: session-guard.js finish <ticketId>\n');
+    process.exit(1);
+  }
+
+  const session = readSessionFile(ticketId);
+  if (!session) {
+    process.stderr.write(`No active session for ${ticketId} (skipping finish)\n`);
+    process.exit(0);
+  }
+
+  // Reveal passphrase (unlock Stop hook)
+  process.stdout.write(session.passphrase + '\n');
+  session.revealed = true;
+  writeSessionAtomic(ticketId, session);
+
+  // Clean up session file
+  try {
+    fs.unlinkSync(sessionFilePath(ticketId));
+  } catch { /* already gone — fine */ }
+  process.stderr.write(`Session guard finished for ${ticketId}\n`);
+  process.exit(0);
+}
+
 function cmdStatus(ticketId) {
   if (ticketId) {
     const session = readSessionFile(ticketId);
@@ -324,15 +358,19 @@ async function main() {
     case 'complete':
       cmdComplete(args[1]);
       break;
+    case 'finish':
+      cmdFinish(args[1]);
+      break;
     case 'status':
       cmdStatus(args[1]);
       break;
     default:
       process.stderr.write(
-        'Usage: session-guard.js <init|reveal|complete|status> [args]\n' +
+        'Usage: session-guard.js <init|reveal|complete|finish|status> [args]\n' +
         '  init <ticketId> <workflow>  — Start session guard\n' +
         '  reveal <ticketId>           — Reveal passphrase\n' +
         '  complete <ticketId>         — Clear session\n' +
+        '  finish <ticketId>           — Reveal + complete (atomic teardown)\n' +
         '  status [ticketId]           — Show session info\n'
       );
       process.exit(1);

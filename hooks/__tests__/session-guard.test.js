@@ -193,6 +193,33 @@ describe('session-guard', () => {
     });
   });
 
+  // ─── CLI: finish (atomic teardown) ───
+
+  describe('CLI: finish', () => {
+    it('reveals passphrase and removes session file', async () => {
+      await runCli(['init', TEST_TICKET, TEST_WORKFLOW]);
+      const session = readSession(TEST_TICKET);
+      assert.ok(session, 'session should exist before finish');
+
+      const r = await runCli(['finish', TEST_TICKET]);
+      assert.equal(r.code, 0);
+      assert.ok(r.stdout.includes(session.passphrase), 'should output passphrase');
+      assert.equal(readSession(TEST_TICKET), null, 'session file should be removed');
+    });
+
+    it('succeeds when no session exists (fail-open)', async () => {
+      const r = await runCli(['finish', 'NONEXISTENT-123']);
+      assert.equal(r.code, 0);
+      assert.ok(r.stderr.includes('skipping finish'));
+    });
+
+    it('fails with usage error when no ticketId provided', async () => {
+      const r = await runCli(['finish']);
+      assert.equal(r.code, 1);
+      assert.ok(r.stderr.includes('Usage'));
+    });
+  });
+
   // ─── CLI: status ───
 
   describe('CLI: status', () => {
