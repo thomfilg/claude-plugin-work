@@ -6,8 +6,8 @@
  * When the AI copies a command from SKILL.md containing ${CLAUDE_PLUGIN_ROOT},
  * the shell variable is unset in the AI's Bash environment. This hook:
  * 1. Detects the unresolved variable in the command
- * 2. Resolves the actual path using __dirname (since hooks.json resolves it for us)
- * 3. Blocks and provides the corrected command with the literal path
+ * 2. Resolves the actual path using process.env.CLAUDE_PLUGIN_ROOT, falling back to __dirname
+ * 3. Blocks and provides the corrected command with the resolved absolute path
  *
  * The AI then re-runs the corrected command — zero guessing needed.
  */
@@ -33,10 +33,15 @@ async function main() {
     process.exit(0); // allow — nothing to resolve
   }
 
-  // Replace variable with actual path
+  // Replace variable with actual path (use replacer function to avoid $ special sequences)
   const fixed = command
-    .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, PLUGIN_ROOT)
-    .replace(/\$CLAUDE_PLUGIN_ROOT\b/g, PLUGIN_ROOT);
+    .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, () => PLUGIN_ROOT)
+    .replace(/\$CLAUDE_PLUGIN_ROOT\b/g, () => PLUGIN_ROOT);
+
+  // If nothing actually changed, don't block — avoid false-positive on similar var names
+  if (fixed === command) {
+    process.exit(0);
+  }
 
   process.stderr.write(
     `CLAUDE_PLUGIN_ROOT resolved → ${PLUGIN_ROOT}\n\nRun this instead:\n${fixed}\n`

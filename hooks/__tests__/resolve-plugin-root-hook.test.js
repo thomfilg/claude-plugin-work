@@ -105,4 +105,21 @@ describe('resolve-plugin-root-hook', () => {
     assert.ok(stderr.includes(`CLAUDE_PLUGIN_ROOT resolved`));
     assert.ok(stderr.includes('Run this instead'));
   });
+
+  it('should ALLOW commands with similar var names (no false positive)', async () => {
+    const { code, stderr } = await runHook({
+      tool_input: { command: 'echo $CLAUDE_PLUGIN_ROOT_DIR/test' },
+    });
+    assert.strictEqual(code, 0);
+    assert.strictEqual(stderr, '');
+  });
+
+  it('should handle $ special sequences in PLUGIN_ROOT path safely', async () => {
+    const { code, stderr } = await runHook(
+      { tool_input: { command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/test.js' } },
+      { CLAUDE_PLUGIN_ROOT: '/path/with/$pecial/chars' },
+    );
+    assert.strictEqual(code, 2);
+    assert.ok(stderr.includes('/path/with/$pecial/chars'));
+  });
 });
