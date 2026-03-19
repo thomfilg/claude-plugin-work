@@ -169,9 +169,9 @@ describe('session-guard', () => {
       assert.equal(updated.revealed, true);
     });
 
-    it('fails gracefully if no session exists', async () => {
+    it('exits 0 gracefully if no session exists (fail-open)', async () => {
       const r = await runCli(['reveal', 'NONEXISTENT-123']);
-      assert.equal(r.code, 1);
+      assert.equal(r.code, 0);
     });
   });
 

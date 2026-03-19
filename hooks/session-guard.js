@@ -23,6 +23,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// Allow disabling session guard entirely via env var
+if (process.env.SESSION_GUARD_ENABLED === '0') {
+  process.exit(0);
+}
+
 // Fail-open in hook mode: never block due to our own bugs
 // CLI mode surfaces errors with non-zero exit codes for debuggability
 const isHookMode = !!process.env.CLAUDE_HOOK_TYPE;
@@ -87,13 +92,14 @@ function writeSessionAtomic(ticketId, data) {
  */
 function findActiveSessions() {
   const sessions = [];
+  const baseDir = path.resolve(SESSION_DIR);
   try {
-    const files = fs.readdirSync(SESSION_DIR);
+    const files = fs.readdirSync(baseDir);
     for (const f of files) {
       if (!f.startsWith('claude-session-guard-') || !f.endsWith('.json')) continue;
       try {
-        const fullPath = path.join(SESSION_DIR, f);
-        if (!fullPath.startsWith(SESSION_DIR + path.sep)) continue;
+        const fullPath = path.resolve(baseDir, f);
+        if (!fullPath.startsWith(baseDir + path.sep)) continue;
         const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
         if (data && data.ticketId) sessions.push(data);
       } catch { /* skip corrupt files */ }
@@ -132,8 +138,8 @@ function cmdReveal(ticketId) {
 
   const session = readSessionFile(ticketId);
   if (!session) {
-    process.stderr.write(`No active session for ${ticketId}\n`);
-    process.exit(1);
+    process.stderr.write(`No active session for ${ticketId} (skipping reveal)\n`);
+    process.exit(0); // fail-open: don't break 13_complete if guard wasn't initialized
   }
 
   // Output passphrase to stdout
@@ -303,4 +309,11 @@ async function main() {
   }
 }
 
-main().catch(() => process.exit(0));
+main().catch((err) => {
+  if (isHookMode) {
+    process.exit(0); // fail-open in hook mode
+  } else {
+    process.stderr.write(`session-guard error: ${err.message}\n`);
+    process.exit(1); // surface errors in CLI mode
+  }
+});

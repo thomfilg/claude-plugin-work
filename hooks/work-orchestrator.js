@@ -651,7 +651,7 @@ function generatePlan(ticket, description, s, rework) {
   const guardPath = path.join(__dirname, 'session-guard.js');
   add('13_complete', 'RUN', 'Task(Bash)', 'Finish', {
     agentType: 'Bash',
-    agentPrompt: `Run these commands in order (each must succeed before running the next):\n1. node ~/.claude/hooks/work-state.js complete ${t}\n2. node "${guardPath}" reveal ${t}\n3. node "${guardPath}" complete ${t}\n\nThe first marks the workflow as complete. The second reveals the session passphrase (unlocking the Stop hook). The third cleans up the session file. Guard is only unlocked after workflow is marked complete.`,
+    agentPrompt: `Run these commands in order:\n1. node ~/.claude/hooks/work-state.js complete ${t}\n2. node "${guardPath}" reveal ${t}\n3. node "${guardPath}" complete ${t}\n\nThe first marks the workflow as complete. The second reveals the session passphrase (unlocking the Stop hook) — exits 0 even if no guard session exists. The third cleans up the session file. Guard is only unlocked after workflow is marked complete.`,
   });
 
   return { ticket: ticket || `TBD ("${description}")`, mode, plan };
