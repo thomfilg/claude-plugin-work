@@ -460,6 +460,7 @@ function generatePlan(ticket, description, s, rework) {
   if (ticket && process.env.SESSION_GUARD_ENABLED !== '0') {
     try {
       const guardPath = path.join(__dirname, 'session-guard.js');
+      // init is idempotent: reuses existing session if one exists for this ticket
       execFileSync(process.execPath, [guardPath, 'init', ticket, '/work'], { stdio: 'pipe', timeout: 5000 });
     } catch { /* fail-open: guard init failure must not block plan generation */ }
   }

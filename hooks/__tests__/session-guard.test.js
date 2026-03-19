@@ -146,10 +146,10 @@ describe('session-guard', () => {
       assert.ok(passphrases.size > 1, 'should generate at least 2 unique passphrases out of 7');
     });
 
-    it('outputs session info to stdout', async () => {
+    it('outputs session info to stderr', async () => {
       const r = await runCli(['init', TEST_TICKET, TEST_WORKFLOW]);
       assert.equal(r.code, 0);
-      assert.ok(r.stdout.length > 0 || r.stderr.length > 0, 'should produce some output');
+      assert.ok(r.stderr.length > 0, 'should produce stderr output');
     });
   });
 

@@ -101,7 +101,10 @@ function findActiveSessions() {
         const fullPath = path.resolve(baseDir, f);
         if (!fullPath.startsWith(baseDir + path.sep)) continue;
         const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-        if (data && data.ticketId) sessions.push(data); // valid session found
+        // Only trust files owned by current user (prevent local DoS via planted files)
+        const stat = fs.statSync(fullPath);
+        if (stat.uid !== process.getuid()) continue;
+        if (data && data.ticketId) sessions.push(data);
       } catch { /* skip corrupt files */ }
     }
   } catch { /* can't read /tmp — fail open */ }
@@ -114,6 +117,13 @@ function cmdInit(ticketId, workflow) {
   if (!ticketId || !workflow) {
     process.stderr.write('Usage: session-guard.js init <ticketId> <workflow>\n');
     process.exit(1);
+  }
+
+  // Idempotent: reuse existing session if one exists for this ticket
+  const existing = readSessionFile(ticketId);
+  if (existing && existing.ticketId === ticketId) {
+    process.stderr.write(`Session guard already active for ${ticketId} (${existing.workflow}). Reusing existing session.\n`);
+    process.exit(0);
   }
 
   const passphrase = generatePassphrase();

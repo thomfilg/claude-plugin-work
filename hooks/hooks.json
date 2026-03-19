@@ -147,7 +147,7 @@
     ],
     "PreCompact": [
       {
-        "matcher": "",
+        "matcher": ".*",
         "hooks": [
           {
             "type": "command",
