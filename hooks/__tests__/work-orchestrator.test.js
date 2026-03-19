@@ -23,6 +23,7 @@ function runOrchestrator(args = [], opts = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn('node', [HOOK_PATH, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      // Disable session guard + TDD gate to isolate orchestrator logic; guard is tested in session-guard.test.js (26 tests)
       env: { ...process.env, SESSION_GUARD_ENABLED: '0', WORK_TDD_ENFORCE: '0', ...opts.env },
       cwd: opts.cwd,
     });

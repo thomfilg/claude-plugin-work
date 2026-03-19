@@ -128,7 +128,8 @@ function findActiveSessions() {
           if (stat.uid !== process.getuid()) continue;
         }
         const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-        if (data?.ticketId) sessions.push(data);
+        // Validate schema: must have ticketId + workflow + passphrase to be a real session
+        if (data?.ticketId && data?.workflow && data?.passphrase) sessions.push(data);
       } catch { /* skip corrupt or inaccessible files */ }
     }
   } catch { /* can't read SESSION_DIR — fail open */ }
