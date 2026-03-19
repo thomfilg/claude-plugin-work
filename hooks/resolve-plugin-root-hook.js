@@ -18,14 +18,12 @@ const path = require('path');
 process.on('uncaughtException', () => process.exit(0));
 process.on('unhandledRejection', () => process.exit(0));
 
-// Resolved by Claude Code when running hooks; falls back to parent of __dirname for direct invocation
+// process.env.CLAUDE_PLUGIN_ROOT is set by the hook system; path.join(__dirname, '..') is the fallback
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
 
 async function main() {
-  let input = '';
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
+  let input = ''; // read hook JSON from stdin
+  for await (const chunk of process.stdin) input += chunk;
 
   const hookData = JSON.parse(input);
   const command = hookData?.tool_input?.command || '';
@@ -43,10 +41,8 @@ async function main() {
     .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, () => PLUGIN_ROOT)
     .replace(/\$CLAUDE_PLUGIN_ROOT\b/g, () => PLUGIN_ROOT);
 
-  // Guard: if regex didn't match (e.g. $CLAUDE_PLUGIN_ROOT_DIR), allow unchanged command
-  if (fixed === command) {
-    process.exit(0);
-  }
+  // Guard against false positives (e.g. $CLAUDE_PLUGIN_ROOT_DIR where \b prevents replacement)
+  if (fixed === command) process.exit(0);
 
   process.stderr.write(
     `CLAUDE_PLUGIN_ROOT resolved → ${PLUGIN_ROOT}\n\nRun this instead:\n${fixed}\n`
