@@ -85,8 +85,12 @@ function writeSessionAtomic(ticketId, data) {
   const dir = path.dirname(target);
   fs.mkdirSync(dir, { recursive: true });
   const tmp = `${target}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, target); // atomic: visible only after rename succeeds
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, target);
+  } finally {
+    try { fs.unlinkSync(tmp); } catch { /* tmp already renamed or never created */ }
+  }
 }
 
 /**

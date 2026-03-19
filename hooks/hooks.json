@@ -161,8 +161,8 @@
         "matcher": ".*",
         "hooks": [
           {
-            "command": "CLAUDE_HOOK_TYPE=Stop node ${CLAUDE_PLUGIN_ROOT}/hooks/session-guard.js",
             "type": "command",
+            "command": "CLAUDE_HOOK_TYPE=Stop node ${CLAUDE_PLUGIN_ROOT}/hooks/session-guard.js",
             "timeout": 10
           }
         ]
