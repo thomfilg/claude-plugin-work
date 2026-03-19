@@ -54,8 +54,9 @@ function sanitizeTicketId(ticketId) {
   const sanitized = String(ticketId).replace(/[/\\:\0]/g, '_');
   const baseDir = path.resolve(SESSION_DIR);
   const resolved = path.resolve(baseDir, `claude-session-guard-${sanitized}.json`);
-  // Verify resolved path stays under SESSION_DIR
-  if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
+  // Verify resolved path stays under SESSION_DIR (handle root "/" where baseDir + sep = "//")
+  const prefix = baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep;
+  if (!resolved.startsWith(prefix) && resolved !== baseDir) {
     throw new Error('Invalid ticketId: resolved path escapes SESSION_DIR');
   }
   return resolved; // validated: stays under SESSION_DIR
@@ -87,6 +88,8 @@ function writeSessionAtomic(ticketId, data) {
   const tmp = `${target}.${process.pid}.tmp`;
   try {
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
+    // Remove existing target first for Windows compatibility (renameSync fails if target exists)
+    try { fs.unlinkSync(target); } catch { /* target doesn't exist yet — fine */ }
     fs.renameSync(tmp, target);
   } catch (err) {
     // Clean up orphaned tmp file on failure, then re-throw
