@@ -44,10 +44,10 @@ async function main() {
   if (fixed === command) {
     process.exit(0);
   }
-
+  // Block with the corrected command so the AI can re-run it directly
   const message = `CLAUDE_PLUGIN_ROOT resolved → ${PLUGIN_ROOT}\n\nRun this instead:\n${fixed}\n`;
   process.stderr.write(message);
-  process.exit(2); // block — AI should retry with the corrected command
+  process.exit(2);
 }
 
 main().catch(() => process.exit(0));
