@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * session-guard.js — Multi-purpose session guard for /work and /follow-up-pr
+ * session-guard.js — Workflow session guard (currently wired for /work only)
  *
  * Prevents AI from getting lost after context compaction by:
  * 1. Generating a passphrase at workflow start (locked until completion)
@@ -79,7 +79,13 @@ function generatePassphrase() {
 
 function readSessionFile(ticketId) {
   try {
-    return JSON.parse(fs.readFileSync(sessionFilePath(ticketId), 'utf8'));
+    const filePath = sessionFilePath(ticketId);
+    // Verify ownership before reading (same check as findActiveSessions)
+    if (typeof process.getuid === 'function') {
+      const stat = fs.statSync(filePath);
+      if (stat.uid !== process.getuid()) return null;
+    }
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch {
     return null;
   }
