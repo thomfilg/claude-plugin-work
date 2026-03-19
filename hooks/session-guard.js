@@ -30,7 +30,7 @@ if (process.env.SESSION_GUARD_ENABLED === '0') {
 
 // Fail-open in hook mode: never block due to our own bugs
 // CLI mode surfaces errors with non-zero exit codes for debuggability
-const isHookMode = !!process.env.CLAUDE_HOOK_TYPE;
+const isHookMode = Boolean(process.env.CLAUDE_HOOK_TYPE);
 if (isHookMode) {
   process.on('uncaughtException', () => process.exit(0));
   process.on('unhandledRejection', () => process.exit(0));
@@ -56,9 +56,9 @@ function sanitizeTicketId(ticketId) {
   const resolved = path.resolve(baseDir, `claude-session-guard-${sanitized}.json`);
   // Verify resolved path stays under SESSION_DIR
   if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
-    throw new Error(`Invalid ticketId: resolved path escapes SESSION_DIR`);
+    throw new Error('Invalid ticketId: resolved path escapes SESSION_DIR');
   }
-  return resolved;
+  return resolved; // validated: stays under SESSION_DIR
 }
 
 function sessionFilePath(ticketId) {
@@ -101,7 +101,7 @@ function findActiveSessions() {
         const fullPath = path.resolve(baseDir, f);
         if (!fullPath.startsWith(baseDir + path.sep)) continue;
         const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-        if (data && data.ticketId) sessions.push(data);
+        if (data && data.ticketId) sessions.push(data); // valid session found
       } catch { /* skip corrupt files */ }
     }
   } catch { /* can't read /tmp — fail open */ }

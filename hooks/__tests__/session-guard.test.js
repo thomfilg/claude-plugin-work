@@ -35,7 +35,7 @@ function cleanupAllSessions() {
         try { fs.unlinkSync(path.join(SESSION_DIR, f)); } catch { /* */ }
       }
     }
-  } catch { /* */ }
+  } catch { /* ignore dir read errors */ }
 }
 
 function readSession(ticketId) {

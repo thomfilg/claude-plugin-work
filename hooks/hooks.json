@@ -162,7 +162,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=Stop node ${CLAUDE_PLUGIN_ROOT}/hooks/session-guard.js"
+            "command": "CLAUDE_HOOK_TYPE=Stop node ${CLAUDE_PLUGIN_ROOT}/hooks/session-guard.js",
+            "timeout": 10
           }
         ]
       },
