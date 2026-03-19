@@ -40,8 +40,19 @@ const NATO_WORDS = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function sanitizeTicketId(ticketId) {
+  // Strip path separators and null bytes to prevent path traversal
+  const sanitized = String(ticketId).replace(/[/\\:\0]/g, '_');
+  const resolved = path.join(SESSION_DIR, `claude-session-guard-${sanitized}.json`);
+  // Verify resolved path stays under SESSION_DIR
+  if (!resolved.startsWith(SESSION_DIR + path.sep)) {
+    throw new Error(`Invalid ticketId: resolved path escapes SESSION_DIR`);
+  }
+  return resolved;
+}
+
 function sessionFilePath(ticketId) {
-  return path.join(SESSION_DIR, `claude-session-guard-${ticketId}.json`);
+  return sanitizeTicketId(ticketId);
 }
 
 function generatePassphrase() {
