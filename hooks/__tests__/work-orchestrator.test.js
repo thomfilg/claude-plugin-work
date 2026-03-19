@@ -441,6 +441,8 @@ describe('work-orchestrator.js', () => {
       assert.equal(completeStep.agentType, 'Bash');
       assert.ok(completeStep.agentPrompt.includes('work-state.js'));
       assert.ok(completeStep.agentPrompt.includes('complete'));
+      assert.ok(completeStep.agentPrompt.includes('session-guard.js'));
+      assert.ok(completeStep.agentPrompt.includes('reveal'));
     });
 
     it('should use Bash agent for 12_reports', async () => {
