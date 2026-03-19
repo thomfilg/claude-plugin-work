@@ -660,9 +660,10 @@ function generatePlan(ticket, description, s, rework) {
       ``,
       `Step 1 marks the workflow as complete — must succeed before unlocking the guard.`,
       `Step 2 reveals the session passphrase (unlocking the Stop hook). Exits 0 if no guard session exists (guard may be disabled).`,
-      `Step 3 cleans up the session guard file. All three commands are tolerant of missing guard state.`,
+      `Step 3 cleans up the session guard file.`,
+      `All three commands are tolerant of missing guard state (SESSION_GUARD_ENABLED=0 or missing session).`,
     ].join('\n'),
-  });
+  }); // 13_complete — must run after all other steps
 
   return { ticket: ticket || `TBD ("${description}")`, mode, plan };
 }

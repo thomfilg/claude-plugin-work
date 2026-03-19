@@ -86,7 +86,7 @@ function writeSessionAtomic(ticketId, data) {
   fs.mkdirSync(dir, { recursive: true });
   const tmp = `${target}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, target);
+  fs.renameSync(tmp, target); // atomic: visible only after rename succeeds
 }
 
 /**
@@ -109,7 +109,7 @@ function findActiveSessions() {
           const stat = fs.statSync(fullPath);
           if (stat.uid !== process.getuid()) continue;
         }
-        if (data && data.ticketId) sessions.push(data);
+        if (data?.ticketId) sessions.push(data);
       } catch { /* skip corrupt or inaccessible files */ }
     }
   } catch { /* can't read /tmp — fail open */ }

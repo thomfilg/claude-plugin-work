@@ -23,8 +23,7 @@ function runOrchestrator(args = [], opts = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn('node', [HOOK_PATH, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      // Disable session guard so orchestrator tests don't create /tmp files; session-guard.test.js covers guard logic
-      env: { ...process.env, SESSION_GUARD_ENABLED: '0', ...opts.env },
+      env: { ...process.env, SESSION_GUARD_ENABLED: '0', ...opts.env }, // guard off: session-guard.test.js covers guard logic
       cwd: opts.cwd,
     });
 
