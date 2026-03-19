@@ -32,7 +32,7 @@
  *   9_pr, 10_ready, 11_ci, 12_reports, 13_complete
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -460,7 +460,7 @@ function generatePlan(ticket, description, s, rework) {
   if (ticket && process.env.NODE_ENV !== 'test') {
     try {
       const guardPath = path.join(__dirname, 'session-guard.js');
-      execSync(`node ${guardPath} init ${ticket} /work`, { stdio: 'pipe', timeout: 5000 });
+      execFileSync(process.execPath, [guardPath, 'init', ticket, '/work'], { stdio: 'pipe', timeout: 5000 });
     } catch { /* fail-open: don't block plan generation if guard init fails */ }
   }
 
@@ -651,7 +651,7 @@ function generatePlan(ticket, description, s, rework) {
   const guardPath = path.join(__dirname, 'session-guard.js');
   add('13_complete', 'RUN', 'Task(Bash)', 'Finish', {
     agentType: 'Bash',
-    agentPrompt: `Run these commands in order:\n1. node ${guardPath} reveal ${t}\n2. node ${guardPath} complete ${t}\n3. node ~/.claude/hooks/work-state.js complete ${t}\n\nThe first command reveals the session passphrase (unlocking the Stop hook). The second cleans up the session file. The third marks the workflow as complete.`,
+    agentPrompt: `Run these commands in order:\n1. node "${guardPath}" reveal ${t}\n2. node "${guardPath}" complete ${t}\n3. node ~/.claude/hooks/work-state.js complete ${t}\n\nThe first command reveals the session passphrase (unlocking the Stop hook). The second cleans up the session file. The third marks the workflow as complete.`,
   });
 
   return { ticket: ticket || `TBD ("${description}")`, mode, plan };

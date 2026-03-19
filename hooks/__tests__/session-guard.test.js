@@ -11,7 +11,7 @@ const { describe, it, before, after, beforeEach, afterEach } = require('node:tes
 const assert = require('node:assert/strict');
 
 const HOOK_PATH = path.join(__dirname, '..', 'session-guard.js');
-const SESSION_DIR = '/tmp';
+const SESSION_DIR = path.join(require('os').tmpdir(), 'session-guard-test-' + process.pid);
 const TEST_TICKET = 'TEST-999';
 const TEST_WORKFLOW = '/work';
 
@@ -24,9 +24,8 @@ function cleanupSession(ticketId) {
 }
 
 /**
- * Remove ALL session guard files from /tmp.
- * Necessary because tests that check "no active session" will fail
- * if stale session files exist from other test runs or orchestrator calls.
+ * Remove ALL session guard files from the isolated test directory.
+ * Safe because SESSION_DIR is a dedicated temp dir per test process.
  */
 function cleanupAllSessions() {
   try {
@@ -54,7 +53,7 @@ function runCli(args = [], extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn('node', [HOOK_PATH, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...extraEnv },
+      env: { ...process.env, SESSION_GUARD_DIR: SESSION_DIR, ...extraEnv },
     });
 
     let stdout = '';
@@ -75,7 +74,7 @@ function runHook(hookData, hookType, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn('node', [HOOK_PATH], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...extraEnv, CLAUDE_HOOK_TYPE: hookType },
+      env: { ...process.env, SESSION_GUARD_DIR: SESSION_DIR, ...extraEnv, CLAUDE_HOOK_TYPE: hookType },
     });
 
     let stdout = '';
@@ -91,8 +90,8 @@ function runHook(hookData, hookType, extraEnv = {}) {
 }
 
 describe('session-guard', () => {
-  before(() => { cleanupAllSessions(); });
-  after(() => { cleanupAllSessions(); });
+  before(() => { fs.mkdirSync(SESSION_DIR, { recursive: true }); cleanupAllSessions(); });
+  after(() => { cleanupAllSessions(); try { fs.rmdirSync(SESSION_DIR); } catch { /* */ } });
 
   beforeEach(() => {
     cleanupAllSessions();
@@ -136,9 +135,15 @@ describe('session-guard', () => {
       await runCli(['init', TEST_TICKET, TEST_WORKFLOW]);
       const s2 = readSession(TEST_TICKET);
 
-      // Not strictly guaranteed but extremely unlikely to collide
-      // With 26^2 words * 10000 numbers = 6,760,000 combinations, collision is ~0.00015%
-      assert.ok(s1.passphrase !== s2.passphrase || true, 'passphrases should generally differ');
+      // Generate several passphrases and verify no duplicates
+      const passphrases = new Set([s1.passphrase, s2.passphrase]);
+      for (let i = 0; i < 5; i++) {
+        cleanupSession(TEST_TICKET);
+        await runCli(['init', TEST_TICKET, TEST_WORKFLOW]);
+        const s = readSession(TEST_TICKET);
+        passphrases.add(s.passphrase);
+      }
+      assert.ok(passphrases.size > 1, 'should generate at least 2 unique passphrases out of 7');
     });
 
     it('outputs session info to stdout', async () => {

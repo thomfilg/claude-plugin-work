@@ -27,7 +27,7 @@ const crypto = require('crypto');
 process.on('uncaughtException', () => process.exit(0));
 process.on('unhandledRejection', () => process.exit(0));
 
-const SESSION_DIR = '/tmp';
+const SESSION_DIR = process.env.SESSION_GUARD_DIR || '/tmp';
 
 // NATO phonetic alphabet words for passphrase generation
 const NATO_WORDS = [
@@ -73,7 +73,7 @@ function readSessionFile(ticketId) {
 function writeSessionAtomic(ticketId, data) {
   const target = sessionFilePath(ticketId);
   const tmp = `${target}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, target);
 }
 
@@ -87,7 +87,9 @@ function findActiveSessions() {
     for (const f of files) {
       if (!f.startsWith('claude-session-guard-') || !f.endsWith('.json')) continue;
       try {
-        const data = JSON.parse(fs.readFileSync(path.join(SESSION_DIR, f), 'utf8'));
+        const fullPath = path.join(SESSION_DIR, f);
+        if (!fullPath.startsWith(SESSION_DIR + path.sep)) continue;
+        const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
         if (data && data.ticketId) sessions.push(data);
       } catch { /* skip corrupt files */ }
     }
