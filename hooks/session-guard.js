@@ -103,29 +103,31 @@ function writeSessionAtomic(ticketId, data) {
 }
 
 /**
- * Find all active session guard files in /tmp
+ * Find all active session guard files in SESSION_DIR.
+ * Checks file ownership before reading content to avoid parsing untrusted files.
+ * Filters by filename prefix rather than scanning all of SESSION_DIR.
  */
 function findActiveSessions() {
   const sessions = [];
   const baseDir = path.resolve(SESSION_DIR);
   try {
-    const files = fs.readdirSync(baseDir);
-    for (const f of files) {
-      if (!f.startsWith('claude-session-guard-') || !f.endsWith('.json')) continue;
+    const prefix = 'claude-session-guard-';
+    const suffix = '.json';
+    for (const f of fs.readdirSync(baseDir)) {
+      if (!f.startsWith(prefix) || !f.endsWith(suffix)) continue;
+      const fullPath = path.resolve(baseDir, f);
+      if (!fullPath.startsWith(baseDir.endsWith(path.sep) ? baseDir : baseDir + path.sep)) continue;
       try {
-        const fullPath = path.resolve(baseDir, f);
-        if (!fullPath.startsWith(baseDir + path.sep)) continue;
-        const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-        // Only trust files owned by current user (prevent local DoS via planted files)
-        // Skip ownership check on platforms without getuid (e.g. Windows)
+        // Check ownership BEFORE reading content to skip untrusted files early
         if (typeof process.getuid === 'function') {
           const stat = fs.statSync(fullPath);
           if (stat.uid !== process.getuid()) continue;
         }
+        const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
         if (data?.ticketId) sessions.push(data);
       } catch { /* skip corrupt or inaccessible files */ }
     }
-  } catch { /* can't read /tmp — fail open */ }
+  } catch { /* can't read SESSION_DIR — fail open */ }
   return sessions;
 }
 
