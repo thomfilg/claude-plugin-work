@@ -456,8 +456,8 @@ function generatePlan(ticket, description, s, rework) {
 
   const tddEnforce = process.env.WORK_TDD_ENFORCE === '1';
 
-  // Initialize session guard for workflow locking
-  if (ticket) {
+  // Initialize session guard for workflow locking (skip during tests to avoid cross-test interference)
+  if (ticket && process.env.NODE_ENV !== 'test') {
     try {
       const guardPath = path.join(__dirname, 'session-guard.js');
       execSync(`node ${guardPath} init ${ticket} /work`, { stdio: 'pipe', timeout: 5000 });
