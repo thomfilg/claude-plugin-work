@@ -462,7 +462,7 @@ function generatePlan(ticket, description, s, rework) {
       const guardPath = path.join(__dirname, 'session-guard.js');
       // init is idempotent: reuses existing session if one exists for this ticket
       execFileSync(process.execPath, [guardPath, 'init', ticket, '/work'], { stdio: 'pipe', timeout: 5000 });
-    } catch { /* fail-open: guard init failure must not block plan generation */ }
+    } catch { /* fail-open: session-guard init failure must not block plan generation */ }
   }
 
   function add(stepName, action, command, reason, extra = {}) {
@@ -652,7 +652,16 @@ function generatePlan(ticket, description, s, rework) {
   const guardPath = path.join(__dirname, 'session-guard.js');
   add('13_complete', 'RUN', 'Task(Bash)', 'Finish', {
     agentType: 'Bash',
-    agentPrompt: `Run these commands in sequence:\n1. node ~/.claude/hooks/work-state.js complete ${t}\n2. node "${guardPath}" reveal ${t}\n3. node "${guardPath}" complete ${t}\n\nStep 1 marks the workflow as complete. Step 2 reveals the session passphrase (unlocking the Stop hook) — exits 0 even if no guard session exists (guard init is conditional on SESSION_GUARD_ENABLED). Step 3 cleans up the session file. Guard is only unlocked after workflow is marked complete.`,
+    agentPrompt: [
+      `Run these commands in sequence:`,
+      `1. node ~/.claude/hooks/work-state.js complete ${t}`,
+      `2. node "${guardPath}" reveal ${t}`,
+      `3. node "${guardPath}" complete ${t}`,
+      ``,
+      `Step 1 marks the workflow as complete.`,
+      `Step 2 reveals the session passphrase (unlocking the Stop hook) — exits 0 even if no guard session exists.`,
+      `Step 3 cleans up the session file. Guard is only unlocked after workflow is marked complete.`,
+    ].join('\n'),
   });
 
   return { ticket: ticket || `TBD ("${description}")`, mode, plan };

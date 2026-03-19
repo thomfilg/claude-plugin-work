@@ -105,7 +105,7 @@ function findActiveSessions() {
         const stat = fs.statSync(fullPath);
         if (stat.uid !== process.getuid()) continue;
         if (data && data.ticketId) sessions.push(data);
-      } catch { /* skip corrupt files */ }
+      } catch { /* skip corrupt or inaccessible files */ }
     }
   } catch { /* can't read /tmp — fail open */ }
   return sessions;
@@ -136,7 +136,7 @@ function cmdInit(ticketId, workflow) {
   };
 
   writeSessionAtomic(ticketId, session);
-  process.stderr.write(`Session guard active for ${ticketId} (${workflow}). Workflow locked until all steps complete.\n`);
+  process.stderr.write(`Session guard active for ${ticketId} (${workflow}). Locked until all steps complete.\n`);
   process.exit(0);
 }
 
