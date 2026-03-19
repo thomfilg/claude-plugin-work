@@ -14,6 +14,7 @@
 
 const path = require('path');
 
+// Resolved by Claude Code when running hooks; falls back to __dirname for direct invocation
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
 
 async function main() {
@@ -38,7 +39,7 @@ async function main() {
     .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, () => PLUGIN_ROOT)
     .replace(/\$CLAUDE_PLUGIN_ROOT\b/g, () => PLUGIN_ROOT);
 
-  // If nothing actually changed, don't block — avoid false-positive on similar var names
+  // Guard: if regex didn't match (e.g. $CLAUDE_PLUGIN_ROOT_DIR), allow unchanged command
   if (fixed === command) {
     process.exit(0);
   }
