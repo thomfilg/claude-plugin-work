@@ -456,6 +456,14 @@ function generatePlan(ticket, description, s, rework) {
 
   const tddEnforce = process.env.WORK_TDD_ENFORCE === '1';
 
+  // Initialize session guard for workflow locking
+  if (ticket) {
+    try {
+      const guardPath = path.join(__dirname, 'session-guard.js');
+      execSync(`node ${guardPath} init ${ticket} /work`, { stdio: 'pipe', timeout: 5000 });
+    } catch { /* fail-open: don't block plan generation if guard init fails */ }
+  }
+
   function add(stepName, action, command, reason, extra = {}) {
     // Augment TDD-gated steps with protocol instructions
     if (tddEnforce && TDD_GATED_STEPS.includes(stepName) && extra.agentPrompt && action === 'RUN') {
@@ -640,9 +648,10 @@ function generatePlan(ticket, description, s, rework) {
     agentType: 'Bash',
     agentPrompt: `Verify and consolidate reports in ${tasksDir}. List all *.check.md files and confirm they exist. Report the count and status of each.`,
   });
+  const guardPath = path.join(__dirname, 'session-guard.js');
   add('13_complete', 'RUN', 'Task(Bash)', 'Finish', {
     agentType: 'Bash',
-    agentPrompt: `Run: node ~/.claude/hooks/work-state.js complete ${t}`,
+    agentPrompt: `Run these commands in order:\n1. node ${guardPath} reveal ${t}\n2. node ${guardPath} complete ${t}\n3. node ~/.claude/hooks/work-state.js complete ${t}\n\nThe first command reveals the session passphrase (unlocking the Stop hook). The second cleans up the session file. The third marks the workflow as complete.`,
   });
 
   return { ticket: ticket || `TBD ("${description}")`, mode, plan };

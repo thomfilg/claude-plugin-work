@@ -518,7 +518,7 @@ describe('work-orchestrator.js', () => {
     it('should allow transition from 8_test_enhancement → 3_implement', async () => {
       const TMP = path.join(os.tmpdir(), 'work-orch-p14b-' + process.pid);
       const T = 'TEST-813';
-      const o = { env: { WORKTREES_BASE: TMP } };
+      const o = { env: { WORKTREES_BASE: TMP, WORK_TDD_ENFORCE: '0' } };
       try {
         await runOrchestrator(['transition', T, '2_bootstrap'], o);
         await runOrchestrator(['transition', T, '6_check'], o);
@@ -533,12 +533,13 @@ describe('work-orchestrator.js', () => {
 
     it('should allow transition from 9_pr → 11_ci (skip 10_ready)', async () => {
       const TEST_TICKET = 'TEST-911';
+      const o = { env: { WORK_TDD_ENFORCE: '0' } };
       try {
-        await runOrchestrator(['transition', TEST_TICKET, '2_bootstrap']);
-        await runOrchestrator(['transition', TEST_TICKET, '6_check']);
-        await runOrchestrator(['transition', TEST_TICKET, '8_test_enhancement']);
-        await runOrchestrator(['transition', TEST_TICKET, '9_pr']);
-        const { result } = await runOrchestrator(['transition', TEST_TICKET, '11_ci']);
+        await runOrchestrator(['transition', TEST_TICKET, '2_bootstrap'], o);
+        await runOrchestrator(['transition', TEST_TICKET, '6_check'], o);
+        await runOrchestrator(['transition', TEST_TICKET, '8_test_enhancement'], o);
+        await runOrchestrator(['transition', TEST_TICKET, '9_pr'], o);
+        const { result } = await runOrchestrator(['transition', TEST_TICKET, '11_ci'], o);
         assert.equal(result.success, true);
         assert.equal(result.from, '9_pr');
         assert.equal(result.to, '11_ci');
@@ -549,13 +550,14 @@ describe('work-orchestrator.js', () => {
 
     it('should reset intermediate steps when skipping 9_pr → 11_ci', async () => {
       const TEST_TICKET = 'TEST-912';
+      const o = { env: { WORK_TDD_ENFORCE: '0' } };
       try {
-        await runOrchestrator(['transition', TEST_TICKET, '2_bootstrap']);
-        await runOrchestrator(['transition', TEST_TICKET, '6_check']);
-        await runOrchestrator(['transition', TEST_TICKET, '8_test_enhancement']);
-        await runOrchestrator(['transition', TEST_TICKET, '9_pr']);
-        await runOrchestrator(['transition', TEST_TICKET, '11_ci']);
-        const { result } = await runOrchestrator(['transitions', TEST_TICKET]);
+        await runOrchestrator(['transition', TEST_TICKET, '2_bootstrap'], o);
+        await runOrchestrator(['transition', TEST_TICKET, '6_check'], o);
+        await runOrchestrator(['transition', TEST_TICKET, '8_test_enhancement'], o);
+        await runOrchestrator(['transition', TEST_TICKET, '9_pr'], o);
+        await runOrchestrator(['transition', TEST_TICKET, '11_ci'], o);
+        const { result } = await runOrchestrator(['transitions', TEST_TICKET], o);
         // 10_ready should be marked completed (skipped)
         assert.equal(result.allStatuses['10_ready'], 'completed');
         assert.equal(result.allStatuses['11_ci'], 'in_progress');
@@ -612,7 +614,7 @@ describe('work-orchestrator.js', () => {
     const TEMP_WB = path.join(os.tmpdir(), 'work-orch-integ-' + process.pid);
     const TEMP_TASKS = path.join(TEMP_WB, 'tasks');
     const TICKET = 'TEST-8888';
-    const envOpts = { env: { WORKTREES_BASE: TEMP_WB } };
+    const envOpts = { env: { WORKTREES_BASE: TEMP_WB, WORK_TDD_ENFORCE: '0' } };
 
     after(() => {
       try { fs.rmSync(TEMP_WB, { recursive: true, force: true }); } catch {}
