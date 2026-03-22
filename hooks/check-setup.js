@@ -226,7 +226,19 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
 
   const resolvedRoot = path.resolve(repoRoot);
   // When WORKTREES_BASE is set, allow paths within it (enables shared docs across worktrees)
-  const worktreesBase = process.env.WORKTREES_BASE ? path.resolve(process.env.WORKTREES_BASE) : null;
+  const rawWorktreesBase = process.env.WORKTREES_BASE;
+  let worktreesBase = null;
+  if (rawWorktreesBase) {
+    const resolved = path.resolve(rawWorktreesBase);
+    // Validate WORKTREES_BASE exists and is a directory to prevent misuse
+    try {
+      if (fs.statSync(resolved).isDirectory()) {
+        worktreesBase = fs.realpathSync(resolved);
+      }
+    } catch {
+      // WORKTREES_BASE does not exist or is inaccessible — ignore
+    }
+  }
   let docs = '';
   for (const relPath of docPaths) {
     // Reject absolute paths
@@ -245,7 +257,7 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
     const withinRepo = absPath.startsWith(resolvedRoot + path.sep) || absPath === resolvedRoot;
     const withinWorktreesBase = worktreesBase && (absPath.startsWith(worktreesBase + path.sep) || absPath === worktreesBase);
     if (!withinRepo && !withinWorktreesBase) {
-      console.error(`Warning: ${envVarName} path escapes repo root: ${relPath}`);
+      console.error(`Warning: ${envVarName} path escapes allowed boundary: ${relPath}`);
       continue;
     }
     try {
