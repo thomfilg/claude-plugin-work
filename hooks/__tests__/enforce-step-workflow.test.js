@@ -328,7 +328,15 @@ describe('enforce-step-workflow', () => {
       });
     });
 
-    describe('Agent tool recognition (mirrors Task tool)', () => {
+    describe('Agent tool recognition (mirrors Task tool)', () => { // addresses review: Agent PreToolUse recognition
+      it('recognizes Agent with description "1_ticket" as 1_ticket', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'general-purpose', description: '1_ticket fetch ticket details', prompt: 'fetch ticket' },
+        });
+        assert.equal(code, 0);
+      });
+
       it('recognizes Agent(quality-checker) via subagent_type as 4_quality', async () => {
         const { code } = await runHook({
           tool_name: 'Agent',
@@ -527,7 +535,7 @@ describe('enforce-step-workflow', () => {
         assert.equal(code, 0);
       });
 
-      it('recognizes Agent(pr-generator) as 3_pr_gen', async () => {
+      it('recognizes Agent(pr-generator) as 3_pr_gen', async () => { // PostToolUse evidence tested below
         const { code } = await runHook({
           tool_name: 'Agent',
           tool_input: { subagent_type: 'pr-generator', prompt: 'update PR' },

@@ -512,7 +512,8 @@ function handlePostToolUse(hookData) {
       if (toolName === 'Skill') {
         what = `Skill(${toolInput?.skill || 'unknown'})`;
       } else if (toolName === 'Task' || toolName === 'Agent') {
-        what = `${toolName}(${toolInput?.subagent_type || toolInput?.description || 'unknown'})`;
+        const label = toolInput?.subagent_type || String(toolInput?.description || 'unknown').substring(0, 60);
+        what = `${toolName}(${label})`;
       } else if (toolName === 'Bash') {
         what = String(toolInput?.command || '').substring(0, 80);
       } else {
