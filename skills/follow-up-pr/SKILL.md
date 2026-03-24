@@ -214,9 +214,9 @@ For each group of related feedback:
 
 Sometimes AI reviewers (Cursor, Copilot) suggest reverting or undoing changes that the user explicitly requested. When you identify such comments:
 
-1. **Do NOT address them** — skip the comment entirely
+1. **Do NOT implement the suggested change** — skip it entirely
 2. **Fix all other legitimate review comments** normally (Steps 5.1–5.3)
-3. **Report skipped comments** to the user in the summary using this format:
+3. **Report all skipped comments** to the user in the summary (see Step 6 templates) using this format:
 
 ```
 ### Skipped AI Review Comments (Conflict With User Intent)
@@ -229,7 +229,7 @@ I didn't address these comments:
 **Why I disagree:**
 {Detailed explanation of how exactly what the AI reviewer asked goes against
 what the user requested. Be thorough — explain the conflict fully.}
-Disagreed because of: {path to supporting document or quote of user's instruction}
+Disagreed because of: {path to supporting document or quote of user instruction}
 ```
 
 **Where to find evidence to support your disagreement:**
