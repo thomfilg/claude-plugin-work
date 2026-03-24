@@ -260,7 +260,7 @@ specifies error boundaries as a requirement.
 
 ---
 
-## Step 4: Diagnose and Fix Failures
+## Step 4: Diagnose and Fix Failures (ordered after Step 5 intentionally — reviews are triaged first)
 
 ### 4.1 Get Failure Details
 

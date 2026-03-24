@@ -311,7 +311,7 @@ function classifyCommentPriority(author, body) {
     return 'medium';
   }
 
-  // Cursor: parse **severity**: <level> pattern
+  // Cursor: parse **severity**: <level> pattern (can appear anywhere in body, unlike Copilot tags)
   if (author === 'cursor-ai[bot]') {
     const severityMatch = lower.match(
       /\*{0,2}severity\*{0,2}\s*[:：]\s*(critical|high|major|medium|moderate|minor|low|nitpick|trivial|suggestion)/
