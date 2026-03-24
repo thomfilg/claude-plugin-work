@@ -357,7 +357,7 @@ describe('enforce-step-workflow', () => {
         assert.equal(evidence['4_quality']?.tool, 'Agent');
       });
 
-      it('Agent with work-workflow: prefix is recognized and records evidence as 4_quality', async () => {
+      it('Agent with work-workflow: prefix records evidence as 4_quality', async () => {
         writeWorkState(makeStepStatus('4_quality', WORK_STEPS));
         const input = { tool_name: 'Agent', tool_input: { subagent_type: 'work-workflow:quality-checker', description: 'run checks', prompt: 'run checks' } };
 
