@@ -327,6 +327,80 @@ describe('enforce-step-workflow', () => {
         assert.equal(code, 0);
       });
     });
+
+    describe('Agent tool recognition (mirrors Task tool)', () => {
+      it('recognizes Agent(quality-checker) via subagent_type as 4_quality', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'quality-checker', description: '4_quality run checks', prompt: 'run checks' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent with work-workflow: prefix as 4_quality', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'work-workflow:quality-checker', description: 'run checks', prompt: 'run checks' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent with description "4_quality" as 4_quality', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'general-purpose', description: '4_quality run dev:check', prompt: 'run checks' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent(commit-writer) via subagent_type as 5_commit', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'commit-writer', description: 'commit changes', prompt: 'commit' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent with description "7_cleanup" as 7_cleanup', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'general-purpose', description: '7_cleanup kill dev session', prompt: 'kill session' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent with description "10_ready" as 10_ready', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'general-purpose', description: '10_ready mark PR ready', prompt: 'gh pr ready' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent with description "11_ci" as 11_ci', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'general-purpose', description: '11_ci watch CI', prompt: 'gh pr checks' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent with description "12_reports" as 12_reports', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'general-purpose', description: '12_reports consolidate', prompt: 'consolidate reports' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent with description "13_complete" as 13_complete', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'general-purpose', description: '13_complete finish', prompt: 'mark complete' },
+        });
+        assert.equal(code, 0);
+      });
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -395,6 +469,22 @@ describe('enforce-step-workflow', () => {
       it('recognizes pr-post-generator as 5_post_pr_gen', async () => {
         const { code } = await runHook({
           tool_name: 'Task',
+          tool_input: { subagent_type: 'pr-post-generator', prompt: 'add screenshots' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent(pr-generator) as 3_pr_gen', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
+          tool_input: { subagent_type: 'pr-generator', prompt: 'update PR' },
+        });
+        assert.equal(code, 0);
+      });
+
+      it('recognizes Agent(pr-post-generator) as 5_post_pr_gen', async () => {
+        const { code } = await runHook({
+          tool_name: 'Agent',
           tool_input: { subagent_type: 'pr-post-generator', prompt: 'add screenshots' },
         });
         assert.equal(code, 0);
