@@ -357,20 +357,30 @@ describe('enforce-step-workflow', () => {
         assert.equal(evidence['4_quality']?.tool, 'Agent');
       });
 
-      it('Agent with work-workflow: prefix is recognized as 4_quality', async () => {
-        const { code } = await runHook({
-          tool_name: 'Agent',
-          tool_input: { subagent_type: 'work-workflow:quality-checker', description: 'run checks', prompt: 'run checks' },
-        });
-        assert.equal(code, 0);
+      it('Agent with work-workflow: prefix is recognized and records evidence as 4_quality', async () => {
+        writeWorkState(makeStepStatus('4_quality', WORK_STEPS));
+        const input = { tool_name: 'Agent', tool_input: { subagent_type: 'work-workflow:quality-checker', description: 'run checks', prompt: 'run checks' } };
+
+        const pre = await runHook(input);
+        assert.equal(pre.code, 0);
+
+        const post = await runHook(input, 'PostToolUse');
+        assert.equal(post.code, 0);
+        const evidence = readEvidence();
+        assert.ok(evidence['4_quality']?.executed, 'Should record evidence for 4_quality');
       });
 
-      it('Agent with description "4_quality" is recognized as 4_quality', async () => {
-        const { code } = await runHook({
-          tool_name: 'Agent',
-          tool_input: { subagent_type: 'general-purpose', description: '4_quality run dev:check', prompt: 'run checks' },
-        });
-        assert.equal(code, 0);
+      it('Agent with description "4_quality" is recognized and records evidence', async () => {
+        writeWorkState(makeStepStatus('4_quality', WORK_STEPS));
+        const input = { tool_name: 'Agent', tool_input: { subagent_type: 'general-purpose', description: '4_quality run dev:check', prompt: 'run checks' } };
+
+        const pre = await runHook(input);
+        assert.equal(pre.code, 0);
+
+        const post = await runHook(input, 'PostToolUse');
+        assert.equal(post.code, 0);
+        const evidence = readEvidence();
+        assert.ok(evidence['4_quality']?.executed, 'Should record evidence for 4_quality');
       });
 
       it('Agent(commit-writer) via subagent_type is recognized and records evidence', async () => {
@@ -401,36 +411,48 @@ describe('enforce-step-workflow', () => {
         assert.equal(evidence['7_cleanup']?.tool, 'Agent');
       });
 
-      it('Agent with description "10_ready" is recognized', async () => {
-        const { code } = await runHook({
-          tool_name: 'Agent',
-          tool_input: { subagent_type: 'general-purpose', description: '10_ready mark PR ready', prompt: 'gh pr ready' },
-        });
-        assert.equal(code, 0);
+      it('Agent with description "10_ready" is recognized and records evidence', async () => {
+        writeWorkState(makeStepStatus('10_ready', WORK_STEPS));
+        const input = { tool_name: 'Agent', tool_input: { subagent_type: 'general-purpose', description: '10_ready mark PR ready', prompt: 'gh pr ready' } };
+        const pre = await runHook(input);
+        assert.equal(pre.code, 0);
+        const post = await runHook(input, 'PostToolUse');
+        assert.equal(post.code, 0);
+        const evidence = readEvidence();
+        assert.ok(evidence['10_ready']?.executed, 'Should record evidence for 10_ready');
       });
 
-      it('Agent with description "11_ci" is recognized', async () => {
-        const { code } = await runHook({
-          tool_name: 'Agent',
-          tool_input: { subagent_type: 'general-purpose', description: '11_ci watch CI', prompt: 'gh pr checks' },
-        });
-        assert.equal(code, 0);
+      it('Agent with description "11_ci" is recognized and records evidence', async () => {
+        writeWorkState(makeStepStatus('11_ci', WORK_STEPS));
+        const input = { tool_name: 'Agent', tool_input: { subagent_type: 'general-purpose', description: '11_ci watch CI', prompt: 'gh pr checks' } };
+        const pre = await runHook(input);
+        assert.equal(pre.code, 0);
+        const post = await runHook(input, 'PostToolUse');
+        assert.equal(post.code, 0);
+        const evidence = readEvidence();
+        assert.ok(evidence['11_ci']?.executed, 'Should record evidence for 11_ci');
       });
 
-      it('Agent with description "12_reports" is recognized', async () => {
-        const { code } = await runHook({
-          tool_name: 'Agent',
-          tool_input: { subagent_type: 'general-purpose', description: '12_reports consolidate', prompt: 'consolidate reports' },
-        });
-        assert.equal(code, 0);
+      it('Agent with description "12_reports" is recognized and records evidence', async () => {
+        writeWorkState(makeStepStatus('12_reports', WORK_STEPS));
+        const input = { tool_name: 'Agent', tool_input: { subagent_type: 'general-purpose', description: '12_reports consolidate', prompt: 'consolidate reports' } };
+        const pre = await runHook(input);
+        assert.equal(pre.code, 0);
+        const post = await runHook(input, 'PostToolUse');
+        assert.equal(post.code, 0);
+        const evidence = readEvidence();
+        assert.ok(evidence['12_reports']?.executed, 'Should record evidence for 12_reports');
       });
 
-      it('Agent with description "13_complete" is recognized', async () => {
-        const { code } = await runHook({
-          tool_name: 'Agent',
-          tool_input: { subagent_type: 'general-purpose', description: '13_complete finish', prompt: 'mark complete' },
-        });
-        assert.equal(code, 0);
+      it('Agent with description "13_complete" is recognized and records evidence', async () => {
+        writeWorkState(makeStepStatus('13_complete', WORK_STEPS));
+        const input = { tool_name: 'Agent', tool_input: { subagent_type: 'general-purpose', description: '13_complete finish', prompt: 'mark complete' } };
+        const pre = await runHook(input);
+        assert.equal(pre.code, 0);
+        const post = await runHook(input, 'PostToolUse');
+        assert.equal(post.code, 0);
+        const evidence = readEvidence();
+        assert.ok(evidence['13_complete']?.executed, 'Should record evidence for 13_complete');
       });
     });
   });
