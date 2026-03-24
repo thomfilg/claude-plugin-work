@@ -337,6 +337,7 @@ describe('enforce-step-workflow', () => {
         assert.equal(code, 0);
       });
 
+      // PreToolUse: verifies Agent is allowed; PostToolUse evidence tests are in dedicated describe below
       it('recognizes Agent(quality-checker) via subagent_type as 4_quality', async () => {
         const { code } = await runHook({
           tool_name: 'Agent',
@@ -535,7 +536,8 @@ describe('enforce-step-workflow', () => {
         assert.equal(code, 0);
       });
 
-      it('recognizes Agent(pr-generator) as 3_pr_gen', async () => { // PostToolUse evidence tested below
+      // PreToolUse: verifies Agent is allowed; PostToolUse evidence tests are in dedicated describe below
+      it('recognizes Agent(pr-generator) as 3_pr_gen', async () => {
         const { code } = await runHook({
           tool_name: 'Agent',
           tool_input: { subagent_type: 'pr-generator', prompt: 'update PR' },
