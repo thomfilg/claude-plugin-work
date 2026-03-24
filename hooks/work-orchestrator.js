@@ -802,10 +802,10 @@ function main() {
         ghUrlMeta = ghParsed;
         raw = '#' + ghParsed.number;
       }
-      // Auto-detect GitHub provider from #N shorthand (unambiguous — no other provider uses #)
-      // providerConfig is `let` so it can be assigned here when auto-detected
+      // Auto-detect GitHub provider from #N shorthand when no provider is configured.
+      // providerConfig is declared as `let` (line 795) to allow this reassignment.
       if (/^#\d+$/.test(raw) && !isGitHub && !providerConfig) {
-        providerConfig = { provider: 'github', projectKey: '' };
+        providerConfig = { provider: 'github', projectKey: '' }; // auto-detected
       }
       const isGitHubEffective = providerConfig?.provider === 'github';
       const isJiraTicket = /^[A-Z]+-\d+$/i.test(raw);

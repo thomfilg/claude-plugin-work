@@ -185,17 +185,20 @@ describe('work-orchestrator.js', () => {
     });
 
     it('should auto-detect GitHub provider from #N shorthand when no provider configured', async () => {
-      const tmpClaudeDir = path.join(os.tmpdir(), 'work-orch-nopr-' + process.pid);
-      fs.mkdirSync(tmpClaudeDir, { recursive: true });
+      // Use a non-git temp dir as cwd so getRemoteOriginUrl() returns null,
+      // preventing ticket-providers.json lookup from interfering.
+      const tmpCwd = path.join(os.tmpdir(), 'work-orch-nogit-' + process.pid);
+      fs.mkdirSync(tmpCwd, { recursive: true });
       try {
         const { result, code } = await runOrchestrator(['#42'], {
-          env: { TICKET_PROVIDER: '', CLAUDE_DIR: tmpClaudeDir },
+          env: { TICKET_PROVIDER: '' },
+          cwd: tmpCwd,
         });
         assert.equal(code, 0);
         assert.equal(result.ticket, '#42');
       } finally {
         cleanupTempWorkState('#42');
-        fs.rmSync(tmpClaudeDir, { recursive: true, force: true });
+        fs.rmSync(tmpCwd, { recursive: true, force: true });
       }
     });
   });
