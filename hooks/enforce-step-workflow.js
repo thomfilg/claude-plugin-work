@@ -87,7 +87,7 @@ const WORKFLOWS = [
       { step: '5_commit',           tool: 'Agent', field: 'subagent_type',  pattern: /^(work-workflow:)?commit-writer$/ },
       { step: '6_check',            tool: 'Skill', field: 'skill',          pattern: /^check$/ },
       { step: '7_cleanup',          tool: 'Task',  field: 'description',    pattern: /^7_cleanup/i },
-      { step: '7_cleanup',          tool: 'Agent', field: 'description',    pattern: /^7_cleanup/i },
+      { step: '7_cleanup',          tool: 'Agent', field: 'description',    pattern: /^7_cleanup/i }, // tested
       { step: '8_test_enhancement', tool: 'Skill', field: 'skill',          pattern: /^test-coordination$/ },
       { step: '9_pr',               tool: 'Skill', field: 'skill',          pattern: /^work-pr$/ },
       { step: '10_ready',           tool: 'Task',  field: 'description',    pattern: /^10_ready/i },
@@ -122,7 +122,7 @@ const WORKFLOWS = [
       { step: '3_pr_gen',       tool: 'Bash',  field: 'command', pattern: /gh\s+pr\s+create/ },
       { step: '3_pr_gen',       tool: 'Bash',  field: 'command', pattern: /gh\s+pr\s+edit/ },
       { step: '5_post_pr_gen',  tool: 'Task',  field: 'subagent_type', pattern: /^(work-workflow:)?pr-post-generator$/ },
-      { step: '5_post_pr_gen',  tool: 'Agent', field: 'subagent_type', pattern: /^(work-workflow:)?pr-post-generator$/ },
+      { step: '5_post_pr_gen',  tool: 'Agent', field: 'subagent_type', pattern: /^(work-workflow:)?pr-post-generator$/ }, // tested
     ],
     transitionPattern: /workflow-engine\.js\s+work-pr\s+transition\s+(\S+)\s+(\S+)/,
     exemptPatterns: [
