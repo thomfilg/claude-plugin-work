@@ -792,7 +792,7 @@ function main() {
       let raw = rest.filter(a => a !== '--rework').join(' ').trim();
       if (!raw) { console.log(JSON.stringify({ error: true, message: 'Provide ticket ID or description' })); process.exit(1); }
 
-      const providerConfig = tp.getProviderConfig({ skipPrompt: true });
+      let providerConfig = tp.getProviderConfig({ skipPrompt: true });
       const isGitHub = providerConfig?.provider === 'github';
 
       // Detect GitHub issue URLs — only when provider is GitHub or auto-detect from URL
