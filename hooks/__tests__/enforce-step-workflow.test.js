@@ -401,6 +401,59 @@ describe('enforce-step-workflow', () => {
         assert.equal(code, 0);
       });
     });
+
+    describe('Agent tool PostToolUse evidence recording', () => {
+      it('records evidence for Agent(quality-checker) via PostToolUse during 4_quality', async () => {
+        writeWorkState(makeStepStatus('4_quality', WORK_STEPS));
+
+        const { code } = await runHook(
+          {
+            tool_name: 'Agent',
+            tool_input: { subagent_type: 'quality-checker', description: 'run checks', prompt: 'run checks' },
+          },
+          'PostToolUse',
+        );
+        assert.equal(code, 0);
+
+        const evidence = readEvidence();
+        assert.ok(evidence['4_quality']?.executed, 'Should record evidence for 4_quality');
+        assert.equal(evidence['4_quality']?.tool, 'Agent');
+      });
+
+      it('records evidence for Agent(commit-writer) via PostToolUse during 5_commit', async () => {
+        writeWorkState(makeStepStatus('5_commit', WORK_STEPS));
+
+        const { code } = await runHook(
+          {
+            tool_name: 'Agent',
+            tool_input: { subagent_type: 'commit-writer', description: 'commit changes', prompt: 'commit' },
+          },
+          'PostToolUse',
+        );
+        assert.equal(code, 0);
+
+        const evidence = readEvidence();
+        assert.ok(evidence['5_commit']?.executed, 'Should record evidence for 5_commit');
+        assert.equal(evidence['5_commit']?.tool, 'Agent');
+      });
+
+      it('records evidence for Agent with description "7_cleanup" via PostToolUse', async () => {
+        writeWorkState(makeStepStatus('7_cleanup', WORK_STEPS));
+
+        const { code } = await runHook(
+          {
+            tool_name: 'Agent',
+            tool_input: { subagent_type: 'general-purpose', description: '7_cleanup kill dev session', prompt: 'kill session' },
+          },
+          'PostToolUse',
+        );
+        assert.equal(code, 0);
+
+        const evidence = readEvidence();
+        assert.ok(evidence['7_cleanup']?.executed, 'Should record evidence for 7_cleanup');
+        assert.equal(evidence['7_cleanup']?.tool, 'Agent');
+      });
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -488,6 +541,48 @@ describe('enforce-step-workflow', () => {
           tool_input: { subagent_type: 'pr-post-generator', prompt: 'add screenshots' },
         });
         assert.equal(code, 0);
+      });
+    });
+
+    describe('Agent tool PostToolUse evidence recording for work-pr', () => {
+      it('records evidence for Agent(pr-generator) via PostToolUse during 3_pr_gen', async () => {
+        writeWorkflowState(
+          makeStepStatus('3_pr_gen', ['1_preflight', '2_setup', '3_pr_gen', '4_screenshot_gate', '5_post_pr_gen', '6_summary']),
+          'work-pr',
+        );
+
+        const { code } = await runHook(
+          {
+            tool_name: 'Agent',
+            tool_input: { subagent_type: 'pr-generator', prompt: 'update PR' },
+          },
+          'PostToolUse',
+        );
+        assert.equal(code, 0);
+
+        const evidence = readEvidence('.step-evidence-work-pr.json');
+        assert.ok(evidence['3_pr_gen']?.executed, 'Should record evidence for 3_pr_gen');
+        assert.equal(evidence['3_pr_gen']?.tool, 'Agent');
+      });
+
+      it('records evidence for Agent(pr-post-generator) via PostToolUse during 5_post_pr_gen', async () => {
+        writeWorkflowState(
+          makeStepStatus('5_post_pr_gen', ['1_preflight', '2_setup', '3_pr_gen', '4_screenshot_gate', '5_post_pr_gen', '6_summary']),
+          'work-pr',
+        );
+
+        const { code } = await runHook(
+          {
+            tool_name: 'Agent',
+            tool_input: { subagent_type: 'pr-post-generator', prompt: 'add screenshots' },
+          },
+          'PostToolUse',
+        );
+        assert.equal(code, 0);
+
+        const evidence = readEvidence('.step-evidence-work-pr.json');
+        assert.ok(evidence['5_post_pr_gen']?.executed, 'Should record evidence for 5_post_pr_gen');
+        assert.equal(evidence['5_post_pr_gen']?.tool, 'Agent');
       });
     });
 
