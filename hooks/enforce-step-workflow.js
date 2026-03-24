@@ -73,8 +73,8 @@ const WORKFLOWS = [
     ],
     softSteps: new Set(['1_ticket', '10_ready', '12_reports']),
     commandMap: [
-      // Note: Claude Code exposes the Agent tool (not Task). Accept both names so
-      // evidence is recorded regardless of which alias the model uses.
+      // Note: Some runtimes/models emit Agent instead of Task. Accept both names
+      // so evidence is recorded regardless of which tool name is used.
       { step: '1_ticket',           tool: 'Task',  field: 'description',    pattern: /^1_ticket/i },
       { step: '1_ticket',           tool: 'Agent', field: 'description',    pattern: /^1_ticket/i },
       { step: '3_implement',        tool: 'Skill', field: 'skill',          pattern: /^work-implement$/ },
