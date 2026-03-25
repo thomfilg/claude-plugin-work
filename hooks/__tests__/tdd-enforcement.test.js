@@ -130,7 +130,7 @@ describe('TDD enforcement', () => {
       assert.doesNotMatch(implStep.agentPrompt || '', /confirm RED/i);
     });
 
-    it('with WORK_TDD_ENFORCE unset: agentPrompt for 3_implement does NOT include TDD protocol', async () => {
+    it('with WORK_TDD_ENFORCE empty: agentPrompt for 3_implement does NOT include TDD protocol', async () => {
       // Set WORK_TDD_ENFORCE to empty string to override any inherited env value
       const { result } = await runOrchestrator(['plan', TICKET], { env: baseEnv({ WORK_TDD_ENFORCE: '' }) });
       const implStep = result.plan.find(s => s.step === '3_implement');
@@ -157,7 +157,7 @@ describe('TDD enforcement', () => {
       assert.equal(result.success, true);
     });
 
-    it('with WORK_TDD_ENFORCE unset: transition 3_implement -> 4_quality ALLOWED without evidence', async () => {
+    it('with WORK_TDD_ENFORCE empty: transition 3_implement -> 4_quality ALLOWED without evidence', async () => {
       await transitionTo(TICKET, '3_implement', { WORK_TDD_ENFORCE: '' });
       const { result } = await runOrchestrator(
         ['transition', TICKET, '4_quality'],
