@@ -699,6 +699,8 @@ function initState(prInfo) {
     attempts: [],
     finalStatus: null,
     addressedBotComments: [],
+    seenBotComments: [],   // hashes recorded on exit-fail, not yet confirmed addressed
+    seenAtHead: null,      // HEAD SHA when seenBotComments were recorded
   };
 }
 
@@ -1015,6 +1017,23 @@ async function main() {
   let ci;
   let reviews = { all: [], comments: [], actionable: [], blocking: [], nonBlocking: [], pendingBots: [], hasBlocking: false, hasActionable: false };
 
+  // Two-phase dedup: promote "seen" → "addressed" only when HEAD changes.
+  // This confirms the user actually pushed a fix before deduping re-posts.
+  const currentHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+  if (state.seenBotComments && state.seenBotComments.length > 0 && state.seenAtHead && state.seenAtHead !== currentHead) {
+    if (!state.addressedBotComments) state.addressedBotComments = [];
+    const existingHashes = new Set(state.addressedBotComments.map((a) => a.hash));
+    for (const entry of state.seenBotComments) {
+      if (!existingHashes.has(entry.hash)) {
+        state.addressedBotComments.push(entry);
+        existingHashes.add(entry.hash);
+      }
+    }
+    state.seenBotComments = [];
+    state.seenAtHead = null;
+    saveState(state);
+  }
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // Refresh PR info each attempt (mergeable status may change)
     try {
@@ -1066,18 +1085,11 @@ async function main() {
     const decision = decideNextAction(ci.status, prInfo, reviews, opts.noReviews);
 
     if (decision.action === 'exit-fail') {
-      // Record blocking bot comment hashes as "addressed" only on exit.
-      // On the next run (after user fixes and force-pushes), re-posted
-      // bot comments with matching hashes are moved to nonBlocking.
-      // Recording here (not during polling) prevents premature dedup
-      // within the same run across multiple poll iterations.
-      // Known trade-off: hashes are recorded before the user fixes
-      // the issues. If the user pushes without addressing a comment,
-      // and the bot re-posts identical text, it will be deduped.
-      // This is acceptable because: (a) the /follow-up-pr skill
-      // addresses all blocking comments before pushing, and (b) if
-      // the bot re-words its comment, the hash won't match.
-      const existingHashes = new Set((state.addressedBotComments || []).map((a) => a.hash));
+      // Two-phase dedup: record blocking bot hashes as "seen", not
+      // "addressed". They are promoted to "addressed" on the next run
+      // only if HEAD has changed — confirming the user pushed a fix.
+      // This prevents false dedup when re-running without addressing.
+      state.seenBotComments = [];
       const botReviewersForRecord = getBotReviewers();
       for (const item of reviews.blocking) {
         if (!isBotAuthorLogin(item.author, botReviewersForRecord)) continue;
@@ -1086,17 +1098,14 @@ async function main() {
         // produce body-only hashes that risk false dedup matches.
         if (!item.path) continue;
         const hash = computeCommentHash(item.path, item.body, item.line);
-        if (!existingHashes.has(hash)) {
-          if (!state.addressedBotComments) state.addressedBotComments = [];
-          state.addressedBotComments.push({
-            hash,
-            path: item.path,
-            author: item.author,
-            snippet: (item.body || '').slice(0, 80),
-          });
-          existingHashes.add(hash);
-        }
+        state.seenBotComments.push({
+          hash,
+          path: item.path,
+          author: item.author,
+          snippet: (item.body || '').slice(0, 80),
+        });
       }
+      state.seenAtHead = currentHead;
       state.finalStatus = decision.finalStatus;
       saveState(state);
       process.exit(1);

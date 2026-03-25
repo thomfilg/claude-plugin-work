@@ -204,4 +204,11 @@ describe('initState includes addressedBotComments', () => {
     assert.ok(Array.isArray(state.addressedBotComments));
     assert.equal(state.addressedBotComments.length, 0);
   });
+
+  it('has seenBotComments as an empty array and seenAtHead as null', () => {
+    const state = initState({ number: 42, url: 'https://github.com/test/42', branch: 'feature' });
+    assert.ok(Array.isArray(state.seenBotComments));
+    assert.equal(state.seenBotComments.length, 0);
+    assert.equal(state.seenAtHead, null);
+  });
 });
