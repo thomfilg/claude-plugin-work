@@ -404,10 +404,42 @@ This command will:
 <If none: omit this section>
 
 ### Non-Blocking Comments Report
-<MANDATORY: Copy the "Non-Blocking Comments Report" from the script output and paste it here
-in full. Each comment must show: text, file:line, author, and status (DEDUPED / NOT ADDRESSED).
-The user MUST see this report to decide if any low-priority items need action.
-Do NOT summarize — paste the full report.>
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  MANDATORY: You MUST present this report to the user.               ║
+║  Do NOT summarize. Enrich each comment with Reason as shown below. ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+For each comment in the script's "Non-Blocking Comments Report", output:
+
+**For NOT ADDRESSED comments:**
+```
+Comment N: <full comment text>
+File: <file:line>
+Author: @<author>
+Status: NOT ADDRESSED
+Reason: <Explain WHY this is not worth addressing. "Low priority" is not a reason.
+        State the specific technical justification — e.g., "The duplicate listing
+        only appears during the ready-to-review path which runs once per PR cycle,
+        so the visual redundancy has no functional impact.">
+```
+
+**For DEDUPED comments:**
+```
+Comment N: <full comment text>
+File: <file:line>
+Author: @<author>
+Status: DEDUPED — previously addressed, re-posted after force-push
+Reason: Addressed in <file> <function/method> line <line>, commit <short_sha>.
+        <Brief description of what was changed to address it.>
+```
+
+To find "where addressed" for DEDUPED comments:
+1. Read the comment's suggestion
+2. Search the branch commits (`git log --oneline main..HEAD`) for the fix
+3. Identify the file, function, line, and commit that addressed it
 
 ### CI Checks (Final)
 <List all passing checks>
