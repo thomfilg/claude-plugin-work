@@ -859,6 +859,27 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
   } else if (!opts.noReviews && reviews.hasBlocking) {
     lines.push(`→ Address blocking reviews, push, then re-run: ${c.dim('node scripts/follow-up-pr.js')}`);
   } else if (ciAcceptable && (!reviews.hasBlocking || opts.noReviews) && reviews.pendingBots.length === 0 && isMergeReady) {
+    // Non-blocking comments report (before the banner)
+    if (reviews.nonBlocking && reviews.nonBlocking.length > 0) {
+      lines.push('');
+      lines.push(c.bold('--- Non-Blocking Comments Report ---'));
+      reviews.nonBlocking.forEach((item, i) => {
+        const loc = item.path ? `${item.path}${item.line ? ':' + item.line : ''}` : '';
+        const preview = item.body ? item.body.replace(/\s+/g, ' ').slice(0, 120) : '';
+        lines.push('');
+        lines.push(`  Comment ${i + 1}: ${preview}${item.body && item.body.replace(/\s+/g, ' ').length > 120 ? '...' : ''}`);
+        lines.push(`  File: ${loc || 'N/A'}`);
+        lines.push(`  Author: @${item.author}`);
+        if (item.deduplicated) {
+          lines.push(`  Status: ${c.cyan('DEDUPED')} — previously addressed, re-posted after force-push`);
+        } else {
+          lines.push(`  Status: ${c.dim('NOT ADDRESSED')} — low priority`);
+        }
+      });
+      lines.push('');
+      lines.push(c.dim('---'));
+    }
+    lines.push('');
     lines.push(c.green('═══════════════════════════════════════'));
     lines.push(c.green('  PR READY TO REVIEW'));
     lines.push(c.green('═══════════════════════════════════════'));
