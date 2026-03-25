@@ -1177,17 +1177,17 @@ async function main() {
           console.log('');
           console.log(formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval }));
           console.log('');
-          if (decision.finalStatus === 'reviews-blocking') {
-            state.seenBotComments = [];
-            const recheckBotReviewers = getBotReviewers();
-            for (const item of recheck.blocking) {
-              if (!isBotAuthorLogin(item.author, recheckBotReviewers)) continue;
-              if (!item.path) continue;
-              const hash = computeCommentHash(item.path, item.body);
-              state.seenBotComments.push({ hash, path: item.path, author: item.author, snippet: (item.body || '').slice(0, 80) });
-            }
-            state.seenAtHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+          // Record seen hashes for late-arriving blocking comments so
+          // the two-phase dedup can handle them on the next run.
+          state.seenBotComments = [];
+          const recheckBotReviewers = getBotReviewers();
+          for (const item of recheck.blocking) {
+            if (!isBotAuthorLogin(item.author, recheckBotReviewers)) continue;
+            if (!item.path) continue;
+            const hash = computeCommentHash(item.path, item.body);
+            state.seenBotComments.push({ hash, path: item.path, author: item.author, snippet: (item.body || '').slice(0, 80) });
           }
+          state.seenAtHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
           state.finalStatus = 'reviews-blocking';
           saveState(state);
           process.exit(1);
