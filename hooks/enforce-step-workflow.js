@@ -50,10 +50,11 @@ try {
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
-// getConfig.orExit: tries env → config.js → exit(0). Real config errors (syntax, transitive deps) still throw.
 const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
-const WORKTREES_BASE = getConfig.orExit('WORKTREES_BASE');
-const TASKS_BASE = getConfig('TASKS_BASE') || path.join(WORKTREES_BASE, 'tasks');
+const TASKS_BASE = getConfig('TASKS_BASE') || (() => {
+  const wb = getConfig.orExit('WORKTREES_BASE'); // only required if TASKS_BASE isn't set
+  return path.join(wb, 'tasks');
+})();
 
 // ─── Workflow Definitions ───────────────────────────────────────────────────
 //
