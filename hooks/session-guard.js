@@ -310,10 +310,8 @@ function isCheckWorkflowActive(ticketId) {
     if (!ticketId || /[/\\:\0]/.test(ticketId)) return false;
 
     const tasksBase = getTasksBase();
-    const statePath = path.join(tasksBase, ticketId, '.workflow-state.json');
-
-    // Double-check: verify resolved path stays under tasksBase
-    const resolved = path.resolve(statePath);
+    const resolved = path.resolve(tasksBase, ticketId, '.workflow-state.json');
+    // Guard against path traversal — resolved path must stay under tasksBase
     if (!resolved.startsWith(path.resolve(tasksBase) + path.sep)) return false;
 
     const state = JSON.parse(fs.readFileSync(resolved, 'utf-8'));
