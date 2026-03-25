@@ -279,6 +279,26 @@ function getBotReviewers() {
   return raw.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * Determine whether an author login belongs to a known bot reviewer.
+ * Uses case-insensitive matching against configured bot reviewers,
+ * hardcoded aliases (copilot, cursor-ai[bot]), and fuzzy [bot]-stripping.
+ *
+ * @param {string} author - GitHub login
+ * @param {string[]} [botReviewers] - optional pre-fetched list (defaults to getBotReviewers())
+ * @returns {boolean}
+ */
+function isBotAuthorLogin(author, botReviewers) {
+  const reviewers = (botReviewers || getBotReviewers()).map((b) => b.toLowerCase());
+  const lower = (author || '').toLowerCase();
+  // Exact match against configured bot reviewers (case-insensitive)
+  if (reviewers.includes(lower)) return true;
+  // Match known aliases used by classifyCommentPriority
+  if (lower === 'copilot' || lower === 'cursor-ai[bot]') return true;
+  // Fuzzy match: strip [bot] suffix from configured names
+  return reviewers.some((bot) => bot.includes('[bot]') && lower === bot.replace('[bot]', ''));
+}
+
 // ── Bot Comment Deduplication ────────────────────────────────────────────────
 //
 // After a force-push (rebase), bot reviewers (Copilot, Cursor) re-review
@@ -319,19 +339,12 @@ function deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComme
   }
 
   const addressedHashes = new Set(addressedBotComments.map((a) => a.hash));
-  const botReviewersLower = getBotReviewers().map((b) => b.toLowerCase());
-  const isBotLogin = (author) => {
-    const lower = (author || '').toLowerCase();
-    if (botReviewersLower.includes(lower)) return true;
-    if (lower === 'copilot' || lower === 'cursor-ai[bot]') return true;
-    return botReviewersLower.some((bot) => bot.includes('[bot]') && lower === bot.replace('[bot]', ''));
-  };
 
   const stillBlocking = [];
   const movedToNonBlocking = [];
 
   for (const item of blocking) {
-    if (!isBotLogin(item.author)) {
+    if (!isBotAuthorLogin(item.author)) {
       // Human comments are NEVER deduplicated
       stillBlocking.push(item);
       continue;
@@ -595,16 +608,7 @@ function getReviews(prNumber, addressedBotComments) {
   // known bot login variants used by classifyCommentPriority (Copilot, cursor-ai[bot]).
   const botReviewersLower = botReviewers.map((b) => b.toLowerCase());
   const BOT_BODY_MARKERS = /<!--\s*(BUGBOT_REVIEW|COPILOT_REVIEW)\s*-->/;
-  const isBotAuthor = (author) => {
-    const lower = (author || '').toLowerCase();
-    // Exact match against configured bot reviewers (case-insensitive)
-    if (botReviewersLower.includes(lower)) return true;
-    // Match known aliases used by classifyCommentPriority
-    if (lower === 'copilot' || lower === 'cursor-ai[bot]') return true;
-    // Fuzzy match: strip [bot] suffix from configured names
-    return botReviewersLower.some((bot) => bot.includes('[bot]') && lower === bot.replace('[bot]', ''));
-  };
-  const isBotReview = (r) => isBotAuthor(r.author) || BOT_BODY_MARKERS.test(r.body || '');
+  const isBotReview = (r) => isBotAuthorLogin(r.author, botReviewersLower) || BOT_BODY_MARKERS.test(r.body || '');
   const isActionableReview = (r) => r.state === 'CHANGES_REQUESTED' || (r.state === 'COMMENTED' && r.body && !isBotReview(r));
   const actionable = reviews.filter(isActionableReview).map((r) => {
     const priority = classifyCommentPriority(r.author, r.body);
@@ -1039,14 +1043,9 @@ async function main() {
     // Record all current blocking bot comment hashes as "addressed".
     // On the next run, if the same hash appears again (re-posted after force-push),
     // it will be moved from blocking to nonBlocking.
-    const botReviewersForDedup = getBotReviewers().map((b) => b.toLowerCase());
-    const isBotForDedup = (author) => {
-      const lower = (author || '').toLowerCase();
-      return botReviewersForDedup.includes(lower) || lower === 'copilot' || lower === 'cursor-ai[bot]';
-    };
     const existingHashes = new Set((state.addressedBotComments || []).map((a) => a.hash));
     for (const item of reviews.blocking) {
-      if (!isBotForDedup(item.author)) continue;
+      if (!isBotAuthorLogin(item.author)) continue;
       const hash = computeCommentHash(item.path, item.body);
       if (!existingHashes.has(hash)) {
         if (!state.addressedBotComments) state.addressedBotComments = [];

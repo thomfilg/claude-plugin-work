@@ -1,4 +1,4 @@
-const { describe, it, beforeEach } = require('node:test');
+const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { computeCommentHash, deduplicateBlockingBotComments, initState } = require('../follow-up-pr.js');
 
@@ -52,8 +52,9 @@ describe('computeCommentHash', () => {
 // ── deduplicateBlockingBotComments ──────────────────────────────────────────
 
 describe('deduplicateBlockingBotComments', () => {
+  let nextId = 1;
   const makeBotComment = (path, body, overrides = {}) => ({
-    id: Math.floor(Math.random() * 10000),
+    id: nextId++,
     author: 'copilot-pull-request-reviewer',
     body,
     path,
@@ -64,7 +65,7 @@ describe('deduplicateBlockingBotComments', () => {
   });
 
   const makeHumanComment = (path, body, overrides = {}) => ({
-    id: Math.floor(Math.random() * 10000),
+    id: nextId++,
     author: 'octocat',
     body,
     path,
