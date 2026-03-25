@@ -349,6 +349,12 @@ function deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComme
       stillBlocking.push(item);
       continue;
     }
+    // Review-level items (CHANGES_REQUESTED, COMMENTED) lack a path.
+    // Skip dedup for these — body-only hashes risk false matches.
+    if (!item.path) {
+      stillBlocking.push(item);
+      continue;
+    }
     const hash = computeCommentHash(item.path, item.body);
     if (addressedHashes.has(hash)) {
       movedToNonBlocking.push({ ...item, deduplicated: true });
@@ -628,7 +634,9 @@ function getReviews(prNumber, addressedBotComments) {
   let blocking = allItems.filter((item) => isBlockingPriority(item.priority));
   let nonBlocking = allItems.filter((item) => !isBlockingPriority(item.priority));
 
-  // Deduplicate re-posted bot comments after force-push
+  // Deduplicate re-posted bot comments after force-push.
+  // Dedup activates automatically when prior runs recorded addressed hashes;
+  // no explicit toggle is needed — it is inert on the first run.
   if (addressedBotComments && addressedBotComments.length > 0) {
     const deduped = deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComments);
     blocking = deduped.blocking;
@@ -1040,25 +1048,6 @@ async function main() {
       nonBlockingReviews: reviews.nonBlocking.length,
     });
 
-    // Record all current blocking bot comment hashes as "addressed".
-    // On the next run, if the same hash appears again (re-posted after force-push),
-    // it will be moved from blocking to nonBlocking.
-    const existingHashes = new Set((state.addressedBotComments || []).map((a) => a.hash));
-    for (const item of reviews.blocking) {
-      if (!isBotAuthorLogin(item.author)) continue;
-      const hash = computeCommentHash(item.path, item.body);
-      if (!existingHashes.has(hash)) {
-        if (!state.addressedBotComments) state.addressedBotComments = [];
-        state.addressedBotComments.push({
-          hash,
-          path: item.path || '',
-          author: item.author,
-          snippet: (item.body || '').slice(0, 80),
-        });
-        existingHashes.add(hash);
-      }
-    }
-
     saveState(state);
 
     // Use explicit --interval if set, otherwise compute adaptive interval
@@ -1073,6 +1062,30 @@ async function main() {
     const decision = decideNextAction(ci.status, prInfo, reviews, opts.noReviews);
 
     if (decision.action === 'exit-fail') {
+      // Record blocking bot comment hashes as "addressed" only on exit.
+      // On the next run (after user fixes and force-pushes), re-posted
+      // bot comments with matching hashes are moved to nonBlocking.
+      // Recording here (not during polling) prevents premature dedup
+      // within the same run across multiple poll iterations.
+      const existingHashes = new Set((state.addressedBotComments || []).map((a) => a.hash));
+      for (const item of reviews.blocking) {
+        if (!isBotAuthorLogin(item.author)) continue;
+        // Only dedup inline comments (with a file path). Review-level
+        // items (CHANGES_REQUESTED, COMMENTED) lack a path and would
+        // produce body-only hashes that risk false dedup matches.
+        if (!item.path) continue;
+        const hash = computeCommentHash(item.path, item.body);
+        if (!existingHashes.has(hash)) {
+          if (!state.addressedBotComments) state.addressedBotComments = [];
+          state.addressedBotComments.push({
+            hash,
+            path: item.path,
+            author: item.author,
+            snippet: (item.body || '').slice(0, 80),
+          });
+          existingHashes.add(hash);
+        }
+      }
       state.finalStatus = decision.finalStatus;
       saveState(state);
       process.exit(1);

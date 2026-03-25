@@ -162,6 +162,18 @@ describe('deduplicateBlockingBotComments', () => {
     assert.equal(result.nonBlocking.length, 1);
   });
 
+  it('does NOT dedup review-level bot items without a path', () => {
+    // Review-level items (CHANGES_REQUESTED) lack a path — body-only
+    // hashes risk false matches, so they must stay blocking.
+    const reviewItem = makeBotComment(null, 'Please address these issues', { path: undefined });
+    const hash = computeCommentHash(undefined, 'Please address these issues');
+    const addressed = [{ hash, path: '', author: 'copilot-pull-request-reviewer', snippet: 'Please address' }];
+
+    const result = deduplicateBlockingBotComments([reviewItem], [], addressed);
+    assert.equal(result.blocking.length, 1, 'review-level item must stay blocking');
+    assert.equal(result.nonBlocking.length, 0);
+  });
+
   it('returns original arrays when no addressed hashes match', () => {
     const comment = makeBotComment('a.js', 'New issue');
     const addressed = [{ hash: 'deadbeef', path: 'other.js', author: 'copilot-pull-request-reviewer', snippet: 'old' }];
