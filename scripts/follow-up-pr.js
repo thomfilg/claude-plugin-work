@@ -1085,33 +1085,59 @@ async function main() {
     const decision = decideNextAction(ci.status, prInfo, reviews, opts.noReviews);
 
     if (decision.action === 'exit-fail') {
-      // Two-phase dedup: record blocking bot hashes as "seen", not
-      // "addressed". They are promoted to "addressed" on the next run
-      // only if HEAD has changed — confirming the user pushed a fix.
-      // This prevents false dedup when re-running without addressing.
-      state.seenBotComments = [];
-      const botReviewersForRecord = getBotReviewers();
-      for (const item of reviews.blocking) {
-        if (!isBotAuthorLogin(item.author, botReviewersForRecord)) continue;
-        // Only dedup inline comments (with a file path). Review-level
-        // items (CHANGES_REQUESTED, COMMENTED) lack a path and would
-        // produce body-only hashes that risk false dedup matches.
-        if (!item.path) continue;
-        const hash = computeCommentHash(item.path, item.body, item.line);
-        state.seenBotComments.push({
-          hash,
-          path: item.path,
-          author: item.author,
-          snippet: (item.body || '').slice(0, 80),
-        });
+      // Two-phase dedup: only record "seen" hashes when exiting due to
+      // blocking reviews — not for CI failures or conflicts, which would
+      // incorrectly promote unrelated bot comments on the next HEAD change.
+      if (decision.finalStatus === 'reviews-blocking' && reviews.hasBlocking) {
+        state.seenBotComments = [];
+        const botReviewersForRecord = getBotReviewers();
+        for (const item of reviews.blocking) {
+          if (!isBotAuthorLogin(item.author, botReviewersForRecord)) continue;
+          // Only dedup inline comments (with a file path). Review-level
+          // items (CHANGES_REQUESTED, COMMENTED) lack a path and would
+          // produce body-only hashes that risk false dedup matches.
+          if (!item.path) continue;
+          const hash = computeCommentHash(item.path, item.body, item.line);
+          state.seenBotComments.push({
+            hash,
+            path: item.path,
+            author: item.author,
+            snippet: (item.body || '').slice(0, 80),
+          });
+        }
+        state.seenAtHead = currentHead;
       }
-      state.seenAtHead = currentHead;
       state.finalStatus = decision.finalStatus;
       saveState(state);
       process.exit(1);
     }
 
     if (decision.action === 'exit-success') {
+      // Guard against GitHub API eventual consistency: after bot review
+      // status clears, new comments may take a few seconds to appear.
+      // Re-fetch reviews after a brief delay to catch late-arriving comments.
+      await sleep(10);
+      const recheck = getReviews(prInfo.number, state.addressedBotComments);
+      if (recheck.hasBlocking) {
+        // New blocking comments appeared during propagation window.
+        // Report them and exit-fail so they get addressed.
+        reviews = recheck;
+        console.log('');
+        console.log(formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval }));
+        console.log('');
+        state.seenBotComments = [];
+        const recheckBotReviewers = getBotReviewers();
+        for (const item of recheck.blocking) {
+          if (!isBotAuthorLogin(item.author, recheckBotReviewers)) continue;
+          if (!item.path) continue;
+          const hash = computeCommentHash(item.path, item.body, item.line);
+          state.seenBotComments.push({ hash, path: item.path, author: item.author, snippet: (item.body || '').slice(0, 80) });
+        }
+        state.seenAtHead = currentHead;
+        state.finalStatus = 'reviews-blocking';
+        saveState(state);
+        process.exit(1);
+      }
       state.finalStatus = decision.finalStatus;
       saveState(state);
       process.exit(0);
