@@ -76,7 +76,7 @@ const WORKFLOWS = [
     // and produce documentation artifacts, not code that requires enforcement.
     softSteps: new Set([
       '1_ticket', '3_brief', '4_spec', // optional/metadata steps (see comment above)
-      '12_ready', '14_reports',         // operational steps without code changes
+      '12_ready', '14_reports',         // operational steps — no code changes to enforce
     ]),
     commandMap: [
       // Note: tool can be a string or array. Some runtimes/models emit Agent

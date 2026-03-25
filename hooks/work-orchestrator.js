@@ -560,11 +560,9 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   let prePlanningFiles = [];
   if (fileExists(tasksDir)) {
     try {
-      prePlanningFiles = listFiles(tasksDir, /pre-planning\.md$/).concat(
-        fs.readdirSync(tasksDir, { withFileTypes: true })
-          .filter(d => d.isDirectory())
-          .flatMap(d => listFiles(path.join(tasksDir, d.name), /pre-planning\.md$/))
-      );
+      // Recursive search for pre-planning.md at any depth under tasksDir
+      const found = run(`find "${tasksDir}" -name "pre-planning.md" -type f 2>/dev/null`);
+      if (found) prePlanningFiles = found.split('\n').filter(Boolean);
     } catch { /* tasksDir may be removed between check and read */ }
   }
   const planningDocs = [];
