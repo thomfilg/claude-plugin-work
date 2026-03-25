@@ -314,12 +314,13 @@ function isBotAuthorLogin(author, botReviewers) {
  * Compute a stable fingerprint for a review comment based on its file path
  * and body text. Used to detect re-posted bot comments after force-push.
  */
-function computeCommentHash(filePath, body) {
+function computeCommentHash(filePath, body, line) {
   const normalizedPath = (filePath || '').trim();
   const normalizedBody = (body || '').trim();
+  const normalizedLine = line != null ? String(line) : '';
   return crypto
     .createHash('sha256')
-    .update(`${normalizedPath}\0${normalizedBody}`)
+    .update(`${normalizedPath}\0${normalizedLine}\0${normalizedBody}`)
     .digest('hex')
     .slice(0, 16); // 16 hex chars = 64 bits — sufficient for dedup
 }
@@ -356,7 +357,7 @@ function deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComme
       stillBlocking.push(item);
       continue;
     }
-    const hash = computeCommentHash(item.path, item.body);
+    const hash = computeCommentHash(item.path, item.body, item.line);
     if (addressedHashes.has(hash)) {
       movedToNonBlocking.push({ ...item, deduplicated: true });
     } else {
@@ -1068,6 +1069,12 @@ async function main() {
       // bot comments with matching hashes are moved to nonBlocking.
       // Recording here (not during polling) prevents premature dedup
       // within the same run across multiple poll iterations.
+      // Known trade-off: hashes are recorded before the user fixes
+      // the issues. If the user pushes without addressing a comment,
+      // and the bot re-posts identical text, it will be deduped.
+      // This is acceptable because: (a) the /follow-up-pr skill
+      // addresses all blocking comments before pushing, and (b) if
+      // the bot re-words its comment, the hash won't match.
       const existingHashes = new Set((state.addressedBotComments || []).map((a) => a.hash));
       const botReviewersForRecord = getBotReviewers();
       for (const item of reviews.blocking) {
@@ -1076,7 +1083,7 @@ async function main() {
         // items (CHANGES_REQUESTED, COMMENTED) lack a path and would
         // produce body-only hashes that risk false dedup matches.
         if (!item.path) continue;
-        const hash = computeCommentHash(item.path, item.body);
+        const hash = computeCommentHash(item.path, item.body, item.line);
         if (!existingHashes.has(hash)) {
           if (!state.addressedBotComments) state.addressedBotComments = [];
           state.addressedBotComments.push({
