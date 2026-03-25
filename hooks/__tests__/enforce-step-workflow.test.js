@@ -1630,6 +1630,19 @@ describe('enforce-step-workflow', () => {
       assert.ok(stderr.includes('BLOCKED'), 'should include BLOCKED message');
     });
 
+    it('allows completion-checker when /check is active', async () => {
+      writeWorkState(makeStepStatus('13_complete', WORK_STEPS));
+      writeWorkflowState(
+        { '1_setup': 'completed', '4_phase1_agents': 'in_progress' },
+        'check',
+      );
+      const { code } = await runHook({
+        tool_name: 'Agent',
+        tool_input: { subagent_type: 'work-workflow:completion-checker', description: 'verify' },
+      });
+      assert.equal(code, 0, 'completion-checker should be allowed when /check is active');
+    });
+
     it('allows quality-checker when /check is active and /work is at mid-step', async () => {
       writeWorkState(makeStepStatus('5_commit', WORK_STEPS));
       writeWorkflowState(

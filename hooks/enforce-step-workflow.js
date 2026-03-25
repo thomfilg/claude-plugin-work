@@ -171,6 +171,15 @@ try {
   // fail-open: config errors don't block tool use
 }
 
+// Agents legitimately used by /check that should bypass /work step blocking
+const CHECK_AGENTS = new Set([
+  'quality-checker', 'work-workflow:quality-checker',
+  'code-checker', 'work-workflow:code-checker',
+  'completion-checker', 'work-workflow:completion-checker',
+  'qa-feature-tester', 'work-workflow:qa-feature-tester',
+  'qa-api-tester', 'work-workflow:qa-api-tester',
+]);
+
 // Pre-index commandMap by tool name for O(1) lookup
 function buildCommandIndex(commandMap) {
   const index = {};
@@ -401,17 +410,12 @@ function handlePreToolUse(hookData) {
 
     // Skip /work blocking for agents legitimately used by /check
     if (wf.name === 'work' && matchedStep !== currentStep) {
-      const checkState = loadStateFile(ticketId, '.workflow-state.json');
-      if (checkState?.workflow === 'check' && checkState?.status === 'in_progress') {
-        const CHECK_AGENTS = new Set([
-          'quality-checker', 'work-workflow:quality-checker',
-          'code-checker', 'work-workflow:code-checker',
-          'completion-checker', 'work-workflow:completion-checker',
-          'qa-feature-tester', 'work-workflow:qa-feature-tester',
-          'qa-api-tester', 'work-workflow:qa-api-tester',
-        ]);
-        const agentType = toolInput?.subagent_type || '';
-        if (CHECK_AGENTS.has(agentType)) continue; // Allow — /check owns this agent
+      const agentType = toolInput?.subagent_type || '';
+      if (CHECK_AGENTS.has(agentType)) {
+        const checkState = loadStateFile(ticketId, '.workflow-state.json');
+        if (checkState?.workflow === 'check' && checkState?.status === 'in_progress') {
+          continue; // Allow — /check owns this agent
+        }
       }
     }
 

@@ -24,6 +24,17 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// Cached TASKS_BASE resolution — loaded once per invocation
+let _tasksBase;
+function getTasksBase() {
+  if (_tasksBase) return _tasksBase;
+  let _config;
+  try { _config = require(path.join(__dirname, '..', 'lib', 'config')); } catch { _config = null; }
+  const worktreesBase = _config?.WORKTREES_BASE || process.env.WORKTREES_BASE || `${process.env.HOME}/worktrees`;
+  _tasksBase = _config?.TASKS_BASE || process.env.TASKS_BASE || path.join(worktreesBase, 'tasks');
+  return _tasksBase;
+}
+
 // Allow disabling session guard entirely via env var
 if (process.env.SESSION_GUARD_ENABLED === '0') {
   process.exit(0);
@@ -295,14 +306,10 @@ function handlePreCompact() {
  */
 function isCheckWorkflowActive(ticketId) {
   try {
-    // Sanitize ticketId to prevent path traversal
+    // Validate ticketId to prevent path traversal
     if (!ticketId || /[/\\:\0]/.test(ticketId)) return false;
 
-    let _config;
-    try { _config = require(path.join(__dirname, '..', 'lib', 'config')); } catch { _config = null; }
-    const worktreesBase = _config?.WORKTREES_BASE || process.env.WORKTREES_BASE || `${process.env.HOME}/worktrees`;
-    const tasksBase = _config?.TASKS_BASE || process.env.TASKS_BASE || path.join(worktreesBase, 'tasks');
-    // ticketId already sanitized above — safe to join
+    const tasksBase = getTasksBase();
     const statePath = path.join(tasksBase, ticketId, '.workflow-state.json');
 
     // Double-check: verify resolved path stays under tasksBase
