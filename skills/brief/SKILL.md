@@ -29,7 +29,7 @@ Generate a structured product brief from a ticket or feature description. The br
 
 ```bash
 # Get config
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "")/../../.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 node -e "const c = require('$PLUGIN_ROOT/lib/config'); console.log(JSON.stringify({ TASKS_BASE: c.TASKS_BASE }))"
 ```
 

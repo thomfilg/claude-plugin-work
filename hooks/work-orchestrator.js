@@ -569,6 +569,8 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   if (fileExists(briefPath)) planningDocs.push(`- Brief: ${briefPath}`);
   if (fileExists(specPath)) planningDocs.push(`- Spec: ${specPath}`);
   prePlanningFiles.forEach(f => planningDocs.push(`- Pre-planning: ${f}`));
+  // planningContext is empty when no files exist yet (e.g., during 3_brief/4_spec).
+  // This is intentional — it's consumed by downstream steps (5_implement onwards).
   const planningContext = planningDocs.length > 0
     ? `\n\nPlanning documents available (read these for requirements, test scenarios, reusable components):\n${planningDocs.join('\n')}`
     : '';

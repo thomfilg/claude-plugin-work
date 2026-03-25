@@ -28,7 +28,7 @@ Generate a technical specification by analyzing the codebase and a product brief
 ### Step 1: Determine ticket and tasks folder
 
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "")/../../.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 node -e "const c = require('$PLUGIN_ROOT/lib/config'); console.log(JSON.stringify({ TASKS_BASE: c.TASKS_BASE }))"
 ```
 
@@ -50,9 +50,8 @@ If `${TASKS_BASE}/${FOLDER_NAME}/spec.md` already exists, ask the user:
 The spec-writer needs a codebase to analyze. Determine the worktree:
 
 ```bash
-# Check if we're in a worktree for this ticket
-WORKTREE_DIR=$(git worktree list --porcelain | grep -B1 "${FOLDER_NAME}" | head -1 | sed 's/worktree //')
-# Fallback to current directory
+# Check if a worktree exists for this ticket, fallback to current directory
+WORKTREE_DIR=$(git worktree list | grep "${FOLDER_NAME}" | awk '{print $1}')
 WORKTREE_DIR="${WORKTREE_DIR:-$(pwd)}"
 ```
 
