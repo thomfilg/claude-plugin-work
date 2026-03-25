@@ -48,15 +48,10 @@ describe('computeCommentHash', () => {
     assert.equal(a, b);
   });
 
-  it('returns different hashes for same path+body but different lines', () => {
-    const a = computeCommentHash('src/index.js', 'Fix this bug', 10);
-    const b = computeCommentHash('src/index.js', 'Fix this bug', 20);
-    assert.notEqual(a, b);
-  });
-
-  it('returns same hash when line is omitted (backward compat)', () => {
+  it('ignores line numbers — same path+body always produces same hash', () => {
+    // Line numbers shift after force-push, so they must NOT affect the hash
     const a = computeCommentHash('src/index.js', 'Fix this bug');
-    const b = computeCommentHash('src/index.js', 'Fix this bug', null);
+    const b = computeCommentHash('src/index.js', 'Fix this bug');
     assert.equal(a, b);
   });
 });
@@ -97,7 +92,7 @@ describe('deduplicateBlockingBotComments', () => {
 
   it('moves a previously-addressed bot comment from blocking to nonBlocking', () => {
     const comment = makeBotComment('src/index.js', 'Fix this bug');
-    const hash = computeCommentHash('src/index.js', 'Fix this bug', 10);
+    const hash = computeCommentHash('src/index.js', 'Fix this bug');
     const addressed = [{ hash, path: 'src/index.js', author: 'copilot-pull-request-reviewer', snippet: 'Fix this bug' }];
 
     const result = deduplicateBlockingBotComments([comment], [], addressed);
@@ -118,7 +113,7 @@ describe('deduplicateBlockingBotComments', () => {
   });
 
   it('keeps new distinct bot comments as blocking', () => {
-    const oldHash = computeCommentHash('a.js', 'Old issue', 10);
+    const oldHash = computeCommentHash('a.js', 'Old issue');
     const addressed = [{ hash: oldHash, path: 'a.js', author: 'copilot-pull-request-reviewer', snippet: 'Old issue' }];
     const newComment = makeBotComment('a.js', 'New distinct issue');
 
@@ -130,7 +125,7 @@ describe('deduplicateBlockingBotComments', () => {
   it('handles mixed blocking list with bot and human comments', () => {
     const botComment = makeBotComment('src/a.js', 'Bot comment');
     const humanComment = makeHumanComment('src/a.js', 'Human comment');
-    const hash = computeCommentHash('src/a.js', 'Bot comment', 10);
+    const hash = computeCommentHash('src/a.js', 'Bot comment');
     const addressed = [{ hash, path: 'src/a.js', author: 'copilot-pull-request-reviewer', snippet: 'Bot comment' }];
 
     const result = deduplicateBlockingBotComments([botComment, humanComment], [], addressed);
@@ -142,8 +137,8 @@ describe('deduplicateBlockingBotComments', () => {
   it('deduplicates multiple bot comments at once', () => {
     const c1 = makeBotComment('a.js', 'Issue 1');
     const c2 = makeBotComment('b.js', 'Issue 2');
-    const h1 = computeCommentHash('a.js', 'Issue 1', c1.line);
-    const h2 = computeCommentHash('b.js', 'Issue 2', c2.line);
+    const h1 = computeCommentHash('a.js', 'Issue 1');
+    const h2 = computeCommentHash('b.js', 'Issue 2');
     const addressed = [
       { hash: h1, path: 'a.js', author: 'copilot-pull-request-reviewer', snippet: 'Issue 1' },
       { hash: h2, path: 'b.js', author: 'copilot-pull-request-reviewer', snippet: 'Issue 2' },
@@ -157,7 +152,7 @@ describe('deduplicateBlockingBotComments', () => {
   it('preserves existing nonBlocking items', () => {
     const existingNonBlocking = [makeBotComment('c.js', 'nitpick', { priority: 'low' })];
     const botComment = makeBotComment('a.js', 'Fix this');
-    const hash = computeCommentHash('a.js', 'Fix this', 10);
+    const hash = computeCommentHash('a.js', 'Fix this');
     const addressed = [{ hash, path: 'a.js', author: 'copilot-pull-request-reviewer', snippet: 'Fix this' }];
 
     const result = deduplicateBlockingBotComments([botComment], existingNonBlocking, addressed);
@@ -166,7 +161,7 @@ describe('deduplicateBlockingBotComments', () => {
 
   it('works with cursor-ai[bot] comments', () => {
     const comment = makeBotComment('x.js', '**severity**: medium\nFix this', { author: 'cursor-ai[bot]' });
-    const hash = computeCommentHash('x.js', '**severity**: medium\nFix this', 10);
+    const hash = computeCommentHash('x.js', '**severity**: medium\nFix this');
     const addressed = [{ hash, path: 'x.js', author: 'cursor-ai[bot]', snippet: '**severity**: medium' }];
 
     const result = deduplicateBlockingBotComments([comment], [], addressed);

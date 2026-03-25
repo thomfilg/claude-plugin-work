@@ -314,13 +314,14 @@ function isBotAuthorLogin(author, botReviewers) {
  * Compute a stable fingerprint for a review comment based on its file path
  * and body text. Used to detect re-posted bot comments after force-push.
  */
-function computeCommentHash(filePath, body, line) {
+function computeCommentHash(filePath, body) {
   const normalizedPath = (filePath || '').trim();
   const normalizedBody = (body || '').trim();
-  const normalizedLine = line != null ? String(line) : '';
+  // Hash is path + body only. Line numbers are NOT included because
+  // they shift after force-push, which would break dedup matching.
   return crypto
     .createHash('sha256')
-    .update(`${normalizedPath}\0${normalizedLine}\0${normalizedBody}`)
+    .update(`${normalizedPath}\0${normalizedBody}`)
     .digest('hex')
     .slice(0, 16); // 16 hex chars = 64 bits — sufficient for dedup
 }
@@ -357,7 +358,7 @@ function deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComme
       stillBlocking.push(item);
       continue;
     }
-    const hash = computeCommentHash(item.path, item.body, item.line);
+    const hash = computeCommentHash(item.path, item.body);
     if (addressedHashes.has(hash)) {
       movedToNonBlocking.push({ ...item, deduplicated: true });
     } else {
@@ -865,9 +866,9 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
       lines.push(c.bold('--- Non-Blocking Comments Report ---'));
       reviews.nonBlocking.forEach((item, i) => {
         const loc = item.path ? `${item.path}${item.line ? ':' + item.line : ''}` : '';
-        const preview = item.body ? item.body.replace(/\s+/g, ' ').slice(0, 120) : '';
+        const fullText = item.body ? item.body.replace(/\s+/g, ' ') : '';
         lines.push('');
-        lines.push(`  Comment ${i + 1}: ${preview}${item.body && item.body.replace(/\s+/g, ' ').length > 120 ? '...' : ''}`);
+        lines.push(`  Comment ${i + 1}: ${fullText}`);
         lines.push(`  File: ${loc || 'N/A'}`);
         lines.push(`  Author: @${item.author}`);
         if (item.deduplicated) {
@@ -1118,7 +1119,7 @@ async function main() {
           // items (CHANGES_REQUESTED, COMMENTED) lack a path and would
           // produce body-only hashes that risk false dedup matches.
           if (!item.path) continue;
-          const hash = computeCommentHash(item.path, item.body, item.line);
+          const hash = computeCommentHash(item.path, item.body);
           state.seenBotComments.push({
             hash,
             path: item.path,
@@ -1126,7 +1127,7 @@ async function main() {
             snippet: (item.body || '').slice(0, 80),
           });
         }
-        state.seenAtHead = currentHead;
+        state.seenAtHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
       }
       state.finalStatus = decision.finalStatus;
       saveState(state);
@@ -1151,10 +1152,10 @@ async function main() {
         for (const item of recheck.blocking) {
           if (!isBotAuthorLogin(item.author, recheckBotReviewers)) continue;
           if (!item.path) continue;
-          const hash = computeCommentHash(item.path, item.body, item.line);
+          const hash = computeCommentHash(item.path, item.body);
           state.seenBotComments.push({ hash, path: item.path, author: item.author, snippet: (item.body || '').slice(0, 80) });
         }
-        state.seenAtHead = currentHead;
+        state.seenAtHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
         state.finalStatus = 'reviews-blocking';
         saveState(state);
         process.exit(1);
