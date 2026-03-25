@@ -288,6 +288,25 @@ function handlePreCompact() {
   process.exit(0);
 }
 
+/**
+ * Check if the /check workflow is actively running for a ticket.
+ * When /check is active, the session guard should not block stops
+ * because /check has its own quality gates and state management.
+ */
+function isCheckWorkflowActive(ticketId) {
+  try {
+    let _config;
+    try { _config = require(path.join(__dirname, '..', 'lib', 'config')); } catch { _config = null; }
+    const worktreesBase = _config?.WORKTREES_BASE || process.env.WORKTREES_BASE || `${process.env.HOME}/worktrees`;
+    const tasksBase = _config?.TASKS_BASE || process.env.TASKS_BASE || path.join(worktreesBase, 'tasks');
+    const statePath = path.join(tasksBase, ticketId, '.workflow-state.json');
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+    return state?.workflow === 'check' && state?.status === 'in_progress';
+  } catch {
+    return false;
+  }
+}
+
 function handleStop(hookData) {
   const sessions = findActiveSessions();
   if (sessions.length === 0) {
@@ -309,7 +328,13 @@ function handleStop(hookData) {
     return;
   }
 
+  // Allow stop during /check — it has its own quality gates
   const session = unrevealed[0];
+  if (isCheckWorkflowActive(session.ticketId)) {
+    process.exit(0);
+    return;
+  }
+
   process.stderr.write(
     `BLOCKED: Active workflow session for ${session.ticketId} (${session.workflow}). ` +
     `Complete all ${session.workflow} steps to unlock, or type 'abort workflow' to force-stop.\n`
