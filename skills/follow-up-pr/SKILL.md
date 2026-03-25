@@ -403,6 +403,12 @@ This command will:
 <If any skipped comments, list each with comment text, why you disagree, and evidence>
 <If none: omit this section>
 
+### Non-Blocking Comments Report
+<MANDATORY: Copy the "Non-Blocking Comments Report" from the script output and paste it here
+in full. Each comment must show: text, file:line, author, and status (DEDUPED / NOT ADDRESSED).
+The user MUST see this report to decide if any low-priority items need action.
+Do NOT summarize — paste the full report.>
+
 ### CI Checks (Final)
 <List all passing checks>
 
