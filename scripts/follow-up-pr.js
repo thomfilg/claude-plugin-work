@@ -335,7 +335,7 @@ function computeCommentHash(filePath, body) {
  * @param {Array} addressedBotComments - array of {hash, path, author, snippet}
  * @returns {{ blocking: Array, nonBlocking: Array }}
  */
-function deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComments) {
+function deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComments, currentHeadSha) {
   if (!addressedBotComments || addressedBotComments.length === 0) {
     return { blocking, nonBlocking };
   }
@@ -355,6 +355,12 @@ function deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComme
     // Review-level items (CHANGES_REQUESTED, COMMENTED) lack a path.
     // Skip dedup for these — body-only hashes risk false matches.
     if (!item.path) {
+      stillBlocking.push(item);
+      continue;
+    }
+    // If the comment was posted against the current HEAD, it's a fresh
+    // review of the latest code — do NOT dedup even if hash matches.
+    if (currentHeadSha && item.commitId && item.commitId === currentHeadSha) {
       stillBlocking.push(item);
       continue;
     }
@@ -506,7 +512,7 @@ function resolveOutdatedThreads(threadIds, execFn = ghExec) {
   return dismissed;
 }
 
-function getReviews(prNumber, addressedBotComments) {
+function getReviews(prNumber, addressedBotComments, headSha) {
   const prArg = prNumber ? `${prNumber}` : '';
   const data = ghExec(`pr view ${prArg} --json reviews,statusCheckRollup`);
   const reviews = (data.reviews || []).map((r) => ({
@@ -562,6 +568,7 @@ function getReviews(prNumber, addressedBotComments) {
         body: (cm.body || '').trim(),
         path: cm.path || null,
         line: cm.line || null,
+        commitId: cm.commit_id || null,
         state: 'COMMENTED',
       })));
       if (pageData.length < perPage) break;
@@ -641,7 +648,7 @@ function getReviews(prNumber, addressedBotComments) {
   // Dedup activates automatically when prior runs recorded addressed hashes;
   // no explicit toggle is needed — it is inert on the first run.
   if (addressedBotComments && addressedBotComments.length > 0) {
-    const deduped = deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComments);
+    const deduped = deduplicateBlockingBotComments(blocking, nonBlocking, addressedBotComments, headSha);
     blocking = deduped.blocking;
     nonBlocking = deduped.nonBlocking;
   }
@@ -1039,16 +1046,33 @@ async function main() {
   let ci;
   let reviews = { all: [], comments: [], actionable: [], blocking: [], nonBlocking: [], pendingBots: [], hasBlocking: false, hasActionable: false };
 
-  // Two-phase dedup: promote "seen" → "addressed" only when HEAD changes.
-  // This confirms the user actually pushed a fix before deduping re-posts.
+  // Two-phase dedup: promote "seen" → "addressed" only when HEAD changes
+  // AND the comment's file was actually modified in the new commits.
+  // This prevents false dedup from unrelated pushes.
   const currentHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
   if (state.seenBotComments && state.seenBotComments.length > 0 && state.seenAtHead && state.seenAtHead !== currentHead) {
-    if (!state.addressedBotComments) state.addressedBotComments = [];
-    const existingHashes = new Set(state.addressedBotComments.map((a) => a.hash));
-    for (const entry of state.seenBotComments) {
-      if (!existingHashes.has(entry.hash)) {
-        state.addressedBotComments.push(entry);
-        existingHashes.add(entry.hash);
+    // Compute which files changed between seenAtHead and current HEAD
+    let changedPaths = new Set();
+    try {
+      const diffOutput = execSync(
+        `git diff --name-only ${state.seenAtHead}..${currentHead}`,
+        { encoding: 'utf8' }
+      );
+      changedPaths = new Set(diffOutput.split('\n').map((f) => f.trim()).filter(Boolean));
+    } catch {
+      // If diff fails (e.g., seenAtHead was garbage-collected), promote nothing
+    }
+
+    if (changedPaths.size > 0) {
+      if (!state.addressedBotComments) state.addressedBotComments = [];
+      const existingHashes = new Set(state.addressedBotComments.map((a) => a.hash));
+      for (const entry of state.seenBotComments) {
+        // Only promote if the file the comment references was changed
+        if (!entry.path || !changedPaths.has(entry.path)) continue;
+        if (!existingHashes.has(entry.hash)) {
+          state.addressedBotComments.push(entry);
+          existingHashes.add(entry.hash);
+        }
       }
     }
     state.seenBotComments = [];
@@ -1076,7 +1100,7 @@ async function main() {
     reviews = { all: [], comments: [], actionable: [], blocking: [], nonBlocking: [], pendingBots: [], hasBlocking: false, hasActionable: false };
     if (!opts.noReviews) {
       try {
-        reviews = getReviews(prInfo.number, state.addressedBotComments);
+        reviews = getReviews(prInfo.number, state.addressedBotComments, currentHead);
       } catch (err) {
         console.error(c.yellow(`Warning: Could not fetch reviews: ${err.message}`));
       }
@@ -1140,35 +1164,35 @@ async function main() {
       // Re-fetch reviews after a brief delay to catch late-arriving comments.
       // Skip recheck when --no-reviews (reviews aren't being polled).
       if (!opts.noReviews) {
-      await sleep(10);
-      let recheck;
-      try {
-        recheck = getReviews(prInfo.number, state.addressedBotComments);
-      } catch (e) {
-        // If recheck fails, proceed with exit-success — the primary check passed.
-        recheck = { hasBlocking: false };
-      }
-      if (recheck.hasBlocking) {
-        // New blocking comments appeared during propagation window.
-        // Report them and exit-fail so they get addressed.
-        reviews = recheck;
-        console.log('');
-        console.log(formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval }));
-        console.log('');
-        state.seenBotComments = [];
-        const recheckBotReviewers = getBotReviewers();
-        for (const item of recheck.blocking) {
-          if (!isBotAuthorLogin(item.author, recheckBotReviewers)) continue;
-          if (!item.path) continue;
-          const hash = computeCommentHash(item.path, item.body);
-          state.seenBotComments.push({ hash, path: item.path, author: item.author, snippet: (item.body || '').slice(0, 80) });
+        await sleep(10);
+        let recheck;
+        try {
+          recheck = getReviews(prInfo.number, state.addressedBotComments, currentHead);
+        } catch {
+          // If recheck fails, proceed with exit-success — the primary check passed.
+          recheck = { hasBlocking: false };
         }
-        state.seenAtHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
-        state.finalStatus = 'reviews-blocking';
-        saveState(state);
-        process.exit(1);
+        if (recheck.hasBlocking) {
+          reviews = recheck;
+          console.log('');
+          console.log(formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval }));
+          console.log('');
+          if (decision.finalStatus === 'reviews-blocking') {
+            state.seenBotComments = [];
+            const recheckBotReviewers = getBotReviewers();
+            for (const item of recheck.blocking) {
+              if (!isBotAuthorLogin(item.author, recheckBotReviewers)) continue;
+              if (!item.path) continue;
+              const hash = computeCommentHash(item.path, item.body);
+              state.seenBotComments.push({ hash, path: item.path, author: item.author, snippet: (item.body || '').slice(0, 80) });
+            }
+            state.seenAtHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+          }
+          state.finalStatus = 'reviews-blocking';
+          saveState(state);
+          process.exit(1);
+        }
       }
-      } // end if (!opts.noReviews)
       state.finalStatus = decision.finalStatus;
       saveState(state);
       process.exit(0);
