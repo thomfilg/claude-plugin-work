@@ -125,7 +125,7 @@ describe('work-state.js', () => {
       assert.equal(code, 0);
       assert.equal(result.ticketId, TICKET_EXISTS);
       assert.equal(result.status, 'in_progress');
-      assert.equal(Object.keys(result.stepStatus).length, 13);
+      assert.equal(Object.keys(result.stepStatus).length, 15);
       for (const step of Object.keys(result.stepStatus)) {
         assert.equal(result.stepStatus[step], 'pending');
       }
@@ -150,8 +150,8 @@ describe('work-state.js', () => {
       // Verify persistence
       const { result: getResult } = await runWorkState(['get', TICKET]);
       assert.equal(getResult.stepStatus['implement'], 'in_progress');
-      // currentStep should be updated to 3 (index 2 + 1)
-      assert.equal(getResult.currentStep, 3);
+      // currentStep should be updated to 5 (index 4 + 1, after ticket/bootstrap/brief/spec)
+      assert.equal(getResult.currentStep, 5);
     });
 
     it('should reject invalid step name with exit code 1', async () => {

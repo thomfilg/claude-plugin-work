@@ -325,7 +325,7 @@ describe('work-orchestrator.js', () => {
   });
 
   describe('state machine logic', () => {
-    it('should have 13 steps total', async () => {
+    it('should have 15 steps total', async () => {
       const { result } = await runOrchestrator(['graph']);
       assert.equal(result.steps.length, 15);
     });
@@ -337,7 +337,7 @@ describe('work-orchestrator.js', () => {
       }
     });
 
-    it('should have terminal state at 13_complete', async () => {
+    it('should have terminal state at complete', async () => {
       const { result } = await runOrchestrator(['graph']);
       assert.deepEqual(result.transitions['complete'], []);
     });
@@ -466,7 +466,7 @@ describe('work-orchestrator.js', () => {
       assert.ok(ciStep.agentPrompt.includes('gh pr checks'));
     });
 
-    it('should use Bash agent for 13_complete', async () => {
+    it('should use Bash agent for complete', async () => {
       const { result } = await runOrchestrator([TEST_TICKET]);
       const completeStep = result.plan.find((s) => s.step === 'complete');
       assert.equal(completeStep.agentType, 'Bash');
@@ -476,7 +476,7 @@ describe('work-orchestrator.js', () => {
       assert.ok(completeStep.agentPrompt.includes('finish'));
     });
 
-    it('should use Bash agent for 12_reports', async () => {
+    it('should use Bash agent for reports', async () => {
       const { result } = await runOrchestrator([TEST_TICKET]);
       const reportsStep = result.plan.find((s) => s.step === 'reports');
       assert.equal(reportsStep.agentType, 'Bash');

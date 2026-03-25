@@ -80,7 +80,7 @@ Parse the JSON output. This is your roadmap. Each RUN step includes `agentType` 
       "agentPrompt": "Run quality checks in /home/node/worktrees/...\nUse pnpm dev:check if available, bundled dev-check scripts as fallback, or pnpm lint && pnpm typecheck && pnpm test as last resort.\n\nReturn PASS or FAIL with summary.",
       "reason": "Lint + typecheck + test" }
   ],
-  "summary": { "total": 14, "run": 4, "skip": 10, "firstAction": "check" }
+  "summary": { "total": 16, "run": 4, "skip": 12, "firstAction": "check" }
 }
 ```
 

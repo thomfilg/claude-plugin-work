@@ -836,9 +836,9 @@ describe('enforce-step-workflow', () => {
 
       // Patch 5: new format includes field names and "Expected one of:"
       assert.ok(stderr.includes('Expected one of:'), 'Should use "Expected one of:" header');
-      assert.ok(stderr.includes('Task.subagent_type matches'), 'Should include field name subagent_type');
+      assert.ok(stderr.includes('Task/Agent.subagent_type matches'), 'Should include field name subagent_type');
       assert.ok(stderr.includes('quality-checker'), 'Should mention quality-checker pattern');
-      assert.ok(stderr.includes('Task.description matches'), 'Should include field name description');
+      assert.ok(stderr.includes('Task/Agent.description matches'), 'Should include field name description');
       assert.ok(stderr.includes('quality'), 'Should mention quality pattern');
     });
 
