@@ -590,16 +590,6 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
     });
   }
 
-  // cleanup
-  if (s?.hasDevSession) {
-    add(STEPS.cleanup, 'RUN', `Task(Bash)`, 'Dev session running', {
-      agentType: 'Bash',
-      agentPrompt: `Run: tmux kill-session -t "${ticket}-dev" 2>/dev/null; echo "Cleanup done"`,
-    });
-  } else {
-    add(STEPS.cleanup, 'SKIP', null, 'No dev session');
-  }
-
   // test_enhancement
   if (rework) {
     add(STEPS.test_enhancement, 'RUN', `Skill(test-coordination): ${ticket}`, 'REWORK: Re-run', {
@@ -647,11 +637,22 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
     });
   }
 
-  // ci → complete
+  // ci → cleanup → reports → complete
   add(STEPS.ci, 'RUN', 'Task(Bash)', 'Wait for CI', {
     agentType: 'Bash',
     agentPrompt: `Run in ${worktreeDir}: gh pr checks --watch --interval 60\n\nReturn PASS if all checks pass, FAIL with details if any fail.`,
   });
+
+  // cleanup (after CI, before reports)
+  if (s?.hasDevSession) {
+    add(STEPS.cleanup, 'RUN', `Task(Bash)`, 'Dev session running', {
+      agentType: 'Bash',
+      agentPrompt: `Run: tmux kill-session -t "${ticket}-dev" 2>/dev/null; echo "Cleanup done"`,
+    });
+  } else {
+    add(STEPS.cleanup, 'SKIP', null, 'No dev session');
+  }
+
   add(STEPS.reports, 'RUN', 'Task(Bash)', 'Move reports to tasks/', {
     agentType: 'Bash',
     agentPrompt: `Verify and consolidate reports in ${tasksDir}. List all *.check.md files and confirm they exist. Report the count and status of each.`,
