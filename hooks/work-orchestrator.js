@@ -565,14 +565,21 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
       if (found) prePlanningFiles = found.split('\n').filter(Boolean);
     } catch { /* tasksDir may be removed between check and read */ }
   }
+  // Build planning context: include existing files AND expected paths when stages are enabled
   const planningDocs = [];
-  if (fileExists(briefPath)) planningDocs.push(`- Brief: ${briefPath}`);
-  if (fileExists(specPath)) planningDocs.push(`- Spec: ${specPath}`);
+  if (fileExists(briefPath)) {
+    planningDocs.push(`- Brief: ${briefPath}`);
+  } else if (briefEnabled) {
+    planningDocs.push(`- Brief (if present after 3_brief): ${briefPath}`);
+  }
+  if (fileExists(specPath)) {
+    planningDocs.push(`- Spec: ${specPath}`);
+  } else if (specEnabled) {
+    planningDocs.push(`- Spec (if present after 4_spec): ${specPath}`);
+  }
   prePlanningFiles.forEach(f => planningDocs.push(`- Pre-planning: ${f}`));
-  // planningContext is empty when no files exist yet (e.g., during 3_brief/4_spec).
-  // This is intentional — it's consumed by downstream steps (5_implement onwards).
   const planningContext = planningDocs.length > 0
-    ? `\n\nPlanning documents available (read these for requirements, test scenarios, reusable components):\n${planningDocs.join('\n')}`
+    ? `\n\nPlanning documents — read these if they exist for requirements, test scenarios, reusable components:\n${planningDocs.join('\n')}`
     : '';
 
   // 4_spec

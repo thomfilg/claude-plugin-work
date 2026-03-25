@@ -21,7 +21,7 @@ Generate a technical specification by analyzing the codebase and a product brief
 
 1. **Locate brief** — Finds `brief.md` in the tasks folder for the given ticket/slug.
 2. **Delegate to spec-writer agent** — The agent reads the brief, explores the codebase, and generates a technical specification.
-3. **Save output** — Spec is saved to `${TASKS_BASE}/${TICKET_ID}/spec.md`.
+3. **Save output** — Spec is saved to `${TASKS_BASE}/${FOLDER_NAME}/spec.md`.
 
 ## Execution
 
