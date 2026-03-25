@@ -444,6 +444,7 @@ function inspect(ticket, providerConfig) {
   s.testEnhancement = te || null;
   s.hasBrief = fileExists(path.join(s.tasksDir, 'brief.md'));
   s.hasSpec = fileExists(path.join(s.tasksDir, 'spec.md'));
+  s.hasPrePlanning = s.tasksDirExists && listFiles(s.tasksDir, /pre-planning\.md$/).length > 0;
 
   s.testEnhancementDone = s.stepIs('10_test_enhancement') === 'completed' || te?.skipped === true;
 
@@ -545,9 +546,27 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
     });
   }
 
-  // 4_spec
+  // ─── Planning Docs Discovery ────────────────────────────────────────────
+  // Build a context string for agents that should consume planning artifacts
   const briefPath = path.join(tasksDir, 'brief.md');
   const specPath = path.join(tasksDir, 'spec.md');
+  const prePlanningFiles = fileExists(tasksDir)
+    ? listFiles(tasksDir, /pre-planning\.md$/).concat(
+        // Also check one level deep (e.g., tasks/TICKET/feature-name/pre-planning.md)
+        fs.readdirSync(tasksDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .flatMap(d => listFiles(path.join(tasksDir, d.name), /pre-planning\.md$/))
+      )
+    : [];
+  const planningDocs = [];
+  if (fileExists(briefPath)) planningDocs.push(`- Brief: ${briefPath}`);
+  if (fileExists(specPath)) planningDocs.push(`- Spec: ${specPath}`);
+  prePlanningFiles.forEach(f => planningDocs.push(`- Pre-planning: ${f}`));
+  const planningContext = planningDocs.length > 0
+    ? `\n\nPlanning documents available (read these for requirements, test scenarios, reusable components):\n${planningDocs.join('\n')}`
+    : '';
+
+  // 4_spec
   if (!specEnabled) {
     add('4_spec', 'SKIP', null, 'Spec generation disabled (WORK_SPEC_ENABLED=0)');
   } else if (s?.hasSpec) {
@@ -566,12 +585,9 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   if (s?.hasDiffVsMain) {
     add('5_implement', 'SKIP', null, `Changes exist: ${s.diffSummary}`);
   } else {
-    const specRef = fileExists(path.join(tasksDir, 'spec.md'))
-      ? `\n\nA technical spec with test scenarios is available at: ${path.join(tasksDir, 'spec.md')} -- use the Given/When/Then scenarios as your TDD targets.`
-      : '';
     add('5_implement', 'RUN', '/work-implement <requirements>', 'No changes vs main', {
       agentType: 'skill',
-      agentPrompt: `/work-implement <requirements>${specRef}`,
+      agentPrompt: `/work-implement <requirements>${planningContext}`,
     });
   }
 
@@ -583,7 +599,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   } else {
     add('6_quality', 'RUN', 'Task(quality-checker)', 'Lint + typecheck + test', {
       agentType: 'quality-checker',
-      agentPrompt: `Run quality checks in ${worktreeDir}:\nUse pnpm dev:check if available. If it doesn't exist, run ${PLUGIN_ROOT}/scripts/dev-check/dev-check.sh as fallback. If that also fails, use pnpm lint && pnpm typecheck && pnpm test.\n\nReturn PASS or FAIL with summary.`,
+      agentPrompt: `Run quality checks in ${worktreeDir}:\nUse pnpm dev:check if available. If it doesn't exist, run ${PLUGIN_ROOT}/scripts/dev-check/dev-check.sh as fallback. If that also fails, use pnpm lint && pnpm typecheck && pnpm test.\n\nReturn PASS or FAIL with summary.${planningContext}`,
     });
   }
 
@@ -608,7 +624,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   if (rework) {
     add('8_check', 'RUN', '/check', 'REWORK: Always re-run', {
       agentType: 'skill',
-      agentPrompt: '/check',
+      agentPrompt: `/check${planningContext}`,
       preCommands: [
         `rm -f "${tasksDir}"/*.check.md`,
         `rm -f "${tasksDir}"/.pr-update-sha`,
@@ -623,7 +639,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
     if (s?.failedReports?.length) p.push(`failed: ${s.failedReports.join(', ')}`);
     add('8_check', 'RUN', '/check', p.length ? p.join('; ') : 'No reports found', {
       agentType: 'skill',
-      agentPrompt: '/check',
+      agentPrompt: `/check${planningContext}`,
     });
   }
 
@@ -641,7 +657,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   if (rework) {
     add('10_test_enhancement', 'RUN', `Skill(test-coordination): ${ticket}`, 'REWORK: Re-run', {
       agentType: 'skill',
-      agentPrompt: `/test-coordination ${ticket}`,
+      agentPrompt: `/test-coordination ${ticket}${planningContext}`,
     });
   } else if (s?.testEnhancementDone) {
     const te = s.testEnhancement;
@@ -650,7 +666,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   } else {
     add('10_test_enhancement', 'RUN', `Skill(test-coordination): ${t}`, 'Not yet run', {
       agentType: 'skill',
-      agentPrompt: `/test-coordination ${t}`,
+      agentPrompt: `/test-coordination ${t}${planningContext}`,
     });
   }
 
