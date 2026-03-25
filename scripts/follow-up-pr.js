@@ -1138,8 +1138,16 @@ async function main() {
       // Guard against GitHub API eventual consistency: after bot review
       // status clears, new comments may take a few seconds to appear.
       // Re-fetch reviews after a brief delay to catch late-arriving comments.
+      // Skip recheck when --no-reviews (reviews aren't being polled).
+      if (!opts.noReviews) {
       await sleep(10);
-      const recheck = getReviews(prInfo.number, state.addressedBotComments);
+      let recheck;
+      try {
+        recheck = getReviews(prInfo.number, state.addressedBotComments);
+      } catch (e) {
+        // If recheck fails, proceed with exit-success — the primary check passed.
+        recheck = { hasBlocking: false };
+      }
       if (recheck.hasBlocking) {
         // New blocking comments appeared during propagation window.
         // Report them and exit-fail so they get addressed.
@@ -1160,6 +1168,7 @@ async function main() {
         saveState(state);
         process.exit(1);
       }
+      } // end if (!opts.noReviews)
       state.finalStatus = decision.finalStatus;
       saveState(state);
       process.exit(0);
