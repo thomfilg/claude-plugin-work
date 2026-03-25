@@ -671,7 +671,9 @@ function getRepoSlug() {
 }
 
 function stateFilePath(prNumber) {
-  return path.join(os.tmpdir(), `follow-up-pr-${getRepoSlug()}-${prNumber}.json`);
+  const stateDir = path.join(os.tmpdir(), '.claude');
+  if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+  return path.join(stateDir, `follow-up-pr-${getRepoSlug()}-${prNumber}.json`);
 }
 
 function loadState(prNumber) {
