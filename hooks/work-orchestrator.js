@@ -530,6 +530,14 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
     add('2b_transition', 'SKIP', null, 'No ticket transition for this provider');
   }
 
+  // ─── Docs Injection Helper ──────────────────────────────────────────────
+  function getDocsPrompt(envVar) {
+    const docs = process.env[envVar] || '';
+    if (!docs.trim()) return '';
+    const paths = docs.split(',').map(p => p.trim()).filter(Boolean);
+    return `\n\nRead these docs before starting (from ${envVar}):\n${paths.map(p => `- ${p}`).join('\n')}`;
+  }
+
   // 3_brief
   const briefEnabled = process.env.WORK_BRIEF_ENABLED !== '0'; // on by default
   const specEnabled = process.env.WORK_SPEC_ENABLED !== '0';   // on by default
@@ -541,7 +549,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   } else {
     add('3_brief', 'RUN', 'Task(brief-writer)', 'Generate product brief from ticket requirements', {
       agentType: 'brief-writer',
-      agentPrompt: `Generate a product brief for ticket ${t} based on the ticket requirements fetched in the previous step.\n\nSave the brief to: ${path.join(tasksDir, 'brief.md')}\n\nStructure it with: Problem Statement, Goal, Target Users, Requirements (P0/P1/P2), Constraints, Out of Scope, Success Metrics, Open Questions.`,
+      agentPrompt: `Generate a product brief for ticket ${t} based on the ticket requirements fetched in the previous step.\n\nSave the brief to: ${path.join(tasksDir, 'brief.md')}\n\nStructure it with: Problem Statement, Goal, Target Users, Requirements (P0/P1/P2), Constraints, Out of Scope, Success Metrics, Open Questions.${getDocsPrompt('READ_DOCS_ON_BRIEF')}`,
     });
   }
 
@@ -578,7 +586,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
       : '';
     add('4_spec', 'RUN', 'Task(spec-writer)', 'Generate technical specification', {
       agentType: 'spec-writer',
-      agentPrompt: `Analyze the codebase in ${worktreeDir} and generate a technical specification for ticket ${t}.${briefRef}\n\nSave the spec to: ${specPath}\n\nThe spec MUST include:\n1. Summary\n2. Architecture decisions (reference specific files)\n3. Data model changes\n4. API/interface changes\n5. Security considerations\n6. Test scenarios in Given/When/Then format (5-10 scenarios)\n7. Implementation phases\n8. Files to create/modify`,
+      agentPrompt: `Analyze the codebase in ${worktreeDir} and generate a technical specification for ticket ${t}.${briefRef}\n\nSave the spec to: ${specPath}\n\nThe spec MUST include:\n1. Summary\n2. Architecture decisions (reference specific files)\n3. Data model changes\n4. API/interface changes\n5. Security considerations\n6. Test scenarios in Given/When/Then format (5-10 scenarios)\n7. Implementation phases\n8. Files to create/modify${getDocsPrompt('READ_DOCS_ON_SPEC')}`,
     });
   }
 
