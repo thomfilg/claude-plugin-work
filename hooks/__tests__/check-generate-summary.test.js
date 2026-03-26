@@ -78,6 +78,29 @@ describe('getReportStatus', () => {
       '"fail 0" must not trigger NEEDS_WORK');
   });
 
+  // ── QA "Failed: 0" / "Failures: 0" should NOT trigger NEEDS_WORK ────────
+
+  it('does not trigger NEEDS_WORK for QA "Failed: 0" summary line', () => {
+    const content = '## QA Report\nSUCCESS\n- Passed: 5\n- Failed: 0\n- Skipped: 0';
+    const result = getReportStatus(content, 'qa');
+    assert.equal(result.status, 'APPROVED',
+      '"Failed: 0" in QA summary must not trigger NEEDS_WORK');
+  });
+
+  it('does not trigger NEEDS_WORK for QA "failures: 0"', () => {
+    const content = 'QA complete\nfailures: 0\npasses: 10';
+    const result = getReportStatus(content, 'qa');
+    assert.notEqual(result.status, 'NEEDS_WORK',
+      '"failures: 0" must not trigger NEEDS_WORK');
+  });
+
+  it('triggers NEEDS_WORK for QA "Failed: 3"', () => {
+    const content = '## QA Report\n- Passed: 2\n- Failed: 3';
+    const result = getReportStatus(content, 'qa');
+    assert.equal(result.status, 'NEEDS_WORK',
+      '"Failed: 3" should trigger NEEDS_WORK');
+  });
+
   // ── Null and empty content ───────────────────────────────────────────────
 
   it('returns MISSING for null content', () => {

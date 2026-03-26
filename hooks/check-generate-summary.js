@@ -4,7 +4,7 @@
  *
  * Generates the final README.md summary report after all agents complete.
  *
- * Usage: node check-generate-summary.js <REPORT_FOLDER> <CHANGES_HASH> <JIRA_TICKET_ID> <IMPACTED_APPS_JSON>
+ * Usage: node check-generate-summary.js <REPORT_FOLDER> <CHANGES_HASH> [JIRA_TICKET_ID] [IMPACTED_APPS_JSON]
  *
  * Output: Writes README.md to report folder
  */
@@ -65,7 +65,7 @@ function getReportStatus(content, type) {
     },
     qa: {
       pass: ['✅ PASS', 'All tests passed', 'SUCCESS'],
-      fail: ['❌ FAIL', 'FAILED:\\s', 'failures:\\s*[1-9]']
+      fail: ['❌ FAIL', 'FAILED:\\s*[1-9]', 'failures:\\s*[1-9]']
     },
     completion: {
       pass: ['COMPLETE', 'DELIVERED'],
