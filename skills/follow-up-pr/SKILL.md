@@ -189,10 +189,11 @@ For each **blocking** review comment:
 
 For each group of related feedback:
 
-1. Formulate a review-fix description: reviewer name, comment text, file path, line number, and what change is requested
-2. Invoke: `Skill(work-implement): fix(review): <description with full comment context, file path, and line number>`
-3. After /work-implement completes, run: `Skill(check)`
-4. Record in `summary.reviewsAddressed`:
+1. Determine `<TICKET_ID>` from the current branch: `git branch --show-current | grep -oE '[A-Z]+-[0-9]+|GH-[0-9]+'`
+2. Formulate a review-fix description: reviewer name, comment text, file path, line number, and what change is requested
+3. Invoke: `Skill(work-implement): --subtask <TICKET_ID> fix(review): <description with full comment context, file path, and line number>`
+4. After /work-implement completes, run: `Skill(check)`
+5. Record in `summary.reviewsAddressed`:
    ```javascript
    { author: "<reviewer>", comment: "<summary>", fix: "<what was changed>" }
    ```
@@ -361,12 +362,13 @@ This command will:
 
 ### 4.4 Apply Fix (Non-Coverage Issues)
 
-1. Formulate a clear fix description including: what failed, root cause, file(s) to change
-2. Invoke: `Skill(work-implement): fix(ci): <fix description with file paths and context>`
-3. After /work-implement completes, run: `Skill(check)`
-4. Push: `git push`
-5. Record the fix in summary.fixes array
-6. Return to Step 1 (re-run monitor script)
+1. Determine `<TICKET_ID>` from the current branch: `git branch --show-current | grep -oE '[A-Z]+-[0-9]+|GH-[0-9]+'`
+2. Formulate a clear fix description including: what failed, root cause, file(s) to change
+3. Invoke: `Skill(work-implement): --subtask <TICKET_ID> fix(ci): <fix description with file paths and context>`
+4. After /work-implement completes, run: `Skill(check)`
+5. Push: `git push`
+6. Record the fix in summary.fixes array
+7. Return to Step 1 (re-run monitor script)
 
 If /work-implement fails, use AskUserQuestion to ask the user for guidance before retrying.
 
