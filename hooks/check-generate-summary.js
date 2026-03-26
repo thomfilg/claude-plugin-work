@@ -20,6 +20,10 @@ if (require.main === module) {
   JIRA_TICKET_ID = process.argv[4] || '';
   try {
     IMPACTED_APPS = JSON.parse(process.argv[5] || '[]');
+    if (!Array.isArray(IMPACTED_APPS)) {
+      console.error('Error: IMPACTED_APPS_JSON must be a JSON array (e.g. \'["app1","app2"]\')');
+      process.exit(1);
+    }
   } catch {
     console.error('Error: IMPACTED_APPS_JSON must be valid JSON (e.g. \'["app1","app2"]\')');
     process.exit(1);
