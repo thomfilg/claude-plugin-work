@@ -18,7 +18,12 @@ if (require.main === module) {
   REPORT_FOLDER = process.argv[2];
   CHANGES_HASH = process.argv[3];
   JIRA_TICKET_ID = process.argv[4] || '';
-  IMPACTED_APPS = JSON.parse(process.argv[5] || '[]');
+  try {
+    IMPACTED_APPS = JSON.parse(process.argv[5] || '[]');
+  } catch {
+    console.error('Error: IMPACTED_APPS_JSON must be valid JSON (e.g. \'["app1","app2"]\')');
+    process.exit(1);
+  }
 
   if (!REPORT_FOLDER || !CHANGES_HASH) {
     console.error('Usage: node check-generate-summary.js <REPORT_FOLDER> <CHANGES_HASH> [JIRA_TICKET_ID] [IMPACTED_APPS_JSON]');
