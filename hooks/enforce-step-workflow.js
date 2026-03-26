@@ -71,15 +71,16 @@ const WORKFLOWS = [
     isActive: (state) => state?.status === 'in_progress',
     steps: WORK_STEPS,
     // Soft steps allow transition without evidence — these are optional or metadata-only steps.
-    // brief and spec are soft because they're toggleable via WORK_BRIEF_ENABLED/WORK_SPEC_ENABLED
-    // and produce documentation artifacts, not code that requires enforcement.
+    // NOTE: brief/spec were soft before GH-89 but are now enforced (require evidence + output files).
     softSteps: new Set([
-      STEPS.ticket, STEPS.brief, STEPS.spec, // optional/metadata steps
+      STEPS.ticket,                           // metadata fetch only
       STEPS.ready, STEPS.reports,             // operational steps — no code changes to enforce
     ]),
     // Tool can be a string or array — some runtimes emit Agent instead of Task.
     commandMap: [
       { step: STEPS.ticket,           tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.ticket}\\b`, 'i') },
+      { step: STEPS.bootstrap,        tool: 'Skill',           field: 'skill',         pattern: /^bootstrap$/ },
+      { step: STEPS.bootstrap,        tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.bootstrap}\\b`, 'i') },
       { step: STEPS.brief,            tool: ['Task', 'Agent'], field: 'subagent_type', pattern: /^(work-workflow:)?brief-writer$/ },
       { step: STEPS.brief,            tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.brief}\\b`, 'i') },
       { step: STEPS.spec,             tool: ['Task', 'Agent'], field: 'subagent_type', pattern: /^(work-workflow:)?spec-writer$/ },
@@ -98,12 +99,45 @@ const WORKFLOWS = [
       { step: STEPS.ci,               tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.ci}\\b`, 'i') },
       { step: STEPS.reports,          tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.reports}\\b`, 'i') },
       { step: STEPS.complete,         tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.complete}\\b`, 'i') },
+      { step: STEPS.complete,         tool: 'Bash',            field: 'command',       pattern: /work-state\.js\s+complete(\s|$)/ },
     ],
     transitionPattern: /work-orchestrator\.js\s+transition\s+(\S+)\s+(\S+)/,
     exemptPatterns: [
       /work-orchestrator\.js\s+(plan|transitions|graph)/,
       /work-state\.js\s+(get|resume-info|init)/,
     ],
+    // Rule 4: Block direct CLI state mutations (GH-89).
+    // Prevents agents from calling work-state.js with mutating subcommands
+    // to bypass the step enforcement system. Checked globally in PreToolUse.
+    blockedPatterns: [
+      /work-state\.js\s+set-step\b/,
+      /work-state\.js\s+set-check\b/,
+      /work-state\.js\s+set-test-enhancement\b/,
+      /work-state\.js\s+add-error\b/,
+    ],
+    // Step-gated output file protection (GH-89 Layer 2).
+    // Maps output file basenames to the step that owns them.
+    // Write/Edit/MultiEdit to these files is blocked unless the owning step is in_progress.
+    outputProtection: {
+      'brief.md':              STEPS.brief,
+      'spec.md':               STEPS.spec,
+      'tests.check.md':        STEPS.check,
+      'code-review.check.md':  STEPS.check,
+      'completion.check.md':   STEPS.check,
+      'tests-feedback.jsonl':  STEPS.test_enhancement,
+    },
+    // Expected output files per step (GH-89 Layer 3).
+    // Transition from a step is blocked unless ALL listed files exist in TASKS_BASE/TICKET/.
+    expectedOutputs: {
+      [STEPS.brief]: ['brief.md'],
+      [STEPS.spec]:  ['spec.md'],
+      [STEPS.check]: ['tests.check.md', 'code-review.check.md', 'completion.check.md'],
+    },
+    // Sub-workflow validation (GH-89 Layer 4).
+    // Before transitioning out of these steps, verify the sub-workflow completed.
+    subWorkflowValidation: {
+      [STEPS.pr]: { stateFile: '.workflow-state.json', requiredWorkflow: 'work-pr', requiredStatus: 'completed' },
+    },
     transitionHint: `node ${path.join(__dirname, 'work-orchestrator.js')} transition`,
   },
   {
@@ -127,6 +161,11 @@ const WORKFLOWS = [
     exemptPatterns: [
       /workflow-engine\.js\s+work-pr\s+(plan|transitions|graph)/,
       /workflow-state\.js\s+work-pr\s+(get|resume-info|init)/,
+    ],
+    blockedPatterns: [
+      /workflow-state\.js\s+\S+\s+set-step\b/,
+      /workflow-state\.js\s+\S+\s+add-error\b/,
+      /workflow-state\.js\s+\S+\s+complete\b/,
     ],
     transitionHint: `node ${path.join(__dirname, '..', 'lib', 'workflow-engine.js')} work-pr transition`,
   },
@@ -202,6 +241,22 @@ const stateFileProtector = createFileProtector({
     `State files must only be modified through the orchestrator/workflow-engine scripts.\n`,
 });
 
+// Pre-compute output protection basenames from all workflows
+// Maps basename → { step, stateFile, steps, workflowName, hint }
+const OUTPUT_BASENAMES = {};
+for (const wf of WORKFLOWS) {
+  if (!wf.outputProtection) continue;
+  for (const [bn, step] of Object.entries(wf.outputProtection)) {
+    OUTPUT_BASENAMES[bn] = {
+      step,
+      stateFile: wf.stateFile,
+      steps: wf.steps,
+      workflowName: wf.name,
+      hint: wf.transitionHint,
+    };
+  }
+}
+
 // (Patch 7) Validate workflow config at startup
 function validateWorkflow(wf) {
   const stepSet = new Set(wf.steps);
@@ -213,6 +268,34 @@ function validateWorkflow(wf) {
   for (const m of wf.commandMap) {
     if (!stepSet.has(m.step)) throw new Error(`[${wf.name}] commandMap references unknown step: ${m.step}`);
     if (m.field === undefined) throw new Error(`[${wf.name}] commandMap missing field for step: ${m.step}`);
+  }
+
+  if (wf.blockedPatterns) {
+    for (const p of wf.blockedPatterns) {
+      if (!(p instanceof RegExp)) throw new Error(`[${wf.name}] blockedPatterns must contain RegExp instances`);
+    }
+  }
+
+  if (wf.expectedOutputs) {
+    for (const [step, files] of Object.entries(wf.expectedOutputs)) {
+      if (!stepSet.has(step)) throw new Error(`[${wf.name}] expectedOutputs references unknown step: ${step}`);
+      if (!Array.isArray(files) || files.length === 0) throw new Error(`[${wf.name}] expectedOutputs[${step}] must be a non-empty array`);
+    }
+  }
+
+  if (wf.outputProtection) {
+    for (const [bn, step] of Object.entries(wf.outputProtection)) {
+      if (!stepSet.has(step)) throw new Error(`[${wf.name}] outputProtection['${bn}'] references unknown step: ${step}`);
+    }
+  }
+
+  if (wf.subWorkflowValidation) {
+    for (const [step, config] of Object.entries(wf.subWorkflowValidation)) {
+      if (!stepSet.has(step)) throw new Error(`[${wf.name}] subWorkflowValidation references unknown step: ${step}`);
+      if (!config.stateFile) throw new Error(`[${wf.name}] subWorkflowValidation[${step}] missing stateFile`);
+      if (!config.requiredWorkflow) throw new Error(`[${wf.name}] subWorkflowValidation[${step}] missing requiredWorkflow`);
+      if (!config.requiredStatus) throw new Error(`[${wf.name}] subWorkflowValidation[${step}] missing requiredStatus`);
+    }
   }
 }
 
@@ -368,6 +451,55 @@ function isExempt(toolName, toolInput, exemptPatterns) {
 }
 
 /**
+ * Check if a Bash command matches any blocked pattern for a workflow.
+ * Blocked patterns are always-deny — checked BEFORE exempt patterns.
+ */
+function isBlocked(toolName, toolInput, patterns) {
+  if (!patterns || patterns.length === 0) return false;
+  if (toolName !== 'Bash') return false;
+  const cmd = String(toolInput?.command || '').trim();
+  if (!cmd) return false;
+  return patterns.some(p => p.test(cmd));
+}
+
+/**
+ * Check if a file write targets a step-gated output file.
+ * Returns { blocked, bn, owningStep, currentStep, workflowName, hint } or null.
+ */
+function checkOutputProtection(toolName, toolInput, ticketId) {
+  if (Object.keys(OUTPUT_BASENAMES).length === 0) return null;
+
+  let targetBn;
+  if (toolName === 'Write' || toolName === 'Edit' || toolName === 'MultiEdit') {
+    targetBn = path.basename(toolInput?.file_path || '');
+  } else if (toolName === 'Bash') {
+    const cmd = String(toolInput?.command || '');
+    // Only check commands with write operators
+    if (/>{1,2}|\btee\b|\bcp\b|\bmv\b/.test(cmd)) {
+      const tokens = (cmd.match(/[^\s"'|;&()]+/g) || []).map(t => path.basename(t));
+      targetBn = tokens.find(t => OUTPUT_BASENAMES[t]);
+    }
+  }
+
+  if (!targetBn) return null;
+  const info = OUTPUT_BASENAMES[targetBn];
+  if (!info) return null;
+
+  const state = loadStateFile(ticketId, info.stateFile);
+  const currentStep = state ? getCurrentStep(state, info.steps) : null;
+  if (currentStep === info.step) return null; // Owning step is active → allow
+
+  return {
+    blocked: true,
+    bn: targetBn,
+    owningStep: info.step,
+    currentStep,
+    workflowName: info.workflowName,
+    hint: info.hint,
+  };
+}
+
+/**
  * Parse a transition command for a specific workflow.
  * Returns { isTransition: true, ticket, targetStep, raw } or { isTransition: false }.
  */
@@ -392,6 +524,24 @@ function handlePreToolUse(hookData) {
   const ticketId = getTicketId();
   if (!ticketId) return; // No ticket context → allow
 
+  // Rule 5: Block writes to step-gated output files (GH-89 Layer 2)
+  // Must run BEFORE Rule 3 because Rule 3's skipRemainingChecks exits early for file tools.
+  const rule5 = checkOutputProtection(toolName, toolInput, ticketId);
+  if (rule5?.blocked) {
+    didBlock = true;
+    if (rule5.workflowName === 'work') {
+      appendAction(ticketId, { step: rule5.owningStep, what: `BLOCKED: write to ${rule5.bn} (step ${rule5.owningStep} not in_progress)`, meta: { rule: 5 } });
+    }
+    process.stderr.write(
+      `BLOCKED [${rule5.workflowName}]: Cannot write '${rule5.bn}' — step '${rule5.owningStep}' is not in_progress.\n` +
+      `This file can only be written during the '${rule5.owningStep}' step.\n` +
+      `Current step: ${rule5.currentStep || 'none'}\n` +
+      `To unblock: transition to the '${rule5.owningStep}' step first.\n` +
+      `Use: ${rule5.hint} ${ticketId} ${rule5.owningStep}\n`
+    );
+    process.exit(2);
+  }
+
   // Rule 3: Block direct writes to workflow state files
   // Prevents agents from bypassing the state machine by directly editing state files
   const rule3 = stateFileProtector.check(toolName, toolInput);
@@ -405,6 +555,24 @@ function handlePreToolUse(hookData) {
     process.exit(2);
   }
   if (rule3.skipRemainingChecks) return; // Edit/Write/MultiEdit — skip per-workflow loop
+
+  // Rule 4: Block direct CLI state mutations (GH-89)
+  // Checked globally (even when workflow is not active) to prevent agents from
+  // creating or modifying state via CLI. Mirrors Rule 3's global placement.
+  for (const wf of WORKFLOWS) {
+    if (isBlocked(toolName, toolInput, wf.blockedPatterns)) {
+      didBlock = true;
+      if (wf.name === 'work') {
+        appendAction(ticketId, { step: '(blocked)', what: 'BLOCKED: direct CLI state mutation', meta: { rule: 4 } });
+      }
+      process.stderr.write(
+        `BLOCKED [${wf.name}]: Direct state mutation via CLI is not allowed.\n` +
+        `State must only be modified through transition commands.\n` +
+        `Use: ${wf.transitionHint} ${ticketId} <step>\n`
+      );
+      process.exit(2);
+    }
+  }
 
   // 2. Check each workflow independently
   for (const wf of WORKFLOWS) {
@@ -427,10 +595,76 @@ function handlePreToolUse(hookData) {
       if (transition.ticket !== ticketId) continue;
 
       // Rule 2: Block transition if current step's command wasn't executed
-      if (wf.softSteps.has(currentStep)) continue; // Soft steps don't need evidence
+      if (wf.softSteps.has(currentStep)) {
+        // Soft steps skip evidence check but still check expected outputs (GH-89 Layer 3)
+        if (wf.expectedOutputs?.[currentStep]) {
+          const tasksDir = path.join(TASKS_BASE, ticketId);
+          const missing = wf.expectedOutputs[currentStep].filter(f => !fs.existsSync(path.join(tasksDir, f)));
+          if (missing.length > 0) {
+            didBlock = true;
+            if (wf.name === 'work') {
+              appendAction(ticketId, { step: currentStep, what: `BLOCKED: missing output files: ${missing.join(', ')}`, meta: { rule: 2 } });
+            }
+            process.stderr.write(
+              `BLOCKED [${wf.name}]: Cannot transition from '${currentStep}' — expected output files missing.\n` +
+              `Missing files:\n` +
+              missing.map(f => `  - ${f}\n`).join('') +
+              `Run the step's command to generate these files, then transition.\n` +
+              `Use: ${wf.transitionHint} ${ticketId} ${transition.targetStep}\n`
+            );
+            process.exit(2);
+          }
+        }
+        continue;
+      }
 
       const evidence = loadEvidence(ticketId, wf.evidenceFile);
-      if (evidence[currentStep]?.executed) continue; // Evidence exists → allow
+
+      // GH-89 Layer 3: Compound evidence — check BOTH agent execution AND output files
+      if (evidence[currentStep]?.executed) {
+        // Agent evidence exists — now also check expected outputs
+        if (wf.expectedOutputs?.[currentStep]) {
+          const tasksDir = path.join(TASKS_BASE, ticketId);
+          const missing = wf.expectedOutputs[currentStep].filter(f => !fs.existsSync(path.join(tasksDir, f)));
+          if (missing.length > 0) {
+            didBlock = true;
+            if (wf.name === 'work') {
+              appendAction(ticketId, { step: currentStep, what: `BLOCKED: missing output files: ${missing.join(', ')}`, meta: { rule: 2 } });
+            }
+            process.stderr.write(
+              `BLOCKED [${wf.name}]: Cannot transition from '${currentStep}' — expected output files missing.\n` +
+              `The step command was executed but output files were not generated.\n` +
+              `Missing files:\n` +
+              missing.map(f => `  - ${f}\n`).join('') +
+              `Re-run the step's command to generate these files, then transition.\n` +
+              `Use: ${wf.transitionHint} ${ticketId} ${transition.targetStep}\n`
+            );
+            process.exit(2);
+          }
+        }
+        // GH-89 Layer 4: Sub-workflow validation
+        if (wf.subWorkflowValidation?.[currentStep]) {
+          const subVal = wf.subWorkflowValidation[currentStep];
+          const subState = loadStateFile(ticketId, subVal.stateFile);
+          if (!subState || subState.workflow !== subVal.requiredWorkflow || subState.status !== subVal.requiredStatus) {
+            didBlock = true;
+            const subStatus = subState ? `${subState.workflow}:${subState.status}` : 'not found';
+            if (wf.name === 'work') {
+              appendAction(ticketId, { step: currentStep, what: `BLOCKED: sub-workflow not completed (${subStatus})`, meta: { rule: 2, subWorkflow: subVal.requiredWorkflow } });
+            }
+            process.stderr.write(
+              `BLOCKED [${wf.name}]: Cannot transition from '${currentStep}' — sub-workflow '${subVal.requiredWorkflow}' not completed.\n` +
+              `Sub-workflow status: ${subStatus}\n` +
+              `Expected: ${subVal.requiredWorkflow}:${subVal.requiredStatus}\n` +
+              `Run the step's command to complete the sub-workflow first.\n` +
+              `Use: ${wf.transitionHint} ${ticketId} ${transition.targetStep}\n`
+            );
+            process.exit(2);
+          }
+        }
+
+        continue; // All checks passed → allow
+      }
 
       // (Patch 5) Multi-command expected hint — show all valid commands with field names
       const expectedMappings = wf.commandMap.filter(m => m.step === currentStep);
