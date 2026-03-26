@@ -705,7 +705,8 @@ function initState(prInfo) {
 function formatNonBlockingItems(items, lines) {
   for (const item of items) {
     const loc = item.path ? ` ${c.dim(item.path + (item.line ? ':' + item.line : ''))}` : '';
-    lines.push(`  ${c.dim('○')} ${c.cyan('@' + item.author)} ${c.dim('[LOW]')}${loc}`);
+    const priorityTag = item.deduplicated ? `[${(item.priority || 'low').toUpperCase()}→DEDUPED]` : '[LOW]';
+    lines.push(`  ${c.dim('○')} ${c.cyan('@' + item.author)} ${c.dim(priorityTag)}${loc}`);
     if (item.body) {
       const normalized = item.body.replace(/\s+/g, ' ');
       const preview = normalized.length > 80 ? normalized.slice(0, 77) + '...' : normalized;
@@ -861,7 +862,7 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
       lines.push(c.bold('--- Non-Blocking Comments Report ---'));
       reviews.nonBlocking.forEach((item, i) => {
         const loc = item.path ? `${item.path}${item.line ? ':' + item.line : ''}` : '';
-        const fullText = item.body ? item.body.replace(/\s+/g, ' ') : '';
+        const fullText = item.body ? item.body.trim() : '';
         lines.push('');
         lines.push(`  Comment ${i + 1}: ${fullText}`);
         lines.push(`  File: ${loc || 'N/A'}`);
@@ -1035,7 +1036,11 @@ async function main() {
   let reviews = { all: [], comments: [], actionable: [], blocking: [], nonBlocking: [], pendingBots: [], hasBlocking: false, hasActionable: false };
 
   // Single-generation dedup: capture previous run's bot hashes (backward compat with old state files)
-  const previousRunBotHashes = (state.previousRunBotHashes || state.addressedBotComments?.map((a) => a.hash) || []).slice();
+  const previousRunBotHashes = (
+    (state.previousRunBotHashes && state.previousRunBotHashes.length > 0)
+      ? state.previousRunBotHashes
+      : (state.addressedBotComments || []).map(a => a.hash)
+  ).slice();
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // Refresh PR info each attempt (mergeable status may change)
