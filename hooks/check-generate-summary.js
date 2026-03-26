@@ -64,8 +64,8 @@ function getReportStatus(content, type) {
       fail: ['CRITICAL', 'NEEDS_WORK']
     },
     qa: {
-      pass: ['✅ PASS', 'All tests passed', 'SUCCESS'],
-      fail: ['❌ FAIL', 'FAILED:\\s*[1-9]', 'failures:\\s*[1-9]', 'Status:\\s*FAIL']
+      pass: ['✅ PASS', 'All tests passed', 'SUCCESS', 'Status:\\s*APPROVED'],
+      fail: ['❌ FAIL', 'FAILED:\\s*[1-9]', 'failures:\\s*[1-9]', 'Status:\\s*FAIL', 'Status:\\s*NEEDS_WORK']
     },
     completion: {
       pass: ['COMPLETE', 'DELIVERED'],
