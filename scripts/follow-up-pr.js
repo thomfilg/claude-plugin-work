@@ -522,12 +522,12 @@ function getReviews(prNumber) {
 
   // Get review comments (inline comments) with pagination
   let comments = [];
+  let branchCommits = new Set();
   try {
     const repoData = ghExec('repo view --json nameWithOwner');
     const repo = repoData.nameWithOwner;
 
     // Get current branch commit SHAs to detect stale comments from force-pushes
-    let branchCommits = new Set();
     try {
       const prData = ghExec(['pr', 'view', String(prNumber), '--json', 'commits']);
       if (prData.commits) {
