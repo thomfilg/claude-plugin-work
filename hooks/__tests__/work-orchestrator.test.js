@@ -737,7 +737,7 @@ describe('work-orchestrator.js', () => {
         assert.equal(result.to, 'implement');
         assert.equal(result.direction, 'backward');
       } finally {
-        try { fs.rmSync(path.join(TEMP_TASKS, T2), { recursive: true, force: true }); } catch {}
+        try { fs.rmSync(path.join(TEMP_TASKS, T2), { recursive: true, force: true }); } catch {} // TASKS_BASE isolation via TEMP_TASKS
       }
     });
 
