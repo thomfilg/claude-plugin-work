@@ -724,7 +724,7 @@ function saveState(state) {
 }
 
 function initState(prInfo) {
-  return {
+  return { // State persisted to /tmp/.claude/follow-up-pr-<repo>-<PR>.json
     prNumber: prInfo.number,
     prUrl: prInfo.url,
     branch: prInfo.branch,
