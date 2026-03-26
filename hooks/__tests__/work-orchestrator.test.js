@@ -688,6 +688,29 @@ describe('work-orchestrator.js', () => {
       assert.equal(result.currentStep, 'check');
     });
 
+    it('should inject READ_DOCS_ON_DEV into implement step agentPrompt when set', async () => {
+      const docs = 'docs/coding-standards.md,docs/api-guide.md';
+      const { result, code } = await runOrchestrator([TICKET], {
+        env: { ...envOpts.env, READ_DOCS_ON_DEV: docs },
+      });
+      assert.equal(code, 0);
+      const implStep = result.plan.find((s) => s.step === 'implement');
+      assert.equal(implStep.action, 'RUN');
+      assert.ok(implStep.agentPrompt.includes('READ_DOCS_ON_DEV'), 'agentPrompt should mention READ_DOCS_ON_DEV');
+      assert.ok(implStep.agentPrompt.includes('docs/coding-standards.md'), 'agentPrompt should include first doc path');
+      assert.ok(implStep.agentPrompt.includes('docs/api-guide.md'), 'agentPrompt should include second doc path');
+    });
+
+    it('should NOT inject READ_DOCS_ON_DEV into implement step agentPrompt when unset', async () => {
+      const { result, code } = await runOrchestrator([TICKET], {
+        env: { ...envOpts.env, READ_DOCS_ON_DEV: '' },
+      });
+      assert.equal(code, 0);
+      const implStep = result.plan.find((s) => s.step === 'implement');
+      assert.equal(implStep.action, 'RUN');
+      assert.ok(!implStep.agentPrompt.includes('READ_DOCS_ON_DEV'), 'agentPrompt should NOT mention READ_DOCS_ON_DEV when empty');
+    });
+
     it('should round-trip: work-state CLI init → set-step → get', async () => {
       const WORK_STATE_PATH = path.join(__dirname, '..', 'work-state.js');
       const stateEnv = { env: { TASKS_BASE: TEMP_TASKS, WORKTREES_BASE: TEMP_WB } };

@@ -156,6 +156,7 @@ function isInsideDeveloperAgent(transcriptPath, opts = {}) {
       'developer-react-senior',
       'developer-react-ui-architect',
       'developer-devops',
+      'code-architect',
     ];
 
     // Check if we're inside a developer agent

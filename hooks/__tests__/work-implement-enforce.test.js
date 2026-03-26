@@ -101,6 +101,40 @@ describe('work-implement-enforce hook', () => {
     assert.strictEqual(result.decision, 'approve');
   });
 
+  it('should APPROVE when code-architect agent has been invoked', async () => {
+    const tp = path.join(os.tmpdir(), `test-wie-ca-${Date.now()}.jsonl`);
+    fs.writeFileSync(tp, '# Implement Command\n"subagent_type": "code-architect"\n');
+    const { result } = await runHook({
+      tool_name: 'Edit',
+      tool_input: { file_path: '/home/node/project/src/app.ts' },
+      transcript_path: tp
+    });
+    assert.strictEqual(result.decision, 'approve');
+  });
+
+  it('should APPROVE when code-architect agent invoked with work-workflow: prefix', async () => {
+    const tp = path.join(os.tmpdir(), `test-wie-ca2-${Date.now()}.jsonl`);
+    fs.writeFileSync(tp, '# Implement Command\n"subagent_type": "work-workflow:code-architect"\n');
+    const { result } = await runHook({
+      tool_name: 'Edit',
+      tool_input: { file_path: '/home/node/project/src/app.ts' },
+      transcript_path: tp
+    });
+    assert.strictEqual(result.decision, 'approve');
+  });
+
+  it('should include code-architect in error message when blocking', async () => {
+    const tp = path.join(os.tmpdir(), `test-wie-ca3-${Date.now()}.jsonl`);
+    fs.writeFileSync(tp, '# Implement Command\n');
+    const { result } = await runHook({
+      tool_name: 'Edit',
+      tool_input: { file_path: '/home/node/project/src/app.ts' },
+      transcript_path: tp
+    });
+    assert.strictEqual(result.decision, 'block');
+    assert.ok(result.reason.includes('code-architect'), 'error message should mention code-architect');
+  });
+
   it('should APPROVE on parse error (JSON.parse in main fails, main().catch fires)', async () => {
     const proc = spawn('node', [HOOK_PATH], { stdio: ['pipe', 'pipe', 'pipe'] });
     const exitCode = await new Promise((resolve) => {
