@@ -1147,7 +1147,11 @@ async function main() {
     const decision = decideNextAction(ci.status, prInfo, reviews, opts.noReviews);
 
     // Compute changed paths once for both exit-fail and exit-success branches
-    const changedPaths = getChangedPaths(state.headAtLastExit || null, currentHead);
+    // changedPaths: null = error/no-data (record all), empty Set = no changes (record all).
+    // An empty Set means headAtLastExit === currentHead (re-run without push) — fall back
+    // to recording all hashes so dedup still works on the next run.
+    const rawChangedPaths = getChangedPaths(state.headAtLastExit || null, currentHead);
+    const changedPaths = (rawChangedPaths && rawChangedPaths.size === 0) ? null : rawChangedPaths;
 
     if (decision.action === 'exit-fail') {
       // Single-generation dedup: record current blocking bot hashes on
