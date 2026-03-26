@@ -641,12 +641,12 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   }
 
   // follow_up
-  if (!s?.pr) {
-    add(STEPS.follow_up, 'SKIP', null, 'No PR exists');
+  if (!s?.pr || s.pr.isDraft) {
+    add(STEPS.follow_up, 'SKIP', null, !s?.pr ? 'No PR exists' : 'PR is draft');
   } else {
     add(STEPS.follow_up, 'RUN', 'Skill(follow-up-pr)', 'Address bot review comments and CI issues', {
       agentType: 'skill',
-      agentPrompt: `/follow-up-pr`,
+      agentPrompt: `/follow-up-pr ${ticket}`,
     });
   }
 

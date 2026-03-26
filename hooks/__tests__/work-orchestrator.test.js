@@ -681,17 +681,13 @@ describe('work-orchestrator.js', () => {
       assert.ok(followUpStep.reason.includes('No PR'));
     });
 
-    it('should have agentType=skill and agentPrompt containing /follow-up-pr when PR exists', async () => {
-      // For a new ticket without worktree, no PR exists, so follow_up is SKIP.
-      // We verify the graph transitions instead; the RUN path requires a worktree with a PR.
-      // Instead, check that the step appears correctly in the plan.
+    it('should SKIP follow_up with no agentType when no PR exists', async () => {
       const { result } = await runOrchestrator([TEST_TICKET]);
       const followUpStep = result.plan.find((s) => s.step === 'follow_up');
       assert.ok(followUpStep, 'follow_up step should exist in plan');
-      // When SKIP, agentType/agentPrompt should be undefined
-      if (followUpStep.action === 'SKIP') {
-        assert.equal(followUpStep.agentType, undefined);
-      }
+      assert.equal(followUpStep.action, 'SKIP');
+      assert.equal(followUpStep.agentType, undefined);
+      assert.equal(followUpStep.agentPrompt, undefined);
     });
 
     it('should appear between ready and ci in plan order', async () => {
