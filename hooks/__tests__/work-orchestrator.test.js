@@ -735,6 +735,8 @@ describe('work-orchestrator.js', () => {
       const commitCmd = ['git', 'commit', '-m'].join(' ');
       fs.mkdirSync(worktreeDir, { recursive: true });
       gitCmd('git init');
+      gitCmd('git config user.name "Test User"');
+      gitCmd('git config user.email "test@example.com"');
       gitCmd('git checkout -b main');
       fs.writeFileSync(path.join(worktreeDir, 'file.txt'), 'initial');
       gitCmd(`git add . && ${commitCmd} "init"`);
