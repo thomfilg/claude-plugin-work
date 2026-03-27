@@ -28,9 +28,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          # Note: npm cache disabled — no package-lock.json in repo
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm install --ignore-scripts # npm install (not ci) — no lockfile in repo
 
       - name: Run tests
         run: npm test
