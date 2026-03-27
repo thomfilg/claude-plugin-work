@@ -180,11 +180,16 @@ async function startDatabase() {
     return { started: false, alreadyRunning: true };
   }
 
-  console.error('Starting database with make dev-local...');
+  // Support custom dev commands per repo via config
+  // e.g. DEV_COMMAND="~/g2i/scripts/dev-squire.sh" in .env
+  const devCommand = config.DEV_COMMAND || 'make dev-local';
+  const [cmd, ...args] = devCommand.split(/\s+/);
+  console.error(`Starting database with ${devCommand}...`);
 
   return new Promise((resolve) => {
-    const proc = spawn('make', ['dev-local'], {
+    const proc = spawn(cmd, args, {
       cwd: process.cwd(),
+      shell: true,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true
     });
