@@ -179,6 +179,7 @@ const WORKFLOWS = [
         } catch { return false; }
       }},
       { step: STEPS.check,            tool: 'Skill',           field: 'skill',         pattern: /^(work-workflow:)?check$/ },
+      { step: STEPS.cleanup,          tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.cleanup}\\b`, 'i') },
       { step: STEPS.cleanup, verify: (ticketId) => {
         // Cleanup is proven if no dev tmux session exists for this ticket
         try {
@@ -212,6 +213,8 @@ const WORKFLOWS = [
           return state.finalStatus === 'ready';
         } catch { return false; }
       }},
+      { step: STEPS.ready,            tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.ready}\\b`, 'i') },
+      { step: STEPS.ci,               tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.ci}\\b`, 'i') },
       { step: STEPS.ci, verify: () => {
         // CI is proven if all PR checks are passing (same as follow_up verify)
         try {
@@ -221,6 +224,7 @@ const WORKFLOWS = [
           return checks.length > 0 && checks.every(c => c.state === 'SUCCESS' || c.state === 'SKIPPED');
         } catch { return false; }
       }},
+      { step: STEPS.reports,          tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.reports}\\b`, 'i') },
       { step: STEPS.reports, verify: (ticketId) => {
         // Reports is proven if all required check files exist and show APPROVED/COMPLETE
         try {
@@ -241,6 +245,7 @@ const WORKFLOWS = [
           return files.every(f => /Status:\s*APPROVED/i.test(fs.readFileSync(path.join(dir, f), 'utf-8')));
         } catch { return false; }
       }},
+      { step: STEPS.complete,         tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.complete}\\b`, 'i') },
       { step: STEPS.complete, verify: (ticketId) => {
         // Complete is proven if: PR exists + CI passing + all reports approved
         try {
