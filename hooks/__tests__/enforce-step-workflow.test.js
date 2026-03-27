@@ -1016,7 +1016,6 @@ describe('enforce-step-workflow', () => {
     it('PostToolUse ignores transition with unknown target step', async () => {
       writeWorkState(makeStepStatus('commit', WORK_STEPS));
       writeEvidence({
-        'implement': { executed: true, tool: 'Skill', timestamp: new Date().toISOString() },
         'implement': { executed: true, tool: 'Task', timestamp: new Date().toISOString() },
         'commit': { executed: true, tool: 'Task', timestamp: new Date().toISOString() },
       });

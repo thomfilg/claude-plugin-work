@@ -44,14 +44,9 @@ process.on('unhandledRejection', (err) => {
 // Agent detection for report file protection
 let isRunningInAgent;
 try {
-  isRunningInAgent = require(path.join(__dirname, '..', '..', '..', 'hooks', 'lib', 'agent-detection')).isRunningInAgent;
+  isRunningInAgent = require(path.join(process.env.HOME, '.claude', 'hooks', 'lib', 'agent-detection')).isRunningInAgent;
 } catch {
-  try {
-    // Fallback: try global hooks location
-    isRunningInAgent = require(path.join(process.env.HOME, '.claude', 'hooks', 'lib', 'agent-detection')).isRunningInAgent;
-  } catch {
-    isRunningInAgent = () => true; // fail-open if agent detection unavailable
-  }
+  isRunningInAgent = () => true; // fail-open if agent detection unavailable
 }
 
 const { createArtifactProtector } = require(path.join(__dirname, '..', 'lib', 'protect-artifact-files'));
@@ -141,6 +136,12 @@ const WORKFLOWS = [
           const shaFile = path.join(TASKS_BASE, ticketId, '.last-commit-sha');
           const headSha = execFileSync('git', ['rev-parse', 'HEAD'], opts).trim();
 
+          let baseBranch = 'origin/main';
+          try {
+            const getBaseBranch = require(path.join(__dirname, '..', 'lib', 'config')).getBaseBranch;
+            baseBranch = getBaseBranch({ cwd: process.cwd() });
+          } catch { /* fallback to origin/main */ }
+
           // 1. If saved SHA exists and HEAD differs → new commit was made
           try {
             const savedSha = fs.readFileSync(shaFile, 'utf-8').trim();
@@ -154,10 +155,10 @@ const WORKFLOWS = [
           } catch { /* no saved SHA — first run */ }
 
           // 2. No saved SHA → check for commits with ticketId not on main
-          const log = execFileSync('git', ['log', '--oneline', 'origin/main..HEAD', '--grep', ticketId], opts).trim();
+          const log = execFileSync('git', ['log', '--oneline', `${baseBranch}..HEAD`, '--grep', ticketId], opts).trim();
           if (log) {
             // Verify diff vs main is non-empty
-            const diff = execFileSync('git', ['diff', '--shortstat', 'origin/main', 'HEAD'], opts).trim();
+            const diff = execFileSync('git', ['diff', '--shortstat', baseBranch, 'HEAD'], opts).trim();
             if (!diff) return false; // No actual changes — reject
             fs.writeFileSync(shaFile, headSha);
             return true;
