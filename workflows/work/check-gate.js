@@ -16,9 +16,9 @@ const { execFileSync } = require('child_process');
 
 // ─── Helpers (local, no external deps) ──────────────────────────────────────
 
-// Helpers match the signatures in hooks/work-orchestrator.js (extracted as-is)
-function fileExists(p) { try { return fs.existsSync(p); } catch { return false; } }
-function readFile(p)   { try { return fs.readFileSync(p, 'utf-8'); } catch { return ''; } }
+// Helpers — extracted as-is from hooks/work-orchestrator.js to preserve identical behavior
+function fileExists(p) { return fs.existsSync(p); }
+function readFile(p) { try { return fs.readFileSync(p, 'utf-8'); } catch { return ''; } }
 
 function listFiles(dir, pattern) {
   if (!fileExists(dir)) return [];
@@ -84,10 +84,8 @@ const CHECK_GATE_RULES = [
             if (err.status != null) details.push(`status=${err.status}`);
             if (err.signal != null) details.push(`signal=${err.signal}`);
             if (err.code) details.push(`code=${err.code}`);
-            process.stderr.write(
-              `check-gate: tmux has-session check failed for ${sessionName}` +
-              (details.length ? ` (${details.join(', ')})` : '') + '\n'
-            );
+            const msg = `check-gate: tmux has-session check failed for ${sessionName}`;
+            process.stderr.write(details.length ? `${msg} (${details.join(', ')})\n` : `${msg}\n`);
           }
         }
       }
