@@ -14,8 +14,8 @@ function writeReport(ticket, name, content) {
   fs.writeFileSync(path.join(dir, name), content);
 }
 
-// Cleanup: afterEach removes per-ticket dir between tests, after removes temp root
-after(() => { fs.rmSync(TEMP, { recursive: true, force: true }); });
+// Cleanup: sequential test runner — afterEach resets ticket dir, after cleans temp root
+after(() => fs.rmSync(TEMP, { recursive: true, force: true }));
 afterEach(() => { try { fs.rmSync(path.join(TEMP, 'T-1'), { recursive: true, force: true }); } catch {} });
 
 describe('check-gate (unit)', () => {

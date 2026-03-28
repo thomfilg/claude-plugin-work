@@ -84,8 +84,8 @@ const CHECK_GATE_RULES = [
             if (err.status != null) details.push(`status=${err.status}`);
             if (err.signal != null) details.push(`signal=${err.signal}`);
             if (err.code) details.push(`code=${err.code}`);
-            const msg = `check-gate: tmux has-session check failed for ${sessionName}`;
-            process.stderr.write(details.length ? `${msg} (${details.join(', ')})\n` : `${msg}\n`);
+            const prefix = 'check-gate: tmux has-session check failed for';
+            process.stderr.write(details.length ? `${prefix} ${sessionName} (${details.join(', ')})\n` : `${prefix} ${sessionName}\n`);
           }
         }
       }

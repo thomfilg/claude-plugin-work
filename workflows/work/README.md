@@ -28,7 +28,7 @@ workflows/work/
 |------|------|---------|
 | work-orchestrator | `hooks/work-orchestrator.js` | Main orchestrator: plan generation, transitions, state machine |
 | work-state | `hooks/work-state.js` | Work state persistence (`.work-state.json`) |
-| enforce-step-workflow | `hooks/enforce-step-workflow.js` | Step enforcement, artifact protection, verify functions |
+| enforce-step-workflow | `hooks/enforce-step-workflow.js` | Step enforcement, artifact protection, verify |
 | session-guard | `hooks/session-guard.js` | Session locking for workflow isolation |
 | enforce-work-command | `hooks/enforce-work-command.js` | Enforce work command constraints |
 | enforce-completion-protocol | `hooks/enforce-completion-protocol.js` | Enforce completion checklist |
