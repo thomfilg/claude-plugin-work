@@ -745,7 +745,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
 const CHECK_GATE_RULES = [
   {
     name: 'required-reports',
-    description: 'All required .check.md reports must exist with approved status',
+    description: 'All required .check.md reports must exist with accepted status (APPROVED or COMPLETE)',
     check(dir) {
       const required = [
         { file: 'tests.check.md',       pattern: /Status:\s*APPROVED/i },
