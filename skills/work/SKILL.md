@@ -75,12 +75,12 @@ Parse the JSON output. This is your roadmap. Each RUN step includes `agentType` 
   "currentStep": "check",
   "plan": [
     { "step": "ticket", "action": "SKIP", "reason": "Fetched" },
-    { "step": "check", "action": "RUN", "command": "Skill(check)",
+    { "step": "check", "action": "RUN", "command": "/check",
       "agentType": "skill",
-      "agentPrompt": "Run /check for full quality verification",
+      "agentPrompt": "/check",
       "reason": "Quality checks + code review" }
   ],
-  "summary": { "total": 16, "run": 4, "skip": 12, "firstAction": "check" }
+  "summary": { "total": 14, "run": 4, "skip": 10, "firstAction": "check" }
 }
 ```
 
@@ -114,10 +114,9 @@ Use the plan's `agentType` and `agentPrompt` to delegate. **NEVER run step comma
 |-----------|----------------|------------------------------|
 | `general-purpose` | `Task(general-purpose)` | `"<step_name> <short description>"` |
 | `jira-task-creator` | `Task(jira-task-creator)` | `"ticket create ticket"` |
-| `skill` | `Skill(check)` | N/A (use Skill tool directly) |
+| `skill` | `Skill(<skill_name>)` | N/A (agentPrompt is usually a literal command like `/check` or `/bootstrap`) |
 | `commit-writer` | `Task(commit-writer)` | `"commit changes"` |
 | `Bash` | `Task(Bash)` | `"<step_name> <short description>"` |
-| `skill` | `Skill(<skill_name>)` | N/A (use Skill tool directly) |
 
 **CRITICAL**: For Task-based delegations, the `description` field MUST start with the step name (e.g., `"cleanup kill dev session"`). This is how the enforcement hook identifies which step the Task belongs to.
 
