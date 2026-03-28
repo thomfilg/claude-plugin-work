@@ -211,7 +211,9 @@ Fix any issues before completing.
 
 **When called from `/work` orchestrator (orchestrator plan exists with subsequent steps):**
 
-Still update `$HOME/worktrees/tasks/${TICKET_ID}/implement.md` with results (same as normal mode) and record TDD evidence. Then return a brief completion signal and hand control back to the orchestrator. Do NOT prompt the user for next steps or display a "Next steps" list.
+Still update `$HOME/worktrees/tasks/${TICKET_ID}/implement.md` with results (same as normal mode) and record TDD evidence.
+
+Then return a brief completion signal and hand control back to the orchestrator. Do NOT prompt the user for next steps or display a "Next steps" list.
 
 ```
 IMPLEMENT_COMPLETE
