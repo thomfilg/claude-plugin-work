@@ -66,30 +66,23 @@ const CHECK_GATE_RULES = [
   {
     name: 'running-agents',
     description: 'No check-agent tmux sessions may be running',
+    // tmux session-found path is integration-tested in work-orchestrator.test.js scenario 8
     check(_dir, ticket) {
       const agents = ['code-checker', 'quality-checker', 'completion-checker', 'qa-feature-tester', 'qa-api-tester'];
-      const reasons = [];
-      for (const agent of agents) {
-        const sessionName = `${ticket}-${agent}`;
+      return agents.reduce((reasons, agent) => {
+        const session = `${ticket}-${agent}`;
         try {
-          execFileSync('tmux', ['has-session', '-t', sessionName], {
-            timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
-          });
-          reasons.push(`Check agent still running: ${agent} (tmux session: ${sessionName})`);
+          execFileSync('tmux', ['has-session', '-t', session], { timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] });
+          reasons.push(`Check agent still running: ${agent} (tmux session: ${session})`);
         } catch (err) {
           // exit code 1 = session not found (expected). Log other failures for debugging.
-          const isSessionNotFound = err && typeof err.status === 'number' && err.status === 1;
-          if (!isSessionNotFound && err) {
-            const details = [];
-            if (err.status != null) details.push(`status=${err.status}`);
-            if (err.signal != null) details.push(`signal=${err.signal}`);
-            if (err.code) details.push(`code=${err.code}`);
-            const prefix = 'check-gate: tmux has-session check failed for';
-            process.stderr.write(details.length ? `${prefix} ${sessionName} (${details.join(', ')})\n` : `${prefix} ${sessionName}\n`);
+          if (!(err && typeof err.status === 'number' && err.status === 1) && err) {
+            const d = [err.status != null && `status=${err.status}`, err.signal != null && `signal=${err.signal}`, err.code && `code=${err.code}`].filter(Boolean);
+            process.stderr.write(`check-gate: tmux check failed for ${session}${d.length ? ` (${d.join(', ')})` : ''}\n`);
           }
         }
-      }
-      return reasons; // tmux session-found path covered by work-orchestrator.test.js scenario 8
+        return reasons;
+      }, []);
     },
   },
 ];
