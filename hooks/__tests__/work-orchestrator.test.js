@@ -646,7 +646,9 @@ describe('work-orchestrator.js', () => {
     it('should include stepsToRun array', async () => {
       const { result } = await runOrchestrator([TEST_TICKET]);
       assert.ok(Array.isArray(result.summary.stepsToRun));
-      assert.equal(result.summary.stepsToRun.length, result.summary.run + result.summary.defer);
+      assert.equal(result.summary.stepsToRun.length, result.summary.run);
+      assert.ok(Array.isArray(result.summary.stepsDeferred));
+      assert.equal(result.summary.stepsDeferred.length, result.summary.defer);
     });
 
     it('should include stepsSkipped array', async () => {

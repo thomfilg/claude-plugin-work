@@ -117,7 +117,7 @@ function formatPlan(plan) {
 
   lines.push('');
   lines.push('═══════════════════════════════════════════════════════════════════');
-  lines.push('  INSTRUCTIONS: Execute RUN steps in order. Call transition before each.');
+  lines.push('  INSTRUCTIONS: Execute RUN steps in order. DEFER steps: re-run plan first to resolve to RUN/SKIP.');
   lines.push(`  TRANSITION: node ~/.claude/plugins/local/work-workflow2/hooks/work-orchestrator.js transition ${plan.ticket} <step>`);
   lines.push('═══════════════════════════════════════════════════════════════════');
   lines.push('');
