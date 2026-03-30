@@ -155,7 +155,9 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
 
     for (const filePath of files) {
       const dest = path.join(runDir, path.basename(filePath));
-      try { fs.renameSync(filePath, dest); } catch { /* ignore */ }
+      try { fs.renameSync(filePath, dest); } catch (e) {
+        process.stderr.write(`work-orchestrator: failed to archive ${path.basename(filePath)}: ${e?.message || e}\n`);
+      }
     }
   }
 
@@ -542,7 +544,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
 
   function add(stepName, action, command, reason, extra = {}) {
     // Augment TDD-gated steps with protocol instructions
-    if (tddEnforce && TDD_GATED_STEPS.includes(stepName) && extra.agentPrompt && action === 'RUN') {
+    if (tddEnforce && TDD_GATED_STEPS.includes(stepName) && extra.agentPrompt && (action === 'RUN' || action === 'DEFER')) {
       const resolvedProtocol = TDD_PROTOCOL
         .replace(/<ORCHESTRATOR_PATH>/g, path.join(__dirname, 'work-orchestrator.js'))
         .replace(/<TICKET_ID>/g, t)
