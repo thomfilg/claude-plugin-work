@@ -678,7 +678,7 @@ describe('work-orchestrator.js', () => {
       const followUpStep = result.plan.find((s) => s.step === 'follow_up');
       assert.ok(followUpStep, 'follow_up step should exist in plan');
       assert.equal(followUpStep.action, 'DEFER');
-      assert.ok(followUpStep.reason.includes('No PR yet'));
+      assert.ok(followUpStep.reason.includes('No PR'));
     });
 
     it('should DEFER follow_up with no agentType when no PR exists (GH-130)', async () => {
@@ -758,6 +758,58 @@ describe('work-orchestrator.js', () => {
         assert.equal(result.direction, 'backward');
       } finally {
         try { fs.rmSync(path.join(TEMP_TASKS, T3), { recursive: true, force: true }); } catch {}
+      }
+    });
+
+    it('should archive check artifacts to runs/runN on backward transition (GH-130)', async () => {
+      const T_ARCHIVE = 'TEST-ARCHIVE-1';
+      const ticketDir = path.join(TEMP_TASKS, T_ARCHIVE);
+      try {
+        await runOrchestrator(['transition', T_ARCHIVE, 'bootstrap'], o);
+        await runOrchestrator(['transition', T_ARCHIVE, 'check'], o);
+        writeCheckReports(TEMP_TASKS, T_ARCHIVE);
+
+        // Verify reports exist before backward transition
+        assert.ok(fs.existsSync(path.join(ticketDir, 'tests.check.md')));
+        assert.ok(fs.existsSync(path.join(ticketDir, 'code-review.check.md')));
+
+        // Backward: check → implement (should archive check artifacts)
+        const { result } = await runOrchestrator(['transition', T_ARCHIVE, 'implement'], o);
+        assert.equal(result.success, true);
+        assert.equal(result.direction, 'backward');
+
+        // Reports should be moved to runs/run1/
+        assert.ok(!fs.existsSync(path.join(ticketDir, 'tests.check.md')), 'reports should be archived');
+        assert.ok(fs.existsSync(path.join(ticketDir, 'runs', 'run1', 'tests.check.md')), 'reports should be in run1');
+        assert.ok(fs.existsSync(path.join(ticketDir, 'runs', 'run1', 'code-review.check.md')));
+        assert.ok(fs.existsSync(path.join(ticketDir, 'runs', 'run1', 'completion.check.md')));
+        assert.ok(fs.existsSync(path.join(ticketDir, 'runs', 'run1', 'qa-feature.check.md')));
+      } finally {
+        try { fs.rmSync(ticketDir, { recursive: true, force: true }); } catch {}
+      }
+    });
+
+    it('should increment run number on subsequent backward transitions (GH-130)', async () => {
+      const T_RUNS = 'TEST-RUNS-1';
+      const ticketDir = path.join(TEMP_TASKS, T_RUNS);
+      try {
+        // First pass: bootstrap → check, write reports, check → implement (backward)
+        await runOrchestrator(['transition', T_RUNS, 'bootstrap'], o);
+        await runOrchestrator(['transition', T_RUNS, 'check'], o);
+        writeCheckReports(TEMP_TASKS, T_RUNS);
+        await runOrchestrator(['transition', T_RUNS, 'implement'], o);
+
+        assert.ok(fs.existsSync(path.join(ticketDir, 'runs', 'run1')), 'run1 should exist');
+
+        // Second pass: implement → commit → check, write reports, check → implement (backward again)
+        await runOrchestrator(['transition', T_RUNS, 'commit'], o);
+        await runOrchestrator(['transition', T_RUNS, 'check'], o);
+        writeCheckReports(TEMP_TASKS, T_RUNS);
+        await runOrchestrator(['transition', T_RUNS, 'implement'], o);
+
+        assert.ok(fs.existsSync(path.join(ticketDir, 'runs', 'run2')), 'run2 should exist');
+      } finally {
+        try { fs.rmSync(ticketDir, { recursive: true, force: true }); } catch {}
       }
     });
 
