@@ -22,8 +22,6 @@ Every review comment MUST include a severity tag at the start:
 - Only review lines that were MODIFIED in this PR — do not review entire files that were added or moved
 - If a file was copied or moved from another location, focus only on the changes made during the move, not pre-existing code
 - Do not flag issues in code that existed before this PR unless the PR explicitly changed that code
-- When a file is newly tracked (added to git) but its content is unchanged, treat it as out of scope
-
 ## Review Focus
 
 When reviewing pull requests in this repository:
