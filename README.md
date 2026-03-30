@@ -127,7 +127,7 @@ Hook errors are logged to a file instead of stderr to prevent false "hook error"
 
 **Log format:**
 ```
-[2026-03-30T18:33:01.123Z] pid=12345 enforce-work-command.js: WORKTREES_BASE: env var not set
+[2026-03-30T18:33:01.123Z] enforce-work-command.js | pid=12345 branch=feature/PROJ-123 cwd=/repo/path | WORKTREES_BASE: env var not set
 ```
 
 **To enable verbose stderr output (shows errors in Claude Code):**
