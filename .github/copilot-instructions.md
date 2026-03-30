@@ -20,7 +20,7 @@ Every review comment MUST include a severity tag at the start:
 ## Review Scope
 
 - Only review lines that were MODIFIED in this PR — do not review entire files that were added or moved
-- If a file was copied or moved from another location, focus only on the changes made during the move, not pre-existing code
+- If a file was copied or moved from another location, focus only on the changes made during the move, not pre-existing code. Example: if `scripts/symlink.js` is moved to `external_scripts/symlink.js`, git shows the entire file as "added" — do not review the 400 lines of pre-existing logic, only comment on lines that were actually modified during the move
 - Do not flag issues in code that existed before this PR unless the PR explicitly changed that code
 ## Review Focus
 
