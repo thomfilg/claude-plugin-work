@@ -82,7 +82,7 @@ function parseArgs(argv = process.argv.slice(2)) {
 
 Options:
   --pr <number>         PR number (default: auto-detect from branch)
-  --max-attempts <n>    Max polling attempts (default: 10)
+  --max-attempts <n>    Max polling attempts (default: 40)
   --interval <seconds>  Fixed wait between attempts (default: adaptive)
   --once                Single check, no loop (for manual debugging only)
   --no-reviews          (disabled — reviews are always checked)
