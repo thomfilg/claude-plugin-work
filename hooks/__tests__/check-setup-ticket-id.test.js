@@ -20,7 +20,8 @@ const SCRIPT = path.join(__dirname, '..', 'check-setup.js');
 
 /**
  * Run check-setup.js with given args and env, parse JSON output.
- * The script may print warnings to stderr; we only care about stdout JSON.
+ * Uses CLI execution to test the real entry point (argv + env resolution).
+ * The script may emit git warnings to stderr; we only care about stdout JSON.
  */
 function runSetup(args = [], env = {}) {
   const mergedEnv = { ...process.env, ...env };

@@ -332,7 +332,8 @@ function main() {
   const branchName = getBranchName();
 
   // Determine report folder - use parent of main worktree + tasks
-  const taskId = TICKET_ID || branchName;
+  // Sanitize branch name fallback: replace path separators to avoid nested directories
+  const taskId = TICKET_ID || branchName.replace(/\//g, '-');
   const reportFolder = path.join(mainWorktreePath, '..', 'tasks', taskId);
 
   // Generate changes hash
