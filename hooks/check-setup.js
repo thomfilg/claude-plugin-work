@@ -19,10 +19,16 @@ const fs = require('fs');
 const path = require('path');
 const config = require(path.join(__dirname, '..', 'lib', 'config'));
 
-// Get ticket ID from args or environment
-// Precedence: CLI arg > TICKET_ID env > JIRA_TICKET_ID env (backward compat)
-// See hooks/__tests__/check-setup-ticket-id.test.js for coverage
-const TICKET_ID = process.argv[2] || process.env.TICKET_ID || process.env.JIRA_TICKET_ID || '';
+/**
+ * Resolve ticket ID from CLI args and environment.
+ * Precedence: CLI arg > TICKET_ID env > JIRA_TICKET_ID env (backward compat)
+ * See hooks/__tests__/check-setup-ticket-id.test.js for coverage.
+ */
+function resolveTicketId(argv = [], env = {}) {
+  return argv[0] || env.TICKET_ID || env.JIRA_TICKET_ID || '';
+}
+
+const TICKET_ID = resolveTicketId(process.argv.slice(2), process.env);
 
 /**
  * Execute a shell command and return trimmed output
@@ -399,5 +405,5 @@ function main() {
 if (require.main === module) {
   main();
 } else {
-  module.exports = { loadDocsFromPaths, DOCS_DENYLIST };
+  module.exports = { loadDocsFromPaths, DOCS_DENYLIST, resolveTicketId };
 }
