@@ -137,7 +137,7 @@ export ENFORCE_HOOK_DEBUG=1
 
 **Auto-rotation:** Log file is truncated when it exceeds 1MB.
 
-**Race conditions:** Each log line includes PID. Writes use `O_APPEND` under Linux's `PIPE_BUF` (4096 bytes), guaranteeing atomic appends across concurrent Claude instances.
+**Race conditions:** Each log line includes PID. Writes use `O_APPEND` with short lines (~3.8KB max). On Linux ext4/xfs, these are effectively atomic across concurrent instances.
 
 **Source files:**
 - `lib/hook-error-log.js` (plugin hooks)
