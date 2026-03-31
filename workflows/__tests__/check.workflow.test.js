@@ -83,6 +83,11 @@ describe('check.workflow.js', () => {
       // allPhase1ReportsMatch is boolean
       assert.equal(typeof data.allPhase1ReportsMatch, 'boolean');
     });
+
+    it('returns hasWebApps as a boolean', () => {
+      const data = wf.inspect('__TEST_NONEXISTENT_ID__');
+      assert.equal(typeof data.hasWebApps, 'boolean');
+    });
   });
 
   // ─── detectStepState() ─────────────────────────────────────────────
