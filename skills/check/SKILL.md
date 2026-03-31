@@ -104,6 +104,7 @@ Parse the JSON output to get:
 - `MAIN_WORKTREE_PATH` - Path to main worktree
 - `REPORT_FOLDER` - Where to save reports
 - `CHANGES_HASH` - Hash for cache validation
+- `TICKET_ID` - From `ticketId` field in setup JSON output
 - `IMPACTED_APPS` - Array of changed apps
 - `AFFECTED_FILES` - Object with `apps` (files per app) and `packages` (changed packages)
 - `REVIEW_DOCS` - Project-specific review docs (from `READ_DOCS_ON_REVIEW`)
