@@ -230,7 +230,7 @@ Look for a transition with name containing "In Testing", "Testing", or "QA".
 
 #### 10.5.4 Transition the task
 Use the configured ticket provider's transition tool (e.g., `mcp__atlassian__jira_transition_issue` for Jira) with:
-- `issue_key`: The ticket task ID (e.g., PROJ-123)
+- The ticket task ID (e.g., PROJ-123)
 - `transition_id`: The ID of the "In Testing" transition
 - `comment`: "Code merged to main and deployed. Ready for testing."
 
