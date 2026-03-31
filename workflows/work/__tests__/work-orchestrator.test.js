@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const HOOK_PATH = path.join(__dirname, '..', 'work-orchestrator.js');
+const HOOK_PATH = path.join(__dirname, '..', 'work.workflow.js');
 const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
 const TASKS_BASE = getConfig.require('TASKS_BASE');
 

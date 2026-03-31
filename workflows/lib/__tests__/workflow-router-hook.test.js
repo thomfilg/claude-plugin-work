@@ -10,7 +10,7 @@ const assert = require('node:assert');
 const { spawn } = require('child_process');
 const path = require('path');
 
-const HOOK_PATH = path.join(__dirname, '..', 'workflow-router-hook.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'workflow-router-hook.js');
 
 function runHook(userPrompt) {
   return new Promise((resolve, reject) => {

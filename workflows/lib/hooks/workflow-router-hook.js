@@ -19,8 +19,8 @@ const path = require('path');
 process.on('uncaughtException', () => process.exit(0));
 process.on('unhandledRejection', () => process.exit(0));
 
-const WORKFLOWS_DIR = path.join(__dirname, '..', 'workflows');
-const ENGINE_PATH = path.join(__dirname, '..', 'lib', 'workflow-engine.js');
+const WORKFLOWS_DIR = path.join(__dirname, '..', '..');
+const ENGINE_PATH = path.join(__dirname, '..', 'workflow-engine.js');
 
 function main() {
   const userPrompt = process.env.CLAUDE_USER_PROMPT || '';
@@ -89,16 +89,25 @@ function buildCommandMap() {
 
   if (!fs.existsSync(WORKFLOWS_DIR)) return map;
 
-  const files = fs.readdirSync(WORKFLOWS_DIR).filter(f => f.endsWith('.workflow.js'));
+  // Scan the workflows dir and one level of subdirectories for *.workflow.js
+  const searchDirs = [WORKFLOWS_DIR];
+  for (const entry of fs.readdirSync(WORKFLOWS_DIR, { withFileTypes: true })) {
+    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules' && entry.name !== 'lib' && entry.name !== '__tests__') {
+      searchDirs.push(path.join(WORKFLOWS_DIR, entry.name));
+    }
+  }
 
-  for (const file of files) {
-    try {
-      const wf = require(path.join(WORKFLOWS_DIR, file));
-      if (wf.command && wf.name) {
-        map[wf.command] = wf.name;
+  for (const dir of searchDirs) {
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.workflow.js'));
+    for (const file of files) {
+      try {
+        const wf = require(path.join(dir, file));
+        if (wf.command && wf.name) {
+          map[wf.command] = wf.name;
+        }
+      } catch {
+        // Skip invalid workflow files
       }
-    } catch {
-      // Skip invalid workflow files
     }
   }
 

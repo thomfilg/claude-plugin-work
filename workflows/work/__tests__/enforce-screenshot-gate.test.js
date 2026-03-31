@@ -10,7 +10,7 @@ const assert = require('node:assert');
 const { spawn } = require('child_process');
 const path = require('path');
 
-const HOOK_PATH = path.join(__dirname, '..', 'enforce-screenshot-gate.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-screenshot-gate.js');
 
 function runHook(input) {
   return new Promise((resolve, reject) => {

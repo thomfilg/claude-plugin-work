@@ -48,7 +48,7 @@ function getCurrentTaskId(cwd = process.cwd()) {
   // Only match trailing number after a separator to avoid false positives
   // (e.g. version numbers, user IDs embedded in paths)
   try {
-    const tp = require('../lib/ticket-provider');
+    const tp = require('../ticket-provider');
     const providerConfig = tp.getProviderConfig({ skipPrompt: true });
     if (providerConfig && providerConfig.provider === 'github') {
       const trailingNum = cwd.match(/[-/](\d+)\/?$/);

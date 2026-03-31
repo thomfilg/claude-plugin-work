@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const config = require('../../lib/config');
 
-const HOOK_PATH = path.join(__dirname, '..', 'work-enforce-steps.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'work-enforce-steps.js');
 
 function runHook(toolInput, hookType = 'PostToolUse') {
   return new Promise((resolve, reject) => {

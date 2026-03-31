@@ -27,7 +27,7 @@ let sharedDocsDir;
 let _mod;
 function getModule() {
   if (!_mod) {
-    const modPath = path.join(__dirname, '..', 'check-setup.js');
+    const modPath = path.join(__dirname, '..', 'hooks', 'check-setup.js');
     delete require.cache[modPath];
     const configPath = path.join(__dirname, '..', '..', 'lib', 'config.js');
     delete require.cache[configPath];

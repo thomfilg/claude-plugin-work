@@ -15,7 +15,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 
-const { resolveTicketId } = require(path.join(__dirname, '..', 'check-setup.js'));
+const { resolveTicketId } = require(path.join(__dirname, '..', 'hooks', 'check-setup.js'));
 
 describe('resolveTicketId', () => {
   it('uses CLI argument when provided', () => {

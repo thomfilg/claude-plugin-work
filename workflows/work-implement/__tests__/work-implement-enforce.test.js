@@ -11,7 +11,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const HOOK_PATH = path.join(__dirname, '..', 'work-implement-enforce.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'work-implement-enforce.js');
 
 function runHook(input) {
   return new Promise((resolve, reject) => {

@@ -15,7 +15,7 @@
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const config = require(path.join(__dirname, '..', 'lib', 'config'));
+const config = require(path.join(__dirname, '..', '..', 'lib', 'config'));
 
 process.on('uncaughtException', () => { console.log(JSON.stringify({ error: 'uncaught exception', apps: {} })); process.exit(0); });
 process.on('unhandledRejection', () => { console.log(JSON.stringify({ error: 'unhandled rejection', apps: {} })); process.exit(0); });

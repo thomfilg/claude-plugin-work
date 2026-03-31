@@ -42,7 +42,7 @@ process.on('unhandledRejection', () => process.exit(0));
 
 let appendAction, loadActions, analyzeActions;
 try {
-  const wa = require(path.join(__dirname, '..', 'lib', 'work-actions'));
+  const wa = require(path.join(__dirname, 'work-actions'));
   appendAction = wa.appendAction;
   loadActions = wa.loadActions;
   analyzeActions = wa.analyzeActions;
@@ -70,7 +70,7 @@ if (!tp) process.exit(0);
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
-const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
+const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..', '..');
 const MAIN_WORKTREE_FOLDER = process.env.REPO_NAME || 'my-project';
 const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
 const WORKTREES_BASE = getConfig('WORKTREES_BASE') || '';
@@ -87,7 +87,7 @@ function requirePaths() {
 }
 
 // ─── Step Registry ───────────────────────────────────────────────────────────
-const { STEPS, STEP_TRANSITIONS, ALL_STEPS, workflowCanTransition, createStatusTransitions, canTransition } = require(path.join(__dirname, '..', 'lib', 'step-registry'));
+const { STEPS, STEP_TRANSITIONS, ALL_STEPS, workflowCanTransition, createStatusTransitions, canTransition } = require(path.join(__dirname, 'step-registry'));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -363,7 +363,7 @@ function recordTddEvidence(ticketId, stepId, flags) {
     }
 
     // Run quality checks when --refactored is set — can't be faked
-    const devCheckScript = process.env.DEV_CHECK_SCRIPT || path.join(__dirname, '..', 'scripts', 'dev-check', 'dev-check.sh');
+    const devCheckScript = process.env.DEV_CHECK_SCRIPT || path.join(__dirname, '..', 'lib', 'scripts', 'dev-check', 'dev-check.sh');
     let qualityOutput = '';
     let qualityExitCode = 1;
     try {
@@ -536,7 +536,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
   // Initialize session guard for workflow locking (skip when explicitly disabled)
   if (ticket && process.env.SESSION_GUARD_ENABLED !== '0') {
     try {
-      const guardPath = path.join(__dirname, 'session-guard.js');
+      const guardPath = path.join(__dirname, '..', 'lib', 'hooks', 'session-guard.js');
       // init is idempotent: reuses existing session if one exists for this ticket
       execFileSync(process.execPath, [guardPath, 'init', ticket, '/work'], { stdio: 'pipe', timeout: 5000 });
     } catch { /* fail-open: session-guard init failure must not block plan generation */ }
@@ -546,7 +546,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
     // Augment TDD-gated steps with protocol instructions
     if (tddEnforce && TDD_GATED_STEPS.includes(stepName) && extra.agentPrompt && (action === 'RUN' || action === 'DEFER')) {
       const resolvedProtocol = TDD_PROTOCOL
-        .replace(/<ORCHESTRATOR_PATH>/g, path.join(__dirname, 'work-orchestrator.js'))
+        .replace(/<ORCHESTRATOR_PATH>/g, path.join(__dirname, 'work.workflow.js'))
         .replace(/<TICKET_ID>/g, t)
         .replace(/<step_id>/g, stepName);
       extra.agentPrompt = `${extra.agentPrompt}\n\n${resolvedProtocol}`;
@@ -792,7 +792,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
     agentType: 'Bash',
     agentPrompt: `Verify and consolidate reports in ${tasksDir}. List all *.check.md files and confirm they exist. Report the count and status of each.`,
   });
-  const guardPath = path.join(__dirname, 'session-guard.js');
+  const guardPath = path.join(__dirname, '..', 'lib', 'hooks', 'session-guard.js');
   add(STEPS.complete, 'RUN', 'Task(Bash)', 'Finish', {
     agentType: 'Bash',
     agentPrompt: [
@@ -810,7 +810,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg) {
 
 // ─── Check-to-PR Gate (GH-121) ──────────────────────────────────────────────
 // Extracted to workflows/work/check-gate.js — declarative array of rules.
-const { validateCheckGate: _validateCheckGate } = require(path.join(__dirname, '..', 'workflows', 'work', 'check-gate'));
+const { validateCheckGate: _validateCheckGate } = require(path.join(__dirname, 'check-gate'));
 function validateCheckGate(ticket) { return _validateCheckGate(TASKS_BASE, ticket); }
 
 // ─── Transition Command ──────────────────────────────────────────────────────
@@ -839,7 +839,7 @@ function transitionStep(ticket, targetStep) {
   if (tddEnforce && TDD_GATED_STEPS.includes(currentStep) && currentStep !== targetStep) {
     const { exists, parseError, evidence } = readTddEvidence(ticket, currentStep);
     if (!exists || parseError) {
-      const orchPath = path.resolve(__dirname, 'work-orchestrator.js');
+      const orchPath = path.resolve(__dirname, 'work.workflow.js');
       const msg = `Cannot leave ${currentStep} without TDD evidence. Record it via:\n  node ${orchPath} record-tdd ${ticket} ${currentStep} --cmd "<test command>" --red --green --refactored --files "<test files>"\nOr for exceptions:\n  node ${orchPath} record-tdd ${ticket} ${currentStep} --exception "<reason>"`;
       return { error: true, message: msg };
     }
@@ -1115,4 +1115,6 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}

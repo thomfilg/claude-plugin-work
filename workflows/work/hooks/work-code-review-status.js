@@ -20,9 +20,9 @@ process.on('unhandledRejection', () => process.exit(didBlock ? 2 : 0));
 
 let config;
 try {
-  config = require('../lib/config');
+  config = require('../../lib/config');
 } catch (err) {
-  if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\.\/lib\/config['"]/.test(err.message)) {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\.\/\.\.\/lib\/config['"]/.test(err.message)) {
     config = null;
   } else {
     throw err;

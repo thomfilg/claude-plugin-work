@@ -18,7 +18,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const HOOK_PATH = path.join(__dirname, '..', 'work-orchestrator.js');
+const HOOK_PATH = path.join(__dirname, '..', 'work.workflow.js');
 
 // ─── Temp dir for isolated TASKS_BASE ─────────────────────────────────────────
 
@@ -251,7 +251,7 @@ it('agentPrompt for 3_implement contains instruction not to make local commits',
         env: baseEnv({ WORK_TDD_ENFORCE: '1' }),
       });
       const implStep = result.plan.find(s => s.step === 'implement');
-      const realPath = path.join(__dirname, '..', 'work-orchestrator.js');
+      const realPath = path.join(__dirname, '..', 'work.workflow.js');
       assert.ok(implStep.agentPrompt.includes(realPath), 'Should contain the real orchestrator path');
     });
 

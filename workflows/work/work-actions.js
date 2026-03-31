@@ -13,7 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const getConfig = require('./get-config');
+const getConfig = require('../lib/get-config');
 let _tasksBase;
 function getTasksBase() {
   if (!_tasksBase) _tasksBase = getConfig.require('TASKS_BASE');

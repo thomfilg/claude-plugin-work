@@ -12,8 +12,8 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
-const HOOK_PATH = path.join(__dirname, '..', 'enforce-step-workflow.js');
-const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-step-workflow.js');
+const getConfig = require(path.join(__dirname, '..', 'get-config'));
 const TASKS_BASE = getConfig.require('TASKS_BASE');
 
 // Use a unique ticket ID per test run to avoid interference
@@ -1463,9 +1463,10 @@ describe('enforce-step-workflow', () => {
 
   describe('Vector 3 exempt scripts', () => {
     // Use the actual hooks directory (trusted path) for exempt script tests
-    const HOOKS_DIR = path.join(__dirname, '..');
-    const LIB_DIR = path.join(__dirname, '..', '..', 'lib');
-    const ORCHESTRATOR_PATH = path.join(HOOKS_DIR, 'work-orchestrator.js');
+    const HOOKS_DIR = path.join(__dirname, '..', 'hooks');
+    const LIB_DIR = path.join(__dirname, '..');
+    const WORK_DIR = path.join(__dirname, '..', '..', 'work');
+    const ORCHESTRATOR_PATH = path.join(WORK_DIR, 'work.workflow.js');
     const ENGINE_PATH = path.join(LIB_DIR, 'workflow-engine.js');
 
     it('allows node work-orchestrator.js transition command (trusted path)', async () => {

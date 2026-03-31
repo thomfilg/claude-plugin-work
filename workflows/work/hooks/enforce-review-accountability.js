@@ -84,7 +84,7 @@ async function main() {
   if (!prComments || prComments === 0) return; // No comments → allow
 
   // Check for accountability file
-  const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
+  const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
   const TASKS_BASE = getConfig('TASKS_BASE') || path.join(getConfig.orExit('WORKTREES_BASE'), 'tasks');
   const accountabilityFile = path.join(TASKS_BASE, ticketId, 'review-accountability.json');
 

@@ -8,7 +8,7 @@
  */
 
 const fs = require('fs');
-const { logHookError } = require(require('path').join(__dirname, '..', 'lib', 'hook-error-log'));
+const { logHookError } = require(require('path').join(__dirname, '..', '..', 'lib', 'hook-error-log'));
 
 // Developer agents that satisfy the requirement
 const DEVELOPER_AGENTS = [

@@ -25,7 +25,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 // Cached TASKS_BASE resolution — loaded once per invocation
-const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
+const getConfig = require(path.join(__dirname, '..', 'get-config'));
 
 let _tasksBase;
 function getTasksBase() {

@@ -11,7 +11,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const HOOK_PATH = path.join(__dirname, '..', 'enforce-completion-protocol.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-completion-protocol.js');
 
 let GIT_ROOT;
 

@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..', '..', '..');
 
 const FILES = [
   { path: 'package.json', get: (j) => j.version, set: (j, v) => { j.version = v; } },

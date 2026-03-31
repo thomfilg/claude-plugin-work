@@ -34,7 +34,7 @@ if (!config) process.exit(0);
 
 const TASKS_BASE = config.TASKS_BASE;
 
-const { ALL_STEPS: STEPS } = require(path.join(__dirname, '..', 'lib', 'step-registry'));
+const { ALL_STEPS: STEPS } = require(path.join(__dirname, 'step-registry'));
 
 const SUBTASK_STEPS = ['implement', 'commit'];
 

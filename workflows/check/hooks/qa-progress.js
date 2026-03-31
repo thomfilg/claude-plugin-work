@@ -22,7 +22,7 @@ const path = require('path');
 process.on('uncaughtException', () => process.exit(0));
 process.on('unhandledRejection', () => process.exit(0));
 
-const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
+const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
 const TASKS_BASE = getConfig.orExit('TASKS_BASE');
 
 /**

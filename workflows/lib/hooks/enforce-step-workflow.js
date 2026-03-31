@@ -42,20 +42,20 @@ process.on('unhandledRejection', (err) => {
 
 // (Patch 1) Lazy-load appendAction with fallback
 // Agent detection for report file protection
-const { isRunningInAgent } = require(path.join(__dirname, '..', 'lib', 'agent-detection'));
+const { isRunningInAgent } = require(path.join(__dirname, '..', 'agent-detection'));
 
-const { createArtifactProtector } = require(path.join(__dirname, '..', 'lib', 'protect-artifact-files'));
+const { createArtifactProtector } = require(path.join(__dirname, '..', 'protect-artifact-files'));
 
 let appendAction;
 try {
-  appendAction = require(path.join(__dirname, '..', 'lib', 'work-actions')).appendAction;
+  appendAction = require(path.join(__dirname, '..', '..', 'work', 'work-actions')).appendAction;
 } catch {
   appendAction = () => {};
 }
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
-const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
+const getConfig = require(path.join(__dirname, '..', 'get-config'));
 const TASKS_BASE = getConfig('TASKS_BASE') || (() => {
   const wb = getConfig.orExit('WORKTREES_BASE'); // only required if TASKS_BASE isn't set
   return path.join(wb, 'tasks');
@@ -66,7 +66,7 @@ const TASKS_BASE = getConfig('TASKS_BASE') || (() => {
 // Each workflow defines its own state file, step-to-command mapping,
 // transition pattern, exemptions, and soft steps.
 
-const { STEPS, ALL_STEPS: WORK_STEPS } = require(path.join(__dirname, '..', 'lib', 'step-registry'));
+const { STEPS, ALL_STEPS: WORK_STEPS } = require(path.join(__dirname, '..', '..', 'work', 'step-registry'));
 
 function verifyBootstrap(ticketId) {
   // Bootstrap is proven if the current branch contains the ticket ID
@@ -137,7 +137,7 @@ const WORKFLOWS = [
 
           let baseBranch = 'origin/main';
           try {
-            const getBaseBranch = require(path.join(__dirname, '..', 'lib', 'config')).getBaseBranch;
+            const getBaseBranch = require(path.join(__dirname, '..', 'config')).getBaseBranch;
             baseBranch = getBaseBranch({ cwd: process.cwd() });
           } catch { /* fallback to origin/main */ }
 
@@ -289,12 +289,12 @@ const WORKFLOWS = [
         } catch { return false; }
       }},
     ],
-    transitionPattern: /work-orchestrator\.js\s+transition\s+(\S+)\s+(\S+)/,
+    transitionPattern: /work(?:-orchestrator|.workflow)\.js\s+transition\s+(\S+)\s+(\S+)/,
     exemptPatterns: [
-      /work-orchestrator\.js\s+(plan|transitions|graph)/,
+      /work(?:-orchestrator|.workflow)\.js\s+(plan|transitions|graph)/,
       /work-state\.js\s+(get|resume-info|init)/,
     ],
-    transitionHint: `node ${path.join(__dirname, 'work-orchestrator.js')} transition`,
+    transitionHint: `node ${path.join(__dirname, '..', '..', 'work', 'work.workflow.js')} transition`,
   },
   {
     name: 'work-pr',
@@ -318,7 +318,7 @@ const WORKFLOWS = [
       /workflow-engine\.js\s+work-pr\s+(plan|transitions|graph)/,
       /workflow-state\.js\s+work-pr\s+(get|resume-info|init)/,
     ],
-    transitionHint: `node ${path.join(__dirname, '..', 'lib', 'workflow-engine.js')} work-pr transition`,
+    transitionHint: `node ${path.join(__dirname, '..', 'workflow-engine.js')} work-pr transition`,
   },
 ];
 
@@ -335,7 +335,7 @@ const ARTIFACT_RULES = [
 ];
 
 // Protected state file basenames — block direct Edit/Write/MultiEdit/Bash writes
-const { buildProtectedBasenames, basenameProtector, createFileProtector } = require(path.join(__dirname, '..', 'lib', 'protect-state-files'));
+const { buildProtectedBasenames, basenameProtector, createFileProtector } = require(path.join(__dirname, '..', 'protect-state-files'));
 const PROTECTED_STATE_BASENAMES = buildProtectedBasenames(WORKFLOWS, ['.work-actions.json', '.pr-update-sha']);
 
 // Map each protected basename to its workflow's transition hint
@@ -362,6 +362,7 @@ const artifactProtector = createArtifactProtector({
 // These are the legitimate writers of state files.
 const EXEMPT_SCRIPTS = new Set([
   'work-orchestrator.js',
+  'work.workflow.js',
   'workflow-engine.js',
   'work-state.js',
   'workflow-state.js',
@@ -371,9 +372,10 @@ const EXEMPT_SCRIPTS = new Set([
 // Trusted directories where exempt scripts are allowed to live.
 // Only scripts resolved under these paths are exempt — prevents basename spoofing.
 const TRUSTED_SCRIPT_DIRS = [
-  path.resolve(__dirname),                           // hooks/
-  path.resolve(__dirname, '..', 'lib'),              // lib/
-  path.resolve(__dirname, '..', 'scripts'),          // scripts/
+  path.resolve(__dirname),                           // workflows/lib/hooks/
+  path.resolve(__dirname, '..'),                     // workflows/lib/
+  path.resolve(__dirname, '..', 'scripts'),          // workflows/lib/scripts/
+  path.resolve(__dirname, '..', '..', 'work'),       // workflows/work/
 ];
 
 const stateFileProtector = createFileProtector({

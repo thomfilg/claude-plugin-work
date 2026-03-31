@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const HOOK_PATH = path.join(__dirname, '..', 'enforce-work-command.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-work-command.js');
 
 function runHook(input, env = {}) {
   return new Promise((resolve, reject) => {

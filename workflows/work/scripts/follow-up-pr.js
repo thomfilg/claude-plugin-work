@@ -788,7 +788,7 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
       lines.push('');
       lines.push(c.yellow('⚠ COVERAGE FAILURE: Run /test-coordination before pushing'));
       try {
-        const getTicketId = require('./get-ticket-id.js');
+        const getTicketId = require('../../lib/scripts/get-ticket-id.js');
         const ticketId = getTicketId.getCurrentTaskId();
         if (ticketId) {
           lines.push(`→ Skill(test-coordination): ${ticketId}`);

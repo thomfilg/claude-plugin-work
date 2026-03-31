@@ -14,7 +14,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const HOOK_PATH = path.join(__dirname, '..', 'enforce-ui-imports.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-ui-imports.js');
 const HOOK_EXISTS = fs.existsSync(HOOK_PATH);
 
 let GIT_ROOT;

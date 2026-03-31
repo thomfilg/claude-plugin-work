@@ -29,7 +29,7 @@ describe('work-actions', () => {
 
     // Clear require cache and re-require with new HOME
     delete require.cache[require.resolve('../work-actions')];
-    delete require.cache[require.resolve('../config')];
+    delete require.cache[require.resolve('../../lib/config')];
     const mod = require('../work-actions');
     appendAction = mod.appendAction;
     loadActions = mod.loadActions;

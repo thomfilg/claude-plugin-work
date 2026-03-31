@@ -22,8 +22,8 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
-const BUNDLED_DEV_CHECK = path.join(PLUGIN_ROOT, 'scripts', 'dev-check', 'dev-check.sh');
+const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..', '..');
+const BUNDLED_DEV_CHECK = path.join(PLUGIN_ROOT, 'workflows', 'lib', 'scripts', 'dev-check', 'dev-check.sh');
 
 /**
  * Read scripts from a repo's package.json

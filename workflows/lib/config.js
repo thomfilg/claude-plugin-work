@@ -20,7 +20,7 @@ const path = require('path');
 
 function loadEnvFile() {
   const locations = [
-    path.join(__dirname, '..', '.env'),
+    path.join(__dirname, '..', '..', '.env'),
     path.join(process.cwd(), '.env'),
   ];
 

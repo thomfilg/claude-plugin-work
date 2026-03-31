@@ -10,7 +10,7 @@ const fs = require('fs');
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
-const HOOK_PATH = path.join(__dirname, '..', 'enforce-screenshot-requirement.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-screenshot-requirement.js');
 const MARKER_DIR = '/tmp';
 
 function getRepoRoot() {

@@ -12,7 +12,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getReportStatus } = require('../check-generate-summary.js');
+const { getReportStatus } = require('../hooks/check-generate-summary.js');
 
 describe('getReportStatus', () => {
   // ── Basic status detection ───────────────────────────────────────────────

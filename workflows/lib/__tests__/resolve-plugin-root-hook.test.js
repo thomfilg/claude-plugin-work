@@ -10,7 +10,7 @@ const assert = require('node:assert');
 const { spawn } = require('child_process');
 const path = require('path');
 
-const HOOK_PATH = path.join(__dirname, '..', 'resolve-plugin-root-hook.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'resolve-plugin-root-hook.js');
 const FAKE_ROOT = '/fake/plugin/root';
 
 function runHook(input, env = {}) {
@@ -89,7 +89,7 @@ describe('resolve-plugin-root-hook', () => {
   });
 
   it('should fallback to __dirname when CLAUDE_PLUGIN_ROOT is not set', async () => {
-    const expectedRoot = path.join(__dirname, '..', '..');
+    const expectedRoot = path.join(__dirname, '..', '..', '..');
     const { code, stderr } = await runHook(
       { tool_input: { command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/test.js' } },
       { CLAUDE_PLUGIN_ROOT: '' },

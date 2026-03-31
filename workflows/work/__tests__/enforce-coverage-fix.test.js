@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const HOOK_PATH = path.join(__dirname, '..', 'enforce-coverage-fix.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-coverage-fix.js');
 
 function runHook(input) {
   return new Promise((resolve, reject) => {

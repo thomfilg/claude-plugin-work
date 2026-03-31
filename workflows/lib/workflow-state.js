@@ -211,15 +211,19 @@ function main() {
   }
 
 
-  // Search plugin workflows first, then global
+  // Search plugin workflows first (including subdirectories), then global
   function findWorkflowFile(name) {
-    const pluginDir = path.join(__dirname, '..', 'workflows');
+    const pluginDir = path.join(__dirname, '..');
     const globalDir = path.join(process.env.HOME || '/home/node', '.claude', 'workflows');
     const fileName = name + '.workflow.js';
-    let p = path.join(pluginDir, fileName);
-    if (fs.existsSync(p)) return p;
-    p = path.join(globalDir, fileName);
-    if (fs.existsSync(p)) return p;
+    for (const baseDir of [pluginDir, globalDir]) {
+      // Check directly in the base dir
+      let p = path.join(baseDir, fileName);
+      if (fs.existsSync(p)) return p;
+      // Check in subdirectory named after the workflow (e.g. workflows/check/check.workflow.js)
+      p = path.join(baseDir, name, fileName);
+      if (fs.existsSync(p)) return p;
+    }
     return null;
   }
 

@@ -17,7 +17,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const config = require(path.join(__dirname, '..', 'lib', 'config'));
+const config = require(path.join(__dirname, '..', '..', 'lib', 'config'));
 
 /**
  * Resolve ticket ID from CLI args and environment.

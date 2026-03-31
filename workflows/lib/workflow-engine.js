@@ -22,7 +22,7 @@ const path = require('path');
 const { WorkflowState } = require('./workflow-state');
 
 // Scan both plugin workflows and global workflows (for non-plugin workflows like create-jira)
-const PLUGIN_WORKFLOWS_DIR = path.join(__dirname, '..', 'workflows');
+const PLUGIN_WORKFLOWS_DIR = path.join(__dirname, '..');
 const GLOBAL_WORKFLOWS_DIR = path.join(process.env.HOME || '/home/node', '.claude', 'workflows');
 const WORKFLOWS_DIR = PLUGIN_WORKFLOWS_DIR; // Primary location
 
@@ -57,26 +57,36 @@ function canTransition(statusTransitions) {
 
 // ─── Workflow Discovery ─────────────────────────────────────────────────────
 
-/** Scan plugin workflows/ and global workflows/ for *.workflow.js files */
+/** Scan plugin workflows/ and global workflows/ for *.workflow.js files (including subdirectories) */
 function discoverWorkflows() {
   const results = [];
   const seen = new Set();
   for (const dir of [PLUGIN_WORKFLOWS_DIR, GLOBAL_WORKFLOWS_DIR]) {
     if (!fs.existsSync(dir)) continue;
-    for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.workflow.js'))) {
-      if (seen.has(f)) continue; // plugin version takes precedence
-      seen.add(f);
-      try {
-        const wf = require(path.join(dir, f));
-        results.push({
-          file: f,
-          name: wf.name,
-          command: wf.command,
-          stateDir: wf.stateDir,
-          stepsCount: wf.steps?.length || 0,
-        });
-      } catch (err) {
-        results.push({ file: f, error: err.message });
+    // Scan both the directory itself and one level of subdirectories
+    const searchDirs = [dir];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules' && entry.name !== 'lib' && entry.name !== '__tests__') {
+        searchDirs.push(path.join(dir, entry.name));
+      }
+    }
+    for (const searchDir of searchDirs) {
+      for (const f of fs.readdirSync(searchDir).filter(f => f.endsWith('.workflow.js'))) {
+        if (seen.has(f)) continue; // plugin version takes precedence
+        seen.add(f);
+        try {
+          const wf = require(path.join(searchDir, f));
+          if (!wf || !wf.name) continue; // Skip non-workflow modules (e.g. CLI-only scripts)
+          results.push({
+            file: f,
+            name: wf.name,
+            command: wf.command,
+            stateDir: wf.stateDir,
+            stepsCount: wf.steps?.length || 0,
+          });
+        } catch (err) {
+          results.push({ file: f, error: err.message });
+        }
       }
     }
   }
@@ -86,11 +96,18 @@ function discoverWorkflows() {
 /** Load and validate a workflow module by name */
 function loadWorkflow(name) {
   const fileName = `${name}.workflow.js`;
-  let filePath = path.join(PLUGIN_WORKFLOWS_DIR, fileName);
-  if (!fs.existsSync(filePath)) {
-    filePath = path.join(GLOBAL_WORKFLOWS_DIR, fileName);
+  let filePath = null;
+  // Search plugin workflows dir and its subdirectories, then global
+  for (const baseDir of [PLUGIN_WORKFLOWS_DIR, GLOBAL_WORKFLOWS_DIR]) {
+    if (!fs.existsSync(baseDir)) continue;
+    // Check directly in the base dir
+    const directPath = path.join(baseDir, fileName);
+    if (fs.existsSync(directPath)) { filePath = directPath; break; }
+    // Check in subdirectory named after the workflow (e.g. workflows/check/check.workflow.js)
+    const subDirPath = path.join(baseDir, name, fileName);
+    if (fs.existsSync(subDirPath)) { filePath = subDirPath; break; }
   }
-  if (!fs.existsSync(filePath)) {
+  if (!filePath) {
     throw new Error(`Workflow "${name}" not found in ${PLUGIN_WORKFLOWS_DIR} or ${GLOBAL_WORKFLOWS_DIR}`);
   }
   const wf = require(filePath);

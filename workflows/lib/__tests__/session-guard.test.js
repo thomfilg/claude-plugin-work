@@ -10,7 +10,7 @@ const fs = require('fs');
 const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
-const HOOK_PATH = path.join(__dirname, '..', 'session-guard.js');
+const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'session-guard.js');
 const SESSION_DIR = path.join(require('os').tmpdir(), 'session-guard-test-' + process.pid);
 const TEST_TICKET = 'TEST-999';
 const TEST_WORKFLOW = '/work';
