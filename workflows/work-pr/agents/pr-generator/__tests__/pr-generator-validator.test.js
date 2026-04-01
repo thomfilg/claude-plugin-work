@@ -4,6 +4,8 @@
  * Run with: node --test hooks/agents/pr-generator/__tests__/pr-generator-validator.test.js
  */
 
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
 const { spawn } = require('child_process');
 const path = require('path');
 

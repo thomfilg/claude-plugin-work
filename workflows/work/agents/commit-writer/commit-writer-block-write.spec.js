@@ -122,6 +122,13 @@ describe('safe git commands → exit 0 (allow)', () => {
   }
 });
 
+describe('echo commands → exit 0 (allow)', () => {
+  it('should allow plain echo', () => {
+    const r = execHook({ tool_name: 'Bash', tool_input: { command: 'echo hello' } });
+    assert.strictEqual(r.exitCode, 0, `Expected exit 0, got ${r.exitCode}. stderr: ${r.stderr}`);
+  });
+});
+
 describe('setup chain commands → exit 0 (allow)', () => {
   it('should allow grep package.json', () => {
     const r = execHook({ tool_name: 'Bash', tool_input: { command: 'grep commitizen package.json' } });
@@ -172,7 +179,7 @@ describe('unsafe git commands → exit 2 (block)', () => {
 });
 
 describe('non-git Bash commands → exit 2 (block)', () => {
-  for (const cmd of ['ls -la', 'cat /etc/passwd', 'echo hello', 'rm -rf /', 'curl http://evil.com']) {
+  for (const cmd of ['ls -la', 'cat /etc/passwd', 'rm -rf /', 'curl http://evil.com']) {
     it(`should block: ${cmd}`, () => {
       const r = execHook({ tool_name: 'Bash', tool_input: { command: cmd } });
       assert.strictEqual(r.exitCode, 2, `Expected exit 2, got ${r.exitCode}`);
