@@ -837,7 +837,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
     agentPrompt: [
       `Run these commands in sequence:`,
       `1. node "${path.join(__dirname, 'work-state.js')}" complete ${safeName}`,
-      `2. node "${guardPath}" finish ${safeName}`,
+      `2. node "${guardPath}" finish ${safeBase}`,
       ``,
       `Step 1 marks the workflow as complete (exits 0 on success).`,
       `Step 2 is an atomic teardown: reveals the session passphrase (unlocking the Stop hook) and removes the session file. Exits 0 when no session exists (guard disabled or already cleaned up). Exits 1 only if called without a ticket ID (programming error).`,
