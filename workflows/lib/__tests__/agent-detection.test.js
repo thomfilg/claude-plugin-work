@@ -6,10 +6,6 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-
 const {
   normalizeAgentName,
   isRunningInAgent,
@@ -169,6 +165,7 @@ describe('isRunningInAgent — debug logging', () => {
     savedEnv.CLAUDE_CURRENT_AGENT = process.env.CLAUDE_CURRENT_AGENT;
     savedEnv.ENFORCE_HOOK_DEBUG = process.env.ENFORCE_HOOK_DEBUG;
     delete process.env.CLAUDE_CURRENT_AGENT;
+    delete process.env.ENFORCE_HOOK_DEBUG;
     stderrOutput = '';
     originalWrite = process.stderr.write;
     process.stderr.write = (chunk) => { stderrOutput += chunk; return true; };
