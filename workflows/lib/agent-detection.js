@@ -154,7 +154,8 @@ function isRunningInAgent(transcriptPath, agentAliases, hookData) {
   try {
     const content = fs.readFileSync(transcriptPath, 'utf8');
     for (const alias of agentAliases) {
-      const frontmatterPattern = new RegExp(`^name:\\s*${alias}\\s*$`, 'm');
+      const normalized = normalizeAgentName(alias);
+      const frontmatterPattern = new RegExp(`^name:\\s*${normalized}\\s*$`, 'mi');
       if (frontmatterPattern.test(content)) {
         return true;
       }
