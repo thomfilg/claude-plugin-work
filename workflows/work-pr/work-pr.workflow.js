@@ -26,8 +26,6 @@ const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
 const WORKTREES_BASE = getConfig.require('WORKTREES_BASE');
 const TASKS_BASE = getConfig('TASKS_BASE') || path.join(WORKTREES_BASE, 'tasks');
 
-const { normalizeTicketId } = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getTasksDir(ticketId) {
@@ -47,6 +45,58 @@ function safeExec(cmd, options = {}) {
   }
 }
 
+
+/**
+ * Compute a deterministic hash of screenshot files in a directory.
+ * Uses Node.js crypto to avoid shell injection risks entirely.
+ * @param {string} screenshotDir - Absolute path to screenshots directory
+ * @returns {string} SHA256 hash or 'none' if no screenshots
+ */
+function computeScreenshotHash(screenshotDir) {
+  if (!fs.existsSync(screenshotDir)) return 'none';
+  const crypto = require('crypto');
+  const extensions = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+  // Manual recursive traversal — avoids reliance on { recursive: true } (Node 18.17+)
+  function walkDir(dir, base) {
+    let results = [];
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch (err) {
+      if (err.code !== 'ENOENT') process.stderr.write(`[work-pr] computeScreenshotHash: cannot read ${dir}: ${err.message}\n`);
+      return results;
+    }
+    for (const entry of entries) {
+      const rel = base ? `${base}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        results = results.concat(walkDir(path.join(dir, entry.name), rel));
+      } else if (entry.isFile() && extensions.has(path.extname(entry.name).toLowerCase())) {
+        results.push(rel);
+      }
+    }
+    return results;
+  }
+  const files = walkDir(screenshotDir, '').sort();
+  if (files.length === 0) return 'none';
+  const hash = crypto.createHash('sha256');
+  for (const file of files) {
+    const fullPath = path.join(screenshotDir, file);
+    try {
+      const stat = fs.statSync(fullPath);
+      if (!stat.isFile() || stat.size > 50 * 1024 * 1024) continue;
+      // Stream file in 64KB chunks to bound memory usage
+      const fd = fs.openSync(fullPath, 'r');
+      const fileHash = crypto.createHash('sha256');
+      const buf = Buffer.alloc(65536);
+      let bytesRead;
+      while ((bytesRead = fs.readSync(fd, buf, 0, buf.length)) > 0) {
+        fileHash.update(buf.subarray(0, bytesRead));
+      }
+      fs.closeSync(fd);
+      hash.update(`${fileHash.digest('hex')}  ${file}\n`);
+    } catch { /* skip unreadable files */ }
+  }
+  return hash.digest('hex');
+}
 // ─── Workflow Definition ────────────────────────────────────────────────────
 
 module.exports = {
@@ -91,8 +141,8 @@ module.exports = {
     if (/^\d+$/.test(ticketId)) {
       ticketId = `${process.env.TICKET_PROJECT_KEY || process.env.JIRA_PROJECT_KEY || 'PROJ'}-${ticketId}`;
     }
-    // Uppercase only the ticket base, preserve suffix case (GH-146)
-    ticketId = normalizeTicketId(ticketId);
+    // Ensure uppercase
+    ticketId = ticketId.toUpperCase();
 
     return { instanceId: ticketId, ticketId, force };
   },
@@ -130,6 +180,25 @@ module.exports = {
     data.tsxChanged = safeExec(`git diff --name-only ${baseBranch}...HEAD -- '*.tsx' '*.jsx'`, { cwd: worktreeDir });
     data.hasTsxChanges = data.tsxChanged.length > 0;
 
+    // Rebase guard: count commits behind base branch (opt-in via REBASE_GUARD_ENABLED=1)
+    data.baseBranch = baseBranch;
+    data.commitsBehindMain = 0;
+    if (data.worktreeExists && process.env.REBASE_GUARD_ENABLED === '1') {
+      const parts = baseBranch.split('/');
+      const remote = parts.length > 1 ? parts[0] : 'origin';
+      const branch = parts.length > 1 ? parts.slice(1).join('/') : parts[0];
+      // Validate remote/branch to prevent command injection
+      const validRef = /^[a-zA-Z0-9_\-./]+$/.test(remote) && /^[a-zA-Z0-9_\-./]+$/.test(branch);
+      if (!validRef) {
+        process.stderr.write(`[work-pr] rebase guard: invalid baseBranch "${baseBranch}" — skipping\n`);
+      } else {
+        safeExec(`git fetch ${remote} ${branch} --quiet --depth=1 --no-tags`, { cwd: worktreeDir, timeout: 5000 });
+        const fetchedRef = `${remote}/${branch}`;
+        const behind = safeExec(`git rev-list --count HEAD..${fetchedRef}`, { cwd: worktreeDir });
+        data.commitsBehindMain = parseInt(behind || '0', 10);
+      }
+    }
+
     // Screenshot count
     const screenshotDir = path.join(tasksDir, 'screenshots');
     data.screenshotDir = screenshotDir;
@@ -143,12 +212,7 @@ module.exports = {
     data.screenshotsExist = data.screenshotCount > 0;
 
     // Screenshot hash for compound gating key
-    let screenshotHash = 'none';
-    if (data.screenshotsExist) {
-      screenshotHash = safeExec(
-        `find "${screenshotDir}" -type f -print0 2>/dev/null | sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1`
-      ) || 'none';
-    }
+    const screenshotHash = computeScreenshotHash(screenshotDir);
     data.screenshotHash = screenshotHash;
 
     // Compound pr-gen gating key: HEAD_SHA|SCREENSHOT_HASH
@@ -198,7 +262,16 @@ module.exports = {
       case '2_setup':
         return { action: 'RUN', reason: 'Parse args and set variables' };
 
-      case '3_pr_gen':
+      case '3_pr_gen': {
+        // Rebase guard: block if worktree is behind main
+        const parsed = parseInt(process.env.REBASE_GUARD_THRESHOLD || '0', 10);
+        const threshold = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+        if (d.commitsBehindMain > threshold) {
+          return {
+            action: 'BLOCKED',
+            reason: `Worktree is ${d.commitsBehindMain} commit(s) behind ${d.baseBranch || 'origin/main'}. Rebase before creating PR.`,
+          };
+        }
         if (!force && d.prUpToDate) {
           return {
             action: 'SKIP',
@@ -212,6 +285,7 @@ module.exports = {
             'No previous PR update recorded',
           command: 'Task(pr-generator)',
         };
+      }
 
       case '4_screenshot_gate':
         if (!d.hasTsxChanges) {
@@ -258,6 +332,31 @@ module.exports = {
     }
   },
 
+  /**
+   * Post-transition hook: write .pr-update-sha programmatically after 3_pr_gen completes.
+   * @param {string} from - Source step
+   * @param {string} to - Target step
+   * @param {string} instanceId - Ticket ID
+   */
+  onTransition(from, to, instanceId) {
+    // Write .pr-update-sha only on forward transitions from 3_pr_gen (PR generation completed)
+    const forwardTargets = ['4_screenshot_gate', '5_post_pr_gen', '6_summary'];
+    if (from === '3_pr_gen' && forwardTargets.includes(to)) {
+      const tasksDir = getTasksDir(instanceId);
+      const worktreeDir = getWorktreeDir(instanceId);
+      const headSha = safeExec('git rev-parse HEAD', { cwd: worktreeDir });
+      if (!headSha) {
+        process.stderr.write(`[work-pr] onTransition: cannot determine HEAD for ${instanceId} (worktree: ${worktreeDir}) — skipping .pr-update-sha write\n`);
+        return;
+      }
+      const screenshotDir = path.join(tasksDir, 'screenshots');
+      const screenshotHash = computeScreenshotHash(screenshotDir);
+      const compoundKey = `${headSha}|${screenshotHash}`;
+      fs.mkdirSync(tasksDir, { recursive: true });
+      fs.writeFileSync(path.join(tasksDir, '.pr-update-sha'), compoundKey + '\n');
+    } // headSha absence is logged to stderr for diagnosis
+  },
+
   /** Extra fields to include in initial state */
   extraStateFields: {
     force: false,
@@ -265,3 +364,6 @@ module.exports = {
     postPrUpdated: false,
   },
 };
+
+// Test-only export
+module.exports._computeScreenshotHash = computeScreenshotHash;

@@ -198,6 +198,9 @@ function transitionStep(workflow, stateInstance, instanceId, targetStep) {
     ws = stateInstance.init(instanceId, allSteps);
   }
 
+  // Snapshot state before mutations — used for full rollback if onTransition fails
+  const preTransitionState = structuredClone(ws);
+
   const currentIdx = allSteps.indexOf(currentStep);
   const targetIdx = allSteps.indexOf(targetStep);
 
@@ -228,6 +231,26 @@ function transitionStep(workflow, stateInstance, instanceId, targetStep) {
   }
 
   stateInstance.save(instanceId, ws);
+
+  // Invoke workflow's onTransition callback if defined
+  if (typeof workflow.onTransition === 'function') {
+    try {
+      workflow.onTransition(currentStep, targetStep, instanceId, { stateInstance });
+    } catch (err) {
+      // onTransition failed — full rollback to pre-transition state
+      const msg = err?.message || String(err);
+      process.stderr.write(`[workflow-engine] onTransition error (rolling back): ${msg}\n`);
+      if (err?.stack) process.stderr.write(`[workflow-engine] ${err.stack}\n`);
+      stateInstance.save(instanceId, preTransitionState);
+      return {
+        error: true,
+        message: `Transition ${currentStep} → ${targetStep} reverted: onTransition failed — ${msg}`,
+        from: currentStep,
+        to: targetStep,
+        rollback: true,
+      }; // full state snapshot restored
+    }
+  }
 
   return {
     success: true,
@@ -362,11 +385,13 @@ function main() {
         skip: byAction('SKIP').length,
         defer: byAction('DEFER').length,
         pending: byAction('PENDING').length,
-        // firstAction: first actionable step (RUN preferred, DEFER as fallback — DEFER steps include execution metadata)
-        firstAction: byAction('RUN')[0]?.step || byAction('DEFER')[0]?.step || 'none',
+        blocked: byAction('BLOCKED').length,
+        // firstAction: BLOCKED takes priority (must resolve before proceeding), then RUN, then DEFER
+        firstAction: byAction('BLOCKED')[0]?.step || byAction('RUN')[0]?.step || byAction('DEFER')[0]?.step || 'none',
         stepsToRun: byAction('RUN').map(s => s.step),
-        stepsDeferred: byAction('DEFER').map(s => s.step), // separate from stepsToRun: re-plan before executing
+        stepsDeferred: byAction('DEFER').map(s => s.step),
         stepsSkipped: byAction('SKIP').map(s => s.step),
+        stepsBlocked: byAction('BLOCKED').map(s => s.step),
       };
 
       // Format output
