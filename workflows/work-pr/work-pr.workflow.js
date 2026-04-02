@@ -85,14 +85,17 @@ function computeScreenshotHash(screenshotDir) {
       if (!stat.isFile() || stat.size > 50 * 1024 * 1024) continue;
       // Stream file in 64KB chunks to bound memory usage
       const fd = fs.openSync(fullPath, 'r');
-      const fileHash = crypto.createHash('sha256');
-      const buf = Buffer.alloc(65536);
-      let bytesRead;
-      while ((bytesRead = fs.readSync(fd, buf, 0, buf.length)) > 0) {
-        fileHash.update(buf.subarray(0, bytesRead));
+      try {
+        const fileHash = crypto.createHash('sha256');
+        const buf = Buffer.alloc(65536);
+        let bytesRead;
+        while ((bytesRead = fs.readSync(fd, buf, 0, buf.length)) > 0) {
+          fileHash.update(buf.subarray(0, bytesRead));
+        }
+        hash.update(`${fileHash.digest('hex')}  ${file}\n`);
+      } finally {
+        fs.closeSync(fd);
       }
-      fs.closeSync(fd);
-      hash.update(`${fileHash.digest('hex')}  ${file}\n`);
     } catch { /* skip unreadable files */ }
   }
   return hash.digest('hex');
@@ -192,9 +195,11 @@ module.exports = {
       if (!validRef) {
         process.stderr.write(`[work-pr] rebase guard: invalid baseBranch "${baseBranch}" — skipping\n`);
       } else {
-        safeExec(`git fetch ${remote} ${branch} --quiet --depth=1 --no-tags`, { cwd: worktreeDir, timeout: 5000 });
+        const guardThreshold = parseInt(process.env.REBASE_GUARD_THRESHOLD || '0', 10);
+        const fetchDepth = Math.max((Number.isFinite(guardThreshold) ? guardThreshold : 0) + 2, 2);
+        safeExec(`git fetch ${remote} ${branch} --quiet --depth=${fetchDepth} --no-tags`, { cwd: worktreeDir, timeout: 5000 });
         const fetchedRef = `${remote}/${branch}`;
-        const behind = safeExec(`git rev-list --count HEAD..${fetchedRef}`, { cwd: worktreeDir });
+        const behind = safeExec(`git rev-list --count --max-count=${fetchDepth} HEAD..${fetchedRef}`, { cwd: worktreeDir });
         data.commitsBehindMain = parseInt(behind || '0', 10);
       }
     }
