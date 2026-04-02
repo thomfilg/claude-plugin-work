@@ -78,6 +78,7 @@ function computeScreenshotHash(screenshotDir) {
   const files = walkDir(screenshotDir, '').sort();
   if (files.length === 0) return 'none';
   const hash = crypto.createHash('sha256');
+  let filesHashed = 0;
   for (const file of files) {
     const fullPath = path.join(screenshotDir, file);
     try {
@@ -93,11 +94,13 @@ function computeScreenshotHash(screenshotDir) {
           fileHash.update(buf.subarray(0, bytesRead));
         }
         hash.update(`${fileHash.digest('hex')}  ${file}\n`);
+        filesHashed++;
       } finally {
         fs.closeSync(fd);
       }
     } catch { /* skip unreadable files */ }
   }
+  if (filesHashed === 0) return 'none';
   return hash.digest('hex');
 }
 // ─── Workflow Definition ────────────────────────────────────────────────────
