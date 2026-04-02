@@ -200,7 +200,7 @@ module.exports = {
         safeExec(`git fetch ${remote} ${branch} --quiet --depth=${fetchDepth} --no-tags`, { cwd: worktreeDir, timeout: 5000 });
         const fetchedRef = `${remote}/${branch}`;
         const behind = safeExec(`git rev-list --count --max-count=${fetchDepth} HEAD..${fetchedRef}`, { cwd: worktreeDir });
-        data.commitsBehindMain = parseInt(behind || '0', 10);
+        data.commitsBehindMain = parseInt(behind || '0', 10); // capped by fetchDepth, flagged via commitsBehindMainCapped
         data.commitsBehindMainCapped = data.commitsBehindMain >= fetchDepth;
       }
     }

@@ -395,7 +395,7 @@ function main() {
         stepsToRun: byAction('RUN').map(s => s.step),
         stepsDeferred: byAction('DEFER').map(s => s.step),
         stepsSkipped: byAction('SKIP').map(s => s.step),
-        stepsBlocked: byAction('BLOCKED').map(s => s.step),
+        stepsBlocked: byAction('BLOCKED').map(s => s.step), // rendered with stop sign icon in formatPlan
       };
 
       // Format output
