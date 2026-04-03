@@ -70,7 +70,7 @@ const GLOB_SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build'
  * @returns {string[]} matching file paths (absolute)
  */
 function miniGlob(base, pattern) {
-  const parts = pattern.split('/');
+  const parts = pattern.split(/[/\\]/);
   return matchParts(base, parts);
 }
 
