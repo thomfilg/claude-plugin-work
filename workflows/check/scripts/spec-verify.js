@@ -391,7 +391,10 @@ function runChecks(markers, root) {
 function main() {
   const args = process.argv.slice(2);
   const jsonMode = args.includes('--json');
-  const specPath = args.find(a => a !== '--json');
+  const rootIdx = args.indexOf('--root');
+  const explicitRoot = rootIdx !== -1 ? args[rootIdx + 1] : null;
+  const skipIndices = new Set(rootIdx !== -1 ? [rootIdx, rootIdx + 1] : []);
+  const specPath = args.find((a, i) => !skipIndices.has(i) && a !== '--json');
 
   if (!specPath) {
     process.stderr.write('Usage: node spec-verify.js <spec-path> [--json]\n');
@@ -407,7 +410,7 @@ function main() {
     process.exit(2);
   }
 
-  const root = getWorktreeRoot(specPath);
+  const root = explicitRoot ? path.resolve(explicitRoot) : getWorktreeRoot(specPath);
   const { hasChecklist, markers } = parseChecklist(content);
 
   // No checklist header at all → fail-open for legacy specs without verification

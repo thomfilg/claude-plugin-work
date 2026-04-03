@@ -114,8 +114,17 @@ const CHECK_GATE_RULES = [
       const specPath = path.join(dir, 'spec.md');
       if (!fileExists(specPath)) return []; // fail-open: no spec = pass
       const scriptPath = path.resolve(__dirname, '..', 'check', 'scripts', 'spec-verify.js');
+      // Resolve worktree root — spec.md lives in the tasks dir, not the git worktree
+      let worktreeRoot;
       try {
-        const stdout = execFileSync('node', [scriptPath, specPath, '--json'], {
+        worktreeRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+          encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim();
+      } catch {
+        worktreeRoot = process.cwd();
+      }
+      try {
+        const stdout = execFileSync('node', [scriptPath, specPath, '--json', '--root', worktreeRoot], {
           encoding: 'utf-8',
           timeout: 30000,
           stdio: ['pipe', 'pipe', 'pipe'],
