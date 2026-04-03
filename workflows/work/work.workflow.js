@@ -963,6 +963,23 @@ function main() {
             .filter(s => s.action === 'DEFER')
             .map(s => s.step);
           saveWorkState(safeName_plan, planState);
+        } else {
+          // No state yet (plan before bootstrap/transition) — persist DEFER
+          // metadata so the guard can function on first-run transitions (GH-154)
+          const deferSteps = result.plan
+            .filter(s => s.action === 'DEFER')
+            .map(s => s.step);
+          if (deferSteps.length > 0) {
+            const minimalState = {
+              ticketId: ticket, description: '', currentStep: 1, status: 'in_progress',
+              stepStatus: {}, checkProgress: {},
+              errors: [], startTime: new Date().toISOString(),
+              lastPlanTimestamp: result.timestamp,
+              deferredSteps: deferSteps,
+            };
+            ALL_STEPS.forEach(s => { minimalState.stepStatus[s] = 'pending'; });
+            saveWorkState(safeName_plan, minimalState);
+          }
         }
       }
 

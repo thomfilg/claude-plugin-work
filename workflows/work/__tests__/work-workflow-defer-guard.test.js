@@ -302,7 +302,7 @@ describe('DEFER step re-evaluation guard (GH-154)', () => {
     cleanupTicket(ticket);
   });
 
-  it('backward transition clears deferredSteps and lastPlanTimestamp', async () => {
+  it('11. backward transition clears deferredSteps and lastPlanTimestamp', async () => {
     const ticket = 'TEST-DEFER-011';
     const state = buildState(ticket, 'ci', {
       deferredSteps: ['follow_up', 'cleanup'],
@@ -321,7 +321,7 @@ describe('DEFER step re-evaluation guard (GH-154)', () => {
     cleanupTicket(ticket);
   });
 
-  it('lastTransitionTimestamp is set after successful transition', async () => {
+  it('12. lastTransitionTimestamp is set after successful transition', async () => {
     const ticket = 'TEST-DEFER-012';
     const state = buildState(ticket, 'ready');
     putWorkState(ticket, state);
