@@ -714,7 +714,26 @@ function handlePreToolUse(hookData) {
           );
           process.exit(2);
         }
-        // Agent verified — issue a write token for the script to consume.
+        // Enforce step: only issue tokens during the 'check' step.
+        // Writer scripts bypass artifactProtector (they write via Bash, not Write tool),
+        // so we enforce step gating here at token issuance time.
+        if (ticketId) {
+          const state = loadStateFile(ticketId, '.work-state.json');
+          const currentStep = state?.stepStatus
+            ? WORK_STEPS.find(s => state.stepStatus[s] === 'in_progress') || null
+            : null;
+          if (currentStep && currentStep !== STEPS.check) {
+            didBlock = true;
+            process.stderr.write(
+              `BLOCKED: Cannot issue write token — step '${STEPS.check}' is not in_progress.\n` +
+              `Current step: ${currentStep}\n` +
+              `Report writer scripts can only be called during the check step.\n`
+            );
+            process.exit(2);
+          }
+        }
+
+        // Agent + step verified — issue a write token for the script to consume.
         // The token file is the trusted bridge between the hook (which has
         // access to Claude Code's hookData) and the script (which doesn't).
         const { tokenPath, ensureTokenDir } = require(path.join(__dirname, '..', 'scripts', 'write-report'));
