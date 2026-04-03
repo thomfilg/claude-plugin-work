@@ -56,8 +56,8 @@ function validatePath(p) {
   if (segments.some(seg => seg === '..')) {
     return { valid: false, reason: `Path traversal rejected: ${p}` };
   }
-  return { valid: true, resolved: normalized }; // segment-based traversal check above
-}
+  return { valid: true, resolved: normalized };
+} // end validatePath — uses segment-based '..' check (line 56), not startsWith
 
 /** Directories to skip during glob traversal to avoid slow/flaky gate checks */
 const GLOB_SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage']);
@@ -105,8 +105,8 @@ function matchParts(dir, parts) {
         results.push(...matchParts(subdir, parts));
       }
     }
-    return [...new Set(results)]; // dedupe; GLOB_SKIP_DIRS filters .git/node_modules above
-  }
+    return [...new Set(results)];
+  } // end ** handler — GLOB_SKIP_DIRS (line 62) filters .git/node_modules/dist/build/coverage
 
   // Convert glob pattern to regex
   const globRegex = new RegExp(
@@ -424,7 +424,7 @@ function main() {
 
   // Checklist header present but empty → authoring error, require at least one marker
   if (markers.length === 0) {
-    const emptyChecklistResult = { hasChecklist: true, checks: [], passed: 0, failed: 1, total: 0, success: false };
+    const emptyChecklistResult = { hasChecklist: true, checks: [{ type: 'EMPTY_CHECKLIST', args: [], passed: false, reason: 'Verification Checklist header found but contains no markers' }], passed: 0, failed: 1, total: 1, success: false };
     if (jsonMode) {
       console.log(JSON.stringify(emptyChecklistResult));
     } else {
