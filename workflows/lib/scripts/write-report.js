@@ -251,6 +251,15 @@ function createReportWriter(config) {
       finalContent = newContent + `\n\n---\n## Previous Run: ${timestamp}\n---\n\n` + oldContent;
     }
 
+    // Reject symlink targets — prevents overwriting unexpected files
+    try {
+      const stat = fs.lstatSync(reportPath);
+      if (stat.isSymbolicLink()) {
+        process.stderr.write(`[${name}] BLOCKED: reportPath is a symlink — refusing to write.\n`);
+        process.exit(2);
+      }
+    } catch { /* file doesn't exist yet — fine */ }
+
     // Atomic write: write to tmp then rename (prevents partial reads)
     const dir = path.dirname(reportPath);
     if (!fs.existsSync(dir)) {
