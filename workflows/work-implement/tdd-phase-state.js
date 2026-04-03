@@ -13,6 +13,7 @@
  *   node tdd-phase-state.js record-green <TICKET_ID> --cmd "<test command>"
  *   node tdd-phase-state.js record-refactor <TICKET_ID> --cmd "<test command>"
  *   node tdd-phase-state.js transition <TICKET_ID> <target_phase>
+ *   node tdd-phase-state.js exception <TICKET_ID> --reason "<reason>"
  */
 
 const fs = require('fs');
@@ -21,6 +22,8 @@ const { execSync } = require('child_process');
 const { tddCanTransition, isTestFile } = require('./tdd-phase-registry');
 const { consumeToken, tokenPath } = require('../lib/scripts/write-report');
 const { normalizeAgentName } = require('../lib/agent-detection');
+
+let config; try { config = require('../lib/config'); } catch { config = null; }
 
 // Agents authorized to call gated subcommands
 const ALLOWED_AGENTS = ['developer-nodejs-tdd', 'developer-react-senior', 'developer-react-ui-architect', 'developer-devops'];
@@ -33,7 +36,11 @@ const TOKEN_MAX_AGE_MS = 10_000; // 10 seconds
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getStatePath(ticketId) {
-  return path.join(process.env.HOME, 'worktrees', 'tasks', ticketId, 'tdd-phase.json');
+  if (!ticketId || /[\/\\]|\.\./.test(ticketId)) {
+    throw new Error(`Invalid ticket ID: ${ticketId}`);
+  }
+  const base = process.env.TASKS_BASE || (config && config.TASKS_BASE) || path.join(process.env.HOME, 'worktrees', 'tasks');
+  return path.join(base, ticketId, 'tdd-phase.json');
 }
 
 function readState(ticketId) {
@@ -48,7 +55,7 @@ function writeState(ticketId, state) {
   const statePath = getStatePath(ticketId);
   const dir = path.dirname(statePath);
   fs.mkdirSync(dir, { recursive: true });
-  const tmpPath = statePath + '.tmp';
+  const tmpPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2));
   fs.renameSync(tmpPath, statePath);
 }
@@ -107,6 +114,9 @@ function verifyToken() {
   }
 
   const age = Date.now() - token.timestamp;
+  if (age < 0) {
+    errorExit(`Write token timestamp is in the future (${Math.abs(age)}ms ahead).`);
+  }
   if (age > TOKEN_MAX_AGE_MS) {
     errorExit(`Write token expired (${age}ms old, max ${TOKEN_MAX_AGE_MS}ms).`);
   }
@@ -153,6 +163,7 @@ function cmdRecordRed(ticketId, args) {
 
   const state = readState(ticketId);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
+  if (state.currentPhase !== 'red') errorExit('Cannot record RED evidence: current phase is "' + state.currentPhase + '". Transition to red first.');
 
   // Detect changed test files via git diff
   let allChanged = [];
@@ -194,6 +205,7 @@ function cmdRecordGreen(ticketId, args) {
 
   const state = readState(ticketId);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
+  if (state.currentPhase !== 'green') errorExit('Cannot record GREEN evidence: current phase is "' + state.currentPhase + '". Transition to green first.');
 
   const exitCode = runTestCommand(cmd);
   if (exitCode !== 0) {
@@ -217,6 +229,7 @@ function cmdRecordRefactor(ticketId, args) {
 
   const state = readState(ticketId);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
+  if (state.currentPhase !== 'refactor') errorExit('Cannot record REFACTOR evidence: current phase is "' + state.currentPhase + '". Transition to refactor first.');
 
   const exitCode = runTestCommand(cmd);
   if (exitCode !== 0) {
@@ -265,12 +278,37 @@ function cmdTransition(ticketId, targetPhase) {
   successOut({ phase: state.currentPhase, cycle: state.currentCycle });
 }
 
+function cmdException(ticketId, args) {
+  if (!ticketId) errorExit('Missing ticket ID.');
+  const reasonIdx = args.indexOf('--reason');
+  if (reasonIdx === -1 || reasonIdx + 1 >= args.length) {
+    errorExit('Missing --reason argument. Usage: node tdd-phase-state.js exception <TICKET_ID> --reason "<reason>"');
+  }
+  const reason = args[reasonIdx + 1];
+  if (!reason || !reason.trim()) {
+    errorExit('Reason cannot be empty.');
+  }
+  const state = {
+    currentPhase: 'exception',
+    exception: reason,
+    cycles: [],
+  };
+  writeState(ticketId, state);
+  successOut({ ok: true, phase: 'exception', exception: reason });
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const subcommand = args[0];
 const ticketId = args[1];
 
+// Token gating: WORK_TDD_TOKEN_SKIP=1 bypasses verification.
+// In production, enforce-step-workflow.js Rule 5 issues tokens for scripts
+// listed in AGENT_GATED_SCRIPTS. Add 'tdd-phase-state.js' there to enable
+// full token enforcement. Until then, the hook-based file restrictions
+// (RED: only test files, GREEN: only production files) provide the primary
+// enforcement layer.
 if (GATED_SUBCOMMANDS.includes(subcommand) && process.env.WORK_TDD_TOKEN_SKIP !== '1') {
   verifyToken();
 }
@@ -294,7 +332,10 @@ switch (subcommand) {
   case 'transition':
     cmdTransition(ticketId, args[2]);
     break;
+  case 'exception':
+    cmdException(ticketId, args.slice(2));
+    break;
   default:
     errorExit(`Unknown subcommand: ${subcommand}. ` +
-      'Valid: init, current, record-red, record-green, record-refactor, transition');
+      'Valid: init, current, record-red, record-green, record-refactor, transition, exception');
 }

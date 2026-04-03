@@ -39,9 +39,10 @@ function createTempGitRepo() {
 
 function runCli(args, homeDir, cwd) {
   try {
+    const tasksBase = path.join(homeDir, 'worktrees', 'tasks');
     const stdout = execSync(`node ${CLI_PATH} ${args}`, {
       encoding: 'utf8',
-      env: { ...process.env, HOME: homeDir, WORK_TDD_TOKEN_SKIP: '1' },
+      env: { ...process.env, HOME: homeDir, TASKS_BASE: tasksBase, WORK_TDD_TOKEN_SKIP: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
       ...(cwd ? { cwd } : {}),
     });
@@ -53,9 +54,10 @@ function runCli(args, homeDir, cwd) {
 
 function runCliNoTokenSkip(args, homeDir) {
   try {
+    const tasksBase = path.join(homeDir, 'worktrees', 'tasks');
     const stdout = execSync(`node ${CLI_PATH} ${args}`, {
       encoding: 'utf8',
-      env: { ...process.env, HOME: homeDir },
+      env: { ...process.env, HOME: homeDir, TASKS_BASE: tasksBase },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return { stdout, exitCode: 0 };
@@ -243,6 +245,97 @@ describe('tdd-phase-state CLI', () => {
       const updatedState = readState(homeDir, 'TEST-CYC');
       assert.strictEqual(updatedState.currentPhase, 'red');
       assert.strictEqual(updatedState.currentCycle, 2);
+    });
+  });
+
+  describe('exception', () => {
+    it('creates valid state with exception reason', () => {
+      const { stdout, exitCode } = runCli('exception TEST-EXC --reason "config-only change, no testable behavior"', homeDir);
+      assert.strictEqual(exitCode, 0);
+      const result = JSON.parse(stdout);
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.phase, 'exception');
+      assert.strictEqual(result.exception, 'config-only change, no testable behavior');
+
+      const state = readState(homeDir, 'TEST-EXC');
+      assert.strictEqual(state.currentPhase, 'exception');
+      assert.strictEqual(state.exception, 'config-only change, no testable behavior');
+      assert.deepStrictEqual(state.cycles, []);
+    });
+
+    it('fails without --reason argument', () => {
+      const { exitCode, stderr } = runCli('exception TEST-EXC2', homeDir);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('reason'), `Expected error about reason, got: ${stderr}`);
+    });
+
+    it('fails with empty reason', () => {
+      const { exitCode, stderr } = runCli('exception TEST-EXC3 --reason ""', homeDir);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('empty') || stderr.includes('reason'), `Expected error about empty reason, got: ${stderr}`);
+    });
+  });
+
+  describe('phase validation in record commands', () => {
+    it('record-red fails when currentPhase is not red', () => {
+      runCli('init TEST-PV1', homeDir);
+      // Manually set phase to green
+      const statePath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-PV1', 'tdd-phase.json');
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      state.currentPhase = 'green';
+      state.cycles = [{
+        cycle: 1,
+        red: { testFiles: ['foo.test.ts'], testCommand: 'echo test', testExitCode: 1, timestamp: new Date().toISOString() },
+      }];
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+      const failScript = createExitScript(scriptDir, 1);
+      const cleanRepo = createTempGitRepo();
+      // Add a test file change so it doesn't fail on "no test files"
+      fs.writeFileSync(path.join(cleanRepo, 'foo.test.ts'), 'test');
+      execSync('git add foo.test.ts', { cwd: cleanRepo, stdio: 'pipe' });
+
+      const { exitCode, stderr } = runCli(`record-red TEST-PV1 --cmd "${failScript}"`, homeDir, cleanRepo);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('Cannot record RED'), `Expected phase mismatch error, got: ${stderr}`);
+    });
+
+    it('record-green fails when currentPhase is not green', () => {
+      runCli('init TEST-PV2', homeDir);
+      // Phase is 'red' by default after init
+      const passScript = createExitScript(scriptDir, 0);
+      const { exitCode, stderr } = runCli(`record-green TEST-PV2 --cmd "${passScript}"`, homeDir);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('Cannot record GREEN'), `Expected phase mismatch error, got: ${stderr}`);
+    });
+
+    it('record-refactor fails when currentPhase is not refactor', () => {
+      runCli('init TEST-PV3', homeDir);
+      // Phase is 'red' by default after init
+      const passScript = createExitScript(scriptDir, 0);
+      const { exitCode, stderr } = runCli(`record-refactor TEST-PV3 --cmd "${passScript}"`, homeDir);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('Cannot record REFACTOR'), `Expected phase mismatch error, got: ${stderr}`);
+    });
+  });
+
+  describe('path traversal protection', () => {
+    it('rejects ticket ID with ..', () => {
+      const { exitCode, stderr } = runCli('init ../../../etc', homeDir);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('Invalid ticket ID'), `Expected invalid ticket ID error, got: ${stderr}`);
+    });
+
+    it('rejects ticket ID with /', () => {
+      const { exitCode, stderr } = runCli('init foo/bar', homeDir);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('Invalid ticket ID'), `Expected invalid ticket ID error, got: ${stderr}`);
+    });
+
+    it('rejects ticket ID with backslash', () => {
+      const { exitCode, stderr } = runCli('init "foo\\\\bar"', homeDir);
+      assert.strictEqual(exitCode, 1);
+      assert.ok(stderr.includes('Invalid ticket ID'), `Expected invalid ticket ID error, got: ${stderr}`);
     });
   });
 

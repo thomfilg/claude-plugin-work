@@ -497,6 +497,24 @@ describe('TDD enforcement', () => {
       assert.match(result.message, /No TDD cycles/i);
     });
 
+    it('transition 3_implement -> commit ALLOWED with exception-based tdd-phase.json', async () => {
+      await transitionTo(TICKET, 'implement', { WORK_TDD_ENFORCE: '1' });
+      const ticketDir = path.join(tempTasksBase, TICKET);
+      fs.mkdirSync(ticketDir, { recursive: true });
+      const phasePath = path.join(ticketDir, 'tdd-phase.json');
+      fs.writeFileSync(phasePath, JSON.stringify({
+        currentPhase: 'exception',
+        exception: 'config-only change, no testable behavior',
+        cycles: [],
+      }));
+      const { result } = await runOrchestrator(
+        ['transition', TICKET, 'commit'],
+        { env: baseEnv({ WORK_TDD_ENFORCE: '1' }) },
+      );
+      assert.equal(result.success, true);
+      assert.equal(result.to, 'commit');
+    });
+
     it('current commit -> check does not consult TDD evidence (non-gated step)', async () => {
       await transitionTo(TICKET, 'implement', { WORK_TDD_ENFORCE: '1' });
       writeValidPhaseState(TICKET);

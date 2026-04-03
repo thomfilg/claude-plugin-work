@@ -123,7 +123,14 @@ function checkTddPhase(filePath) {
 
     if (!ticketId) return 'no-state';
 
-    const statePath = require('path').join(process.env.HOME, 'worktrees', 'tasks', ticketId, 'tdd-phase.json');
+    let taskBase;
+    try {
+      const cfg = require(require('path').join(__dirname, '..', '..', 'lib', 'config'));
+      taskBase = cfg.TASKS_BASE;
+    } catch {
+      taskBase = require('path').join(process.env.HOME, 'worktrees', 'tasks');
+    }
+    const statePath = require('path').join(taskBase, ticketId, 'tdd-phase.json');
     if (!require('fs').existsSync(statePath)) return 'no-state';
 
     const state = JSON.parse(require('fs').readFileSync(statePath, 'utf8'));
@@ -164,6 +171,17 @@ async function main() {
 
   // Get the file path being edited
   const filePath = toolInput.file_path || toolInput.path || '';
+
+  // tdd-phase.json is NOT allowed via the generic .json allowlist
+  // It must be protected by TDD phase hooks or blocked entirely
+  if (filePath && /tdd-phase\.json$/.test(filePath)) {
+    // Block direct edits to tdd-phase.json — only tdd-phase-state.js can write it
+    process.stderr.write(
+      'Direct edit of tdd-phase.json is blocked.\n' +
+      'Use tdd-phase-state.js CLI to manage TDD phase state.\n'
+    );
+    process.exit(2);
+  }
 
   // Allow config/non-code files
   if (isFileAllowed(filePath)) {

@@ -201,6 +201,18 @@ describe('work-implement-enforce hook', () => {
     });
   });
 
+  it('should BLOCK direct edits to tdd-phase.json even when /work-implement active', async () => {
+    const tp = path.join(os.tmpdir(), `test-wie-tdd-${Date.now()}.jsonl`);
+    fs.writeFileSync(tp, '# Implement Command\n');
+    const { result } = await runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '/home/node/project/tasks/TEST-123/tdd-phase.json' },
+      transcript_path: tp
+    });
+    assert.strictEqual(result.decision, 'block');
+    assert.ok(result.reason.includes('tdd-phase.json'), 'Should mention tdd-phase.json in block message');
+  });
+
   it('should APPROVE on parse error (JSON.parse in main fails, main().catch fires)', async () => {
     const proc = spawn('node', [HOOK_PATH], { stdio: ['pipe', 'pipe', 'pipe'] });
     const exitCode = await new Promise((resolve) => {

@@ -271,7 +271,8 @@ REFACTOR Phase (clean up):
 Rules:
 - Evidence is recorded by the SCRIPT — it runs git diff and test commands itself.
 - Do NOT make local git commits during the cycle — the commit step handles that.
-- If the change is purely mechanical (config-only, no behavior change), skip the TDD loop.
+- If the change is purely mechanical (config-only, no behavior change):
+  node <TDD_STATE_PATH> exception <TICKET_ID> --reason "config-only change, no testable behavior"
 `.trim();
 
 function readTddEvidence(ticketId, stepId) {
@@ -288,6 +289,11 @@ function readTddEvidence(ticketId, stepId) {
 
 function validateTddEvidence(evidence, expectedStepId) {
   if (!evidence || typeof evidence !== 'object') return { valid: false, reason: 'Evidence is null or not an object' };
+
+  // Exception mode: config-only or mechanical changes that skip TDD
+  if (typeof evidence.exception === 'string' && evidence.exception.trim() !== '') {
+    return { valid: true, reason: '' };
+  }
 
   // Must have at least one completed cycle with all three phases
   const cycles = evidence.cycles;

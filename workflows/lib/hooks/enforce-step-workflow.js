@@ -376,6 +376,7 @@ const TRUSTED_SCRIPT_DIRS = [
   path.resolve(__dirname, '..', 'scripts'),          // workflows/lib/scripts/
   path.resolve(__dirname, '..', '..', 'work'),       // workflows/work/
   path.resolve(__dirname, '..', '..', 'check', 'scripts'), // workflows/check/scripts/
+  path.resolve(__dirname, '..', '..', 'work-implement'),   // workflows/work-implement/
 ];
 
 // Agent-gated writer scripts — map script basename to authorized agents.
@@ -386,6 +387,7 @@ const AGENT_GATED_SCRIPTS = {
   'write-tests-report.js':      ['quality-checker'],
   'write-code-review.js':       ['code-checker'],
   'write-completion-report.js':  ['completion-checker'],
+  'tdd-phase-state.js':         ['developer-nodejs-tdd', 'developer-react-senior', 'developer-react-ui-architect', 'developer-devops'],
 };
 
 const stateFileProtector = createFileProtector({
