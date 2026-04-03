@@ -118,6 +118,7 @@ const CHECK_GATE_RULES = [
             }
           } catch { /* parse error, fall through */ }
         }
+        // execFileSync attaches stdout/stderr to the thrown error for non-zero exits
         const stderr = err.stderr ? err.stderr.toString().trim() : '';
         const detail = stderr || err.message || 'unknown error';
         return [`Spec verification script error: ${detail}`];

@@ -53,7 +53,8 @@ function validatePath(p) {
   if (normalized.startsWith('..') || normalized.includes(`${path.sep}..`)) {
     return { valid: false, reason: `Path traversal rejected: ${p}` };
   }
-  return { valid: true };
+  // All validations passed (type-check, absolute path, traversal)
+  return { valid: true, resolved: normalized };
 }
 
 /**
@@ -91,14 +92,12 @@ function matchParts(dir, parts) {
     const results = [];
     // Try matching rest at this level (zero dirs matched)
     results.push(...matchParts(dir, rest));
-    // Try matching in subdirectories
+    // Try matching in subdirectories (matchParts(subdir, parts) recurses with **
+    // still active, which internally tries rest at each level — no separate call needed)
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const subdir = path.join(dir, entry.name);
-        // Keep ** active for deeper levels
         results.push(...matchParts(subdir, parts));
-        // Also try rest in subdirectory
-        results.push(...matchParts(subdir, rest));
       }
     }
     return [...new Set(results)];
@@ -216,7 +215,7 @@ function checkFileExists(args, root) {
   if (!validation.valid) {
     return { type: 'FILE_EXISTS', args, passed: false, reason: validation.reason };
   }
-  const full = path.join(root, filePath);
+  const full = path.resolve(root, validation.resolved);
   if (fs.existsSync(full)) {
     return { type: 'FILE_EXISTS', args, passed: true };
   }
@@ -290,7 +289,7 @@ function checkTestCount(args, root) {
   if (!validation.valid) {
     return { type: 'TEST_COUNT', args, passed: false, reason: validation.reason };
   }
-
+  // globPattern is guaranteed non-null by the guard above
   const files = miniGlob(root, globPattern);
   let count = 0;
   const testPattern = /\b(?:it|test)\s*\(/g;
