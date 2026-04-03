@@ -22,6 +22,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 // (Patch 11) Gate transient stderr logging behind debug env var — declared early for use in handlers
@@ -201,19 +202,29 @@ const WORKFLOWS = [
         } catch { return false; }
       }},
       { step: STEPS.follow_up, verify: (ticketId) => {
+        // Verify follow_up by checking LIVE GitHub state — no fakeable state files.
+        // Checks: CI passing, no changes-requested reviews, all PR comments accounted for.
         try {
           const { execFileSync } = require('child_process');
-          const os = require('os');
           const opts = { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] };
 
-          // 1. follow-up-pr state must show finalStatus 'ready'
-          const slug = execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], opts).trim().replace('/', '-');
+          // 1. Get PR number
           const prNum = execFileSync('gh', ['pr', 'view', '--json', 'number', '-q', '.number'], opts).trim();
-          const stateFile = path.join(os.tmpdir(), '.claude', `follow-up-pr-${slug}-${prNum}.json`);
-          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          if (state.finalStatus !== 'ready') return false;
+          if (!prNum) return false;
 
-          // 2. Review accountability: every PR comment must be accounted for
+          // 2. CI checks must all pass (or have no checks)
+          const checksJson = execFileSync('gh', ['pr', 'checks', prNum, '--json', 'state,name'], opts).trim();
+          const checks = JSON.parse(checksJson || '[]');
+          const hasFailure = checks.some(c => c.state === 'FAILURE' || c.state === 'ERROR');
+          const hasPending = checks.some(c => c.state === 'PENDING');
+          if (hasFailure || hasPending) return false;
+
+          // 3. No blocking reviews (CHANGES_REQUESTED)
+          const reviewJson = execFileSync('gh', ['pr', 'view', prNum, '--json', 'reviewDecision'], opts).trim();
+          const reviewData = JSON.parse(reviewJson || '{}');
+          if (reviewData.reviewDecision === 'CHANGES_REQUESTED') return false;
+
+          // 4. Review accountability: every PR comment must be accounted for
           const commentCount = parseInt(
             execFileSync('gh', ['api', `repos/{owner}/{repo}/pulls/${prNum}/comments`, '--jq', 'length'], opts).trim(),
             10
@@ -223,10 +234,8 @@ const WORKFLOWS = [
             if (!fs.existsSync(accountabilityFile)) return false;
             const entries = JSON.parse(fs.readFileSync(accountabilityFile, 'utf-8'));
             if (!Array.isArray(entries) || entries.length < commentCount) return false;
-            // Every entry must have disposition and reason
             if (!entries.every(e => e.disposition && e.reason)) return false;
-            // 3. "acknowledged" entries (AI justifying a skip) require user approval
-            // Agent must call AskUserQuestion and record the user's decision
+            // "acknowledged" entries require user approval via AskUserQuestion
             const acknowledged = entries.filter(e => e.disposition === 'acknowledged');
             if (acknowledged.length > 0) {
               if (!acknowledged.every(e => e.userApproval === true)) return false;
@@ -333,6 +342,7 @@ const ARTIFACT_RULES = [
   { basename: 'completion.check.md',   step: STEPS.check, agents: ['completion-checker'] },
   { pattern: /^qa-.*\.check\.md$/,     step: STEPS.check, agents: ['qa-feature-tester', 'qa-api-tester'] },
   { basename: 'code-review-reply.check.md', step: STEPS.check, agents: ['developer-nodejs-tdd', 'developer-react-senior', 'developer-devops'] },
+  { basename: 'review-accountability.json', step: STEPS.follow_up, agents: ['follow-up-pr'] },
 ];
 
 // Protected state file basenames — block direct Edit/Write/MultiEdit/Bash writes
