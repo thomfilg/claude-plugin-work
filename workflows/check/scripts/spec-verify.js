@@ -56,7 +56,7 @@ function validatePath(p) {
   if (segments.some(seg => seg === '..')) {
     return { valid: false, reason: `Path traversal rejected: ${p}` };
   }
-  return { valid: true, resolved: normalized };
+  return { valid: true, resolved: normalized }; // segment-based traversal check above
 }
 
 /** Directories to skip during glob traversal to avoid slow/flaky gate checks */
@@ -105,7 +105,7 @@ function matchParts(dir, parts) {
         results.push(...matchParts(subdir, parts));
       }
     }
-    return [...new Set(results)];
+    return [...new Set(results)]; // dedupe across ** expansion paths
   }
 
   // Convert glob pattern to regex

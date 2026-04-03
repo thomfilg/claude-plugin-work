@@ -132,7 +132,7 @@ const CHECK_GATE_RULES = [
           .map(c => `Spec verification failed: ${c.type} ${Array.isArray(c.args) ? c.args.join(' ') : ''} — ${c.reason || 'check failed'}`);
       } catch (/** @type {Error & { stdout?: string, stderr?: string }} */ err) {
         return parseSpecVerifyError(err);
-      }
+      } // execFileSync throw handled by parseSpecVerifyError above
     },
   },
 ];
