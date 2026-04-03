@@ -104,9 +104,10 @@ describe('check-gate (unit)', () => {
     const ticketDir = path.join(TEMP, testTicket);
     fs.writeFileSync(path.join(ticketDir, 'spec.md'),
       '# Spec\n\n## Summary\nLegacy spec without verification checklist\n');
+    // Verify full check-gate passes (fail-open for legacy spec without checklist)
     const result = validateCheckGate(TEMP, testTicket);
-    // The spec-verification rule should pass (fail-open) since there's no checklist
-    // Note: running-agents may also pass since there are no tmux sessions for this test ticket
+    assert.equal(result.valid, true);
+    // Also verify the spec-verification rule independently
     const specRule = CHECK_GATE_RULES.find(r => r.name === 'spec-verification');
     const reasons = specRule.check(ticketDir, testTicket);
     assert.equal(reasons.length, 0);

@@ -118,7 +118,9 @@ const CHECK_GATE_RULES = [
             }
           } catch { /* parse error, fall through */ }
         }
-        return [`Spec verification script error: ${err.message || 'unknown error'}`];
+        const stderr = err.stderr ? err.stderr.toString().trim() : '';
+        const detail = stderr || err.message || 'unknown error';
+        return [`Spec verification script error: ${detail}`];
       }
     },
   },

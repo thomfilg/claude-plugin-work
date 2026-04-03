@@ -43,6 +43,9 @@ function getWorktreeRoot(specPath) {
  * @returns {{ valid: boolean, reason?: string }}
  */
 function validatePath(p) {
+  if (typeof p !== 'string' || p.length === 0) {
+    return { valid: false, reason: `Missing or invalid path argument: ${p}` };
+  }
   if (path.isAbsolute(p)) {
     return { valid: false, reason: `Absolute path rejected: ${p}` };
   }
@@ -206,6 +209,9 @@ function parseMarkerLine(line) {
  */
 function checkFileExists(args, root) {
   const [filePath] = args;
+  if (!filePath) {
+    return { type: 'FILE_EXISTS', args, passed: false, reason: 'FILE_EXISTS requires one argument: <path>' };
+  }
   const validation = validatePath(filePath);
   if (!validation.valid) {
     return { type: 'FILE_EXISTS', args, passed: false, reason: validation.reason };
@@ -236,7 +242,7 @@ function checkGrep(args, root) {
   // Parse /regex/flags
   const match = /^\/(.+)\/([gimsuy]*)$/.exec(patternStr);
   if (!match) {
-    return { type: 'GREP', args, passed: false, reason: `Invalid regex pattern: ${patternStr} — must use /regex/ delimiters` };
+    return { type: 'GREP', args, passed: false, reason: `Invalid regex pattern: ${String(patternStr)} — must use /regex/ delimiters` };
   }
 
   /** @type {RegExp} */
@@ -278,8 +284,9 @@ function checkTestCount(args, root) {
     return { type: 'TEST_COUNT', args, passed: false, reason: `Invalid minimum count: ${minStr}` };
   }
 
-  // Validate the glob pattern doesn't contain path traversal
-  const validation = validatePath(globPattern.split('*')[0] || '.');
+  // Validate the glob pattern prefix (before any wildcards) doesn't contain path traversal
+  const globPrefix = globPattern.split('*')[0] || '.';
+  const validation = validatePath(globPrefix);
   if (!validation.valid) {
     return { type: 'TEST_COUNT', args, passed: false, reason: validation.reason };
   }
