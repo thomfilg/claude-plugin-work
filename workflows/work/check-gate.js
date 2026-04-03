@@ -99,6 +99,7 @@ const CHECK_GATE_RULES = [
           stdio: ['pipe', 'pipe', 'pipe'],
         });
         const result = JSON.parse(stdout);
+        if (typeof result.success !== 'boolean') return ['Spec verification returned unexpected output format'];
         if (result.success) return [];
         // Collect failure reasons from individual checks
         return result.checks

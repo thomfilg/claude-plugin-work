@@ -128,7 +128,7 @@ function matchParts(dir, parts) {
  * @returns {{ hasChecklist: boolean, markers: Array<{ type: string, args: string[] }> }}
  */
 function parseChecklist(content) {
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   let inChecklist = false;
   /** @type {Array<{ type: string, args: string[] }>} */
   const markers = [];
@@ -163,7 +163,7 @@ function parseChecklist(content) {
     markers.push({ type, args });
   }
 
-  return { hasChecklist: inChecklist && true, markers };
+  return { hasChecklist: inChecklist, markers };
 }
 
 /**
@@ -306,6 +306,9 @@ function checkTestCount(args, root) {
  */
 function checkReuses(args, root) {
   const [filePath, importPattern] = args;
+  if (!filePath || !importPattern) {
+    return { type: 'REUSES', args, passed: false, reason: 'REUSES requires two arguments: <path> <import-pattern>' };
+  }
   const validation = validatePath(filePath);
   if (!validation.valid) {
     return { type: 'REUSES', args, passed: false, reason: validation.reason };
