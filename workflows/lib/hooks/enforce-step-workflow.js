@@ -22,7 +22,6 @@
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 // (Patch 11) Gate transient stderr logging behind debug env var — declared early for use in handlers
@@ -215,9 +214,8 @@ const WORKFLOWS = [
           // 2. CI checks must all pass (or have no checks)
           const checksJson = execFileSync('gh', ['pr', 'checks', prNum, '--json', 'state,name'], opts).trim();
           const checks = JSON.parse(checksJson || '[]');
-          const hasFailure = checks.some(c => c.state === 'FAILURE' || c.state === 'ERROR');
-          const hasPending = checks.some(c => c.state === 'PENDING');
-          if (hasFailure || hasPending) return false;
+          const badStates = new Set(['FAILURE', 'ERROR', 'CANCELLED', 'ACTION_REQUIRED', 'PENDING', 'STARTUP_FAILURE']);
+          if (checks.some(c => badStates.has(c.state))) return false;
 
           // 3. No blocking reviews (CHANGES_REQUESTED)
           const reviewJson = execFileSync('gh', ['pr', 'view', prNum, '--json', 'reviewDecision'], opts).trim();
