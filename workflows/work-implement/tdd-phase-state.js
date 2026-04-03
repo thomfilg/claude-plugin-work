@@ -63,6 +63,7 @@ function writeState(ticketId, state) {
   fs.mkdirSync(dir, { recursive: true });
   const tmpPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2));
+  try { fs.unlinkSync(statePath); } catch (e) { if (e && e.code !== 'ENOENT') throw e; }
   fs.renameSync(tmpPath, statePath);
 }
 
@@ -178,7 +179,8 @@ function cmdRecordRed(ticketId, args) {
   try {
     const diff = execSync('git diff --name-only', { encoding: 'utf8' }).trim();
     const staged = execSync('git diff --cached --name-only', { encoding: 'utf8' }).trim();
-    allChanged = [...new Set([...diff.split('\n'), ...staged.split('\n')].filter(Boolean))];
+    const untracked = execSync('git ls-files --others --exclude-standard', { encoding: 'utf8' }).trim();
+    allChanged = [...new Set([...diff.split('\n'), ...staged.split('\n'), ...untracked.split('\n')].filter(Boolean))];
   } catch {
     // git not available or not a repo
   }
@@ -313,13 +315,9 @@ const args = process.argv.slice(2);
 const subcommand = args[0];
 const ticketId = args[1];
 
-// Token gating: WORK_TDD_TOKEN_SKIP=1 bypasses verification.
-// In production, enforce-step-workflow.js Rule 5 issues tokens for scripts
-// listed in AGENT_GATED_SCRIPTS. Add 'tdd-phase-state.js' there to enable
-// full token enforcement. Until then, the hook-based file restrictions
-// (RED: only test files, GREEN: only production files) provide the primary
-// enforcement layer.
-// Verify caller identity via hook-issued token (skip with WORK_TDD_TOKEN_SKIP=1 for standalone use)
+// Token gating: enforce-step-workflow.js Rule 5 issues tokens via AGENT_GATED_SCRIPTS
+// where tdd-phase-state.js is registered with developer-* agents authorized.
+// WORK_TDD_TOKEN_SKIP=1 bypasses verification for standalone/debugging use.
 if (GATED_SUBCOMMANDS.includes(subcommand) && process.env.WORK_TDD_TOKEN_SKIP !== '1') {
   verifyToken();
 }

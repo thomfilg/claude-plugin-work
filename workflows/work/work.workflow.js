@@ -453,7 +453,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
       const tddStatePath = path.join(__dirname, '..', 'work-implement', 'tdd-phase-state.js');
       const resolvedProtocol = TDD_PROTOCOL
         .replace(/<TDD_STATE_PATH>/g, tddStatePath)
-        .replace(/<TICKET_ID>/g, t);
+        .replace(/<TICKET_ID>/g, safeName);
       extra.agentPrompt = `${extra.agentPrompt}\n\n${resolvedProtocol}`;
     }
     plan.push({ step: stepName, action, ...(command ? { command } : {}), reason, ...extra });
