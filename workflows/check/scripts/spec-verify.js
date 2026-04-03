@@ -339,14 +339,13 @@ function checkReuses(args, root) {
     return { type: 'REUSES', args, passed: false, reason: `File ${filePath} not found` };
   }
 
-  // Check for import or require containing the pattern
-  // Matches: import { X } from, import X from, const { X } = require(...), const X = require(...)
+  // Check for import or require containing the pattern (line-by-line to avoid cross-line false positives)
   const escaped = escapeRegex(importPattern);
   const importRegex = new RegExp(
-    `(import\\s[\\s\\S]*?${escaped}|${escaped}[\\s\\S]*?require\\s*\\(|require\\s*\\([\\s\\S]*?${escaped})`,
-    'm'
+    `(import\\s.*${escaped}|${escaped}.*require\\s*\\(|require\\s*\\(.*${escaped})`,
   );
-  if (importRegex.test(content)) {
+  const lines = content.split(/\r?\n/);
+  if (lines.some(line => importRegex.test(line))) {
     return { type: 'REUSES', args, passed: true };
   }
   return { type: 'REUSES', args, passed: false, reason: `Expected import matching "${importPattern}" in ${filePath} — not found` };
