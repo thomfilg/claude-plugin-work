@@ -39,6 +39,7 @@ function getStatePath(ticketId) {
   if (!ticketId || /[\/\\]|\.\./.test(ticketId)) {
     throw new Error(`Invalid ticket ID: ${ticketId}`);
   }
+  // Resolve from TASKS_BASE env, config module, or default HOME-based path
   const base = process.env.TASKS_BASE || (config && config.TASKS_BASE) || path.join(process.env.HOME, 'worktrees', 'tasks');
   return path.join(base, ticketId, 'tdd-phase.json');
 }
@@ -114,6 +115,7 @@ function verifyToken() {
   }
 
   const age = Date.now() - token.timestamp;
+  // Reject future timestamps (clock skew or replay attack)
   if (age < 0) {
     errorExit(`Write token timestamp is in the future (${Math.abs(age)}ms ahead).`);
   }
@@ -163,6 +165,7 @@ function cmdRecordRed(ticketId, args) {
 
   const state = readState(ticketId);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
+  // Enforce phase consistency: record-red only allowed during red phase
   if (state.currentPhase !== 'red') errorExit('Cannot record RED evidence: current phase is "' + state.currentPhase + '". Transition to red first.');
 
   // Detect changed test files via git diff
@@ -205,6 +208,7 @@ function cmdRecordGreen(ticketId, args) {
 
   const state = readState(ticketId);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
+  // Enforce phase consistency: record-green only allowed during green phase
   if (state.currentPhase !== 'green') errorExit('Cannot record GREEN evidence: current phase is "' + state.currentPhase + '". Transition to green first.');
 
   const exitCode = runTestCommand(cmd);
@@ -229,6 +233,7 @@ function cmdRecordRefactor(ticketId, args) {
 
   const state = readState(ticketId);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
+  // Enforce phase consistency: record-refactor only allowed during refactor phase
   if (state.currentPhase !== 'refactor') errorExit('Cannot record REFACTOR evidence: current phase is "' + state.currentPhase + '". Transition to refactor first.');
 
   const exitCode = runTestCommand(cmd);
@@ -309,6 +314,7 @@ const ticketId = args[1];
 // full token enforcement. Until then, the hook-based file restrictions
 // (RED: only test files, GREEN: only production files) provide the primary
 // enforcement layer.
+// Verify caller identity via hook-issued token (skip with WORK_TDD_TOKEN_SKIP=1 for standalone use)
 if (GATED_SUBCOMMANDS.includes(subcommand) && process.env.WORK_TDD_TOKEN_SKIP !== '1') {
   verifyToken();
 }

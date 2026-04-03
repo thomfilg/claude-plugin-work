@@ -130,6 +130,7 @@ function checkTddPhase(filePath) {
     } catch {
       taskBase = require('path').join(process.env.HOME, 'worktrees', 'tasks');
     }
+    // Use TASKS_BASE from env, config module, or default HOME-based fallback
     const statePath = require('path').join(taskBase, ticketId, 'tdd-phase.json');
     if (!require('fs').existsSync(statePath)) return 'no-state';
 
