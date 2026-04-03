@@ -376,8 +376,7 @@ function runChecks(markers, root) {
   return markers.map(({ type, args }) => {
     const checker = CHECKERS[type];
     if (!checker) {
-      process.stderr.write(`spec-verify: unknown marker type "${type}" — skipping (warning)\n`);
-      return { type, args, passed: true, warning: true };
+      return { type, args, passed: false, reason: `Unknown marker type "${type}" — supported types: ${Object.keys(CHECKERS).join(', ')}` };
     }
     return checker(args, root);
   });
@@ -414,6 +413,16 @@ function main() {
       console.log('No Verification Checklist found — passing (fail-open).');
     }
     process.exit(0);
+  }
+
+  if (markers.length === 0) {
+    // Checklist header exists but contains no markers — this is likely an error
+    if (jsonMode) {
+      console.log(JSON.stringify({ hasChecklist: true, checks: [], passed: 0, failed: 1, total: 0, success: false }));
+    } else {
+      console.log('Verification Checklist header found but contains no markers — failing.');
+    }
+    process.exit(1);
   }
 
   const checks = runChecks(markers, root);

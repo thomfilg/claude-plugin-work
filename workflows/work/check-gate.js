@@ -122,7 +122,8 @@ const CHECK_GATE_RULES = [
             }
           } catch { /* stdout wasn't valid JSON, fall through to generic error */ }
         }
-        return [`Spec verification script error: ${stderr || err.message || 'unknown error'}`];
+        const errorDetail = stderr || err.message || 'unknown error';
+        return [`Spec verification script error: ${errorDetail}`];
       }
     },
   },

@@ -144,22 +144,22 @@ describe('spec-verify.js', () => {
     assert.ok(json.checks[0].reason.toLowerCase().includes('regex') || json.checks[0].reason.toLowerCase().includes('invalid'));
   });
 
-  it('scenario 10: unknown marker type produces warning, not failure', () => {
+  it('scenario 10: unknown marker type fails with descriptive reason', () => {
     writeFile('src/foo.js', 'content');
     const specPath = writeSpec([
       '- FILE_EXISTS src/foo.js',
       '- ROUTE_EXISTS /api/foo',
     ]);
     const result = runScript(specPath, { json: true });
-    assert.equal(result.exitCode, 0);
+    assert.equal(result.exitCode, 1);
     const json = JSON.parse(result.stdout);
     // The known check should pass
     assert.equal(json.checks[0].passed, true);
-    // The unknown marker should be a warning, not counted as failure
+    // The unknown marker should fail with a descriptive reason
     const unknown = json.checks.find(c => c.type === 'ROUTE_EXISTS');
     assert.ok(unknown, 'unknown marker should appear in checks');
-    assert.equal(unknown.passed, true, 'unknown marker should not count as failure');
-    assert.ok(unknown.warning, 'unknown marker should have warning flag');
+    assert.equal(unknown.passed, false, 'unknown marker should fail');
+    assert.ok(unknown.reason.includes('Unknown marker type'), 'reason should mention unknown type');
   });
 
   // ── Security ────────────────────────────────────────────────────────────
