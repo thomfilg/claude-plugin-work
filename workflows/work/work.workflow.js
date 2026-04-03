@@ -972,7 +972,7 @@ function main() {
             .map(s => s.step);
           if (deferSteps.length > 0) {
             const minimalState = {
-              ticketId: ticket, description: '', currentStep: 1, status: 'in_progress',
+              ticketId: safeName_plan, description: '', currentStep: 1, status: 'in_progress',
               stepStatus: {}, checkProgress: {},
               errors: [], startTime: new Date().toISOString(),
               lastPlanTimestamp: result.timestamp,
