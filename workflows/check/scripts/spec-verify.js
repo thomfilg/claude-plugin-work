@@ -225,6 +225,9 @@ function checkFileExists(args, root) {
  */
 function checkGrep(args, root) {
   const [filePath, patternStr] = args;
+  if (!filePath || !patternStr) {
+    return { type: 'GREP', args, passed: false, reason: 'GREP requires two arguments: <path> <pattern>' };
+  }
   const validation = validatePath(filePath);
   if (!validation.valid) {
     return { type: 'GREP', args, passed: false, reason: validation.reason };
@@ -267,6 +270,9 @@ function checkGrep(args, root) {
  */
 function checkTestCount(args, root) {
   const [globPattern, minStr] = args;
+  if (!globPattern || minStr == null) {
+    return { type: 'TEST_COUNT', args, passed: false, reason: 'TEST_COUNT requires two arguments: <glob-pattern> <minimum>' };
+  }
   const minimum = parseInt(minStr, 10);
   if (isNaN(minimum)) {
     return { type: 'TEST_COUNT', args, passed: false, reason: `Invalid minimum count: ${minStr}` };

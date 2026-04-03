@@ -101,10 +101,11 @@ const CHECK_GATE_RULES = [
         const result = JSON.parse(stdout);
         if (typeof result.success !== 'boolean') return ['Spec verification returned unexpected output format'];
         if (result.success) return [];
+        if (!Array.isArray(result.checks)) return ['Spec verification failed with no check details'];
         // Collect failure reasons from individual checks
         return result.checks
           .filter(c => !c.passed)
-          .map(c => `Spec verification failed: ${c.type} ${c.args.join(' ')} — ${c.reason || 'check failed'}`);
+          .map(c => `Spec verification failed: ${c.type} ${Array.isArray(c.args) ? c.args.join(' ') : ''} — ${c.reason || 'check failed'}`);
       } catch (err) {
         // Script error (exit code 2) or parse error
         return [`Spec verification script error: ${err.message || 'unknown error'}`];
