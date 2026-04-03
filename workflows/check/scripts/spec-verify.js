@@ -278,18 +278,17 @@ function checkTestCount(args, root) {
   if (!globPattern || minStr == null) {
     return { type: 'TEST_COUNT', args, passed: false, reason: 'TEST_COUNT requires two arguments: <glob-pattern> <minimum>' };
   }
+  // Validate the glob pattern prefix (before any wildcards) doesn't contain path traversal.
+  // globPattern is guaranteed to be a non-empty string by the guard above.
+  const globPrefix = globPattern.split('*')[0] || '.';
+  const pathValidation = validatePath(globPrefix);
+  if (!pathValidation.valid) {
+    return { type: 'TEST_COUNT', args, passed: false, reason: pathValidation.reason };
+  }
   const minimum = parseInt(minStr, 10);
   if (isNaN(minimum)) {
     return { type: 'TEST_COUNT', args, passed: false, reason: `Invalid minimum count: ${minStr}` };
   }
-
-  // Validate the glob pattern prefix (before any wildcards) doesn't contain path traversal
-  const globPrefix = globPattern.split('*')[0] || '.';
-  const validation = validatePath(globPrefix);
-  if (!validation.valid) {
-    return { type: 'TEST_COUNT', args, passed: false, reason: validation.reason };
-  }
-  // globPattern is guaranteed non-null by the guard above
   const files = miniGlob(root, globPattern);
   let count = 0;
   const testPattern = /\b(?:it|test)\s*\(/g;
