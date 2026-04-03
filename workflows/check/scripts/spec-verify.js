@@ -57,7 +57,7 @@ function validatePath(p) {
     return { valid: false, reason: `Path traversal rejected: ${p}` };
   }
   return { valid: true, resolved: normalized };
-} // end validatePath — uses segment-based '..' check (line 56), not startsWith
+}
 
 /** Directories to skip during glob traversal to avoid slow/flaky gate checks */
 const GLOB_SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage']);
@@ -257,7 +257,7 @@ function checkGrep(args, root) {
     return { type: 'GREP', args, passed: false, reason: `Invalid regex: ${err.message}` };
   }
 
-  const full = path.join(root, filePath);
+  const full = path.resolve(root, validation.resolved);
   /** @type {string} */
   let content;
   try {
@@ -330,7 +330,7 @@ function checkReuses(args, root) {
     return { type: 'REUSES', args, passed: false, reason: validation.reason };
   }
 
-  const full = path.join(root, filePath);
+  const full = path.resolve(root, validation.resolved);
   /** @type {string} */
   let content;
   try {
