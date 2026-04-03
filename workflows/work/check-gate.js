@@ -20,6 +20,28 @@ const { execFileSync } = require('child_process');
 function fileExists(p) { return fs.existsSync(p); }
 function readFile(p) { try { return fs.readFileSync(p, 'utf-8'); } catch { return ''; } }
 
+/**
+ * Parse execFileSync error from spec-verify.js execution.
+ * @param {Error & { stdout?: string, stderr?: string }} err
+ * @returns {string[]}
+ */
+function parseSpecVerifyError(err) {
+  const stdout = typeof err.stdout === 'string' ? err.stdout : (Buffer.isBuffer(err.stdout) ? err.stdout.toString() : '');
+  const stderr = typeof err.stderr === 'string' ? err.stderr.trim() : (Buffer.isBuffer(err.stderr) ? err.stderr.toString().trim() : '');
+  if (stdout) {
+    try {
+      const result = JSON.parse(stdout);
+      if (typeof result.success === 'boolean' && !result.success && Array.isArray(result.checks)) {
+        const failures = result.checks
+          .filter(c => !c.passed)
+          .map(c => `Spec verification failed: ${c.type} ${Array.isArray(c.args) ? c.args.join(' ') : ''} — ${c.reason || 'check failed'}`);
+        return failures.length > 0 ? failures : ['Spec verification failed but no specific check details available'];
+      }
+    } catch { /* stdout wasn't valid JSON, fall through to generic error */ }
+  }
+  return [`Spec verification script error: ${stderr || err.message || 'unknown error'}`];
+}
+
 function listFiles(dir, pattern) {
   if (!fileExists(dir)) return [];
   try {
@@ -83,6 +105,31 @@ const CHECK_GATE_RULES = [
         }
         return reasons;
       }, []);
+    },
+  },
+  {
+    name: 'spec-verification',
+    description: 'Spec Verification Checklist markers must all pass (fail-open for legacy specs)',
+    check(dir) {
+      const specPath = path.join(dir, 'spec.md');
+      if (!fileExists(specPath)) return []; // fail-open: no spec = pass
+      const scriptPath = path.resolve(__dirname, '..', 'check', 'scripts', 'spec-verify.js');
+      try {
+        const stdout = execFileSync('node', [scriptPath, specPath, '--json'], {
+          encoding: 'utf-8',
+          timeout: 30000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        const result = JSON.parse(stdout);
+        if (typeof result.success !== 'boolean') return ['Spec verification returned unexpected output format'];
+        if (result.success) return [];
+        if (!Array.isArray(result.checks)) return ['Spec verification failed with no check details'];
+        return result.checks
+          .filter(c => !c.passed)
+          .map(c => `Spec verification failed: ${c.type} ${Array.isArray(c.args) ? c.args.join(' ') : ''} — ${c.reason || 'check failed'}`);
+      } catch (err) {
+        return parseSpecVerifyError(err);
+      }
     },
   },
 ];
