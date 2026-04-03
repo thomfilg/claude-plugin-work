@@ -40,7 +40,7 @@ function getWorktreeRoot(specPath) {
 /**
  * Validate a path argument: reject absolute paths and `..` traversal.
  * @param {string} p - the path argument from the marker
- * @returns {{ valid: boolean, reason?: string }}
+ * @returns {{ valid: boolean, reason?: string, resolved?: string }}
  */
 function validatePath(p) {
   if (typeof p !== 'string' || p.length === 0) {
@@ -50,16 +50,21 @@ function validatePath(p) {
     return { valid: false, reason: `Absolute path rejected: ${p}` };
   }
   const normalized = path.normalize(p);
-  if (normalized.startsWith('..') || normalized.includes(`${path.sep}..`)) {
+  // Check each path segment individually — only reject literal '..' segments,
+  // not paths that merely contain '..' as part of a name (e.g., '..cache')
+  const segments = normalized.split(path.sep);
+  if (segments.some(seg => seg === '..')) {
     return { valid: false, reason: `Path traversal rejected: ${p}` };
   }
-  // All validations passed (type-check, absolute path, traversal)
   return { valid: true, resolved: normalized };
 }
 
+/** Directories to skip during glob traversal to avoid slow/flaky gate checks */
+const GLOB_SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage']);
+
 /**
  * Minimal recursive glob using fs.readdirSync.
- * Supports * and ** glob patterns.
+ * Supports * and ** glob patterns. Skips common large/irrelevant directories.
  * @param {string} base - root directory
  * @param {string} pattern - glob pattern (e.g. "src/**\/*.test.js")
  * @returns {string[]} matching file paths (absolute)
@@ -95,7 +100,7 @@ function matchParts(dir, parts) {
     // Try matching in subdirectories (matchParts(subdir, parts) recurses with **
     // still active, which internally tries rest at each level — no separate call needed)
     for (const entry of entries) {
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() && !GLOB_SKIP_DIRS.has(entry.name)) {
         const subdir = path.join(dir, entry.name);
         results.push(...matchParts(subdir, parts));
       }
@@ -115,7 +120,7 @@ function matchParts(dir, parts) {
     const full = path.join(dir, entry.name);
     if (rest.length === 0) {
       if (entry.isFile()) results.push(full);
-    } else if (entry.isDirectory()) {
+    } else if (entry.isDirectory() && !GLOB_SKIP_DIRS.has(entry.name)) {
       results.push(...matchParts(full, rest));
     }
   }

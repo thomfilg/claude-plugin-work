@@ -130,7 +130,7 @@ const CHECK_GATE_RULES = [
         return result.checks
           .filter(c => !c.passed)
           .map(c => `Spec verification failed: ${c.type} ${Array.isArray(c.args) ? c.args.join(' ') : ''} — ${c.reason || 'check failed'}`);
-      } catch (err) {
+      } catch (/** @type {Error & { stdout?: string, stderr?: string }} */ err) {
         return parseSpecVerifyError(err);
       }
     },
