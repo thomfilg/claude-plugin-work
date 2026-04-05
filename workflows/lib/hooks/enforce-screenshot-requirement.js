@@ -154,7 +154,8 @@ function blockIfNoScreenshots(hookData) {
   if (!ticketId) return;
   // Skip screenshot enforcement when no web apps are configured (GH-181)
   // Use process.env.WEB_APPS directly to avoid circular dependencies in the hook
-  const webApps = JSON.parse(process.env.WEB_APPS || '[]');
+  let webApps = [];
+  try { webApps = JSON.parse(process.env.WEB_APPS || '[]'); } catch { /* malformed — treat as empty */ }
   if (!Array.isArray(webApps) || webApps.length === 0) return;
   if (fs.existsSync(skipMarkerPath(ticketId))) return;
   if (!hasTsxChanges()) return;

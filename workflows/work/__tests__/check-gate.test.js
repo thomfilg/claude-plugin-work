@@ -21,7 +21,7 @@ beforeEach(() => { testTicket = `T-${++testCount}`; });
 
 describe('check-gate (unit)', () => {
 
-  it('CHECK_GATE_RULES has 3 rules with required shape', () => {
+  it('CHECK_GATE_RULES has 4 rules with required shape', () => {
     assert.equal(CHECK_GATE_RULES.length, 4);
     for (const rule of CHECK_GATE_RULES) {
       assert.ok(rule.name, 'rule must have a name');
