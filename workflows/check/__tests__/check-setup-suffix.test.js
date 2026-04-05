@@ -64,4 +64,24 @@ describe('check-setup suffix preservation (GH-181)', () => {
     const taskId = deriveTaskId('GH-181/phase1', 'some-branch');
     assert.equal(taskId, 'GH-181/phase1');
   });
+
+  it('deriveTaskId rejects absolute paths and falls back to branch', () => {
+    const taskId = deriveTaskId('/etc/passwd', 'safe-branch');
+    assert.equal(taskId, 'safe-branch');
+  });
+
+  it('deriveTaskId rejects path traversal and falls back to branch', () => {
+    const taskId = deriveTaskId('../../../etc/passwd', 'safe-branch');
+    assert.equal(taskId, 'safe-branch');
+  });
+
+  it('deriveTaskId rejects nested suffixes (multiple slashes)', () => {
+    const taskId = deriveTaskId('GH-181/phase1/extra', 'safe-branch');
+    assert.equal(taskId, 'safe-branch');
+  });
+
+  it('deriveTaskId rejects unsafe characters in ticketId', () => {
+    const taskId = deriveTaskId('GH-181; rm -rf /', 'safe-branch');
+    assert.equal(taskId, 'safe-branch');
+  });
 });

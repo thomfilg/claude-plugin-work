@@ -337,7 +337,18 @@ function loadDocsFromPaths(envVarName, csvPaths, repoRoot) {
  * Only sanitize the branch name fallback: strip unsafe chars to avoid path issues.
  */
 function deriveTaskId(ticketId, branchName) {
-  return ticketId || branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
+  if (ticketId) {
+    // Validate: reject absolute paths, path traversal, and unsafe characters.
+    // Allow one optional suffix segment (e.g., GH-181/phase1) with safe chars.
+    if (path.isAbsolute(ticketId)) return branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
+    if (/\.\./.test(ticketId)) return branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
+    // Allow: alphanumeric, hyphens, underscores, dots, and one / for suffix
+    if (!/^[a-zA-Z0-9._-]+(\/[a-zA-Z0-9._-]+)?$/.test(ticketId)) {
+      return branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
+    }
+    return ticketId;
+  }
+  return branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 
 /**
