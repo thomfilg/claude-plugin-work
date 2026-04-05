@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const { WorkflowState } = require('../workflow-state');
+const { WorkflowState, _legacyWarned } = require('../workflow-state');
 
 const TEST_BASE = path.join(os.tmpdir(), 'workflow-state-test-' + process.pid);
 const STEPS = ['1_parse', '2_draft', '3_review', '4_publish'];
@@ -388,6 +388,7 @@ describe('WorkflowState', () => {
     afterEach(() => {
       const instanceDir = path.join(ISOLATION_DIR, INSTANCE);
       fs.rmSync(instanceDir, { recursive: true, force: true });
+      _legacyWarned.clear();
     });
 
     it('two workflows with different names produce separate state files and load only their own state', () => {
@@ -497,6 +498,8 @@ describe('WorkflowState', () => {
 
       try {
         wsCheck.load(INSTANCE);
+        // Second load should NOT emit again (once-per-key)
+        wsCheck.load(INSTANCE);
       } finally {
         process.stderr.write = originalWrite;
       }
@@ -504,6 +507,9 @@ describe('WorkflowState', () => {
       assert.ok(stderrOutput.includes('DEPRECATED'), 'Should emit DEPRECATED warning');
       assert.ok(stderrOutput.includes('legacy .workflow-state.json'), 'Should mention legacy file');
       assert.ok(stderrOutput.includes('check'), 'Should mention workflow name');
+      // Warning should appear exactly once despite two load() calls
+      const count = (stderrOutput.match(/DEPRECATED/g) || []).length;
+      assert.strictEqual(count, 1, 'Deprecation warning should be emitted only once per workflow+instanceId');
     });
   });
 });
