@@ -120,13 +120,12 @@ function autoInitTdd(ticketId) {
   let fd;
   let created = false;
   try {
-    // Validate ticketId to prevent path traversal (mirrors tdd-phase-state.js)
+    // Validate ticketId — reject traversal chars and verify resolved path stays within TASKS_BASE
     if (!ticketId || /\.\./.test(ticketId) || /\\/.test(ticketId)) return;
     const tddStatePath = path.join(TASKS_BASE, ticketId, 'tdd-phase.json');
-    const resolved = path.resolve(tddStatePath);
-    if (!resolved.startsWith(path.resolve(TASKS_BASE) + path.sep)) return;
-    const dir = path.dirname(tddStatePath);
-    fs.mkdirSync(dir, { recursive: true });
+    if (!path.resolve(tddStatePath).startsWith(path.resolve(TASKS_BASE) + path.sep)) return;
+    // Create directory and write initial RED phase state
+    fs.mkdirSync(path.dirname(tddStatePath), { recursive: true });
     const state = { currentPhase: 'red', currentCycle: 1, cycles: [] };
     // Atomic exclusive create: 'wx' flag fails with EEXIST if file exists (no TOCTOU)
     fd = fs.openSync(tddStatePath, 'wx');
