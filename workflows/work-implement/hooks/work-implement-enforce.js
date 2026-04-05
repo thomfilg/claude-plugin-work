@@ -108,7 +108,7 @@ function isFileAllowed(filePath) {
 
 /**
  * Check TDD phase restrictions for a file path.
- * Returns 'block', 'allow', or 'no-state'.
+ * Returns 'block', 'allow', 'no-file' (tdd-phase.json missing), or 'no-state' (infrastructure issue).
  */
 function checkTddPhase(filePath) {
   try {
@@ -142,7 +142,7 @@ function checkTddPhase(filePath) {
     }
     // Use TASKS_BASE from env, config module, or default HOME-based fallback
     const statePath = require('path').join(taskBase, ticketId, 'tdd-phase.json');
-    if (!require('fs').existsSync(statePath)) return 'no-state';
+    if (!require('fs').existsSync(statePath)) return 'no-file';
 
     const state = JSON.parse(require('fs').readFileSync(statePath, 'utf8'));
     const { PHASE_HOOKS } = require(require('path').join(__dirname, '..', 'tdd-phase-registry'));
@@ -204,11 +204,12 @@ async function main() {
   }
   // Defense-in-depth: if TDD state doesn't exist and this is a production file,
   // block until TDD is initialized. This catches cases where auto-init didn't run.
-  if (tddPhaseResult === 'no-state' && !isFileAllowed(filePath) && hasDeveloperAgentBeenInvoked(transcriptPath)) {
+  if (tddPhaseResult === 'no-file' && !isFileAllowed(filePath) && hasDeveloperAgentBeenInvoked(transcriptPath)) {
+    const tddScript = require('path').join(__dirname, '..', 'tdd-phase-state.js');
     process.stderr.write(
       'TDD not initialized. Production file writes are blocked until TDD state exists.\n' +
-      'Run: node tdd-phase-state.js init <TICKET_ID>\n' +
-      'Or use: node tdd-phase-state.js exception <TICKET_ID> --reason "<reason>"\n'
+      `Run: node ${tddScript} init <TICKET_ID>\n` +
+      `Or use: node ${tddScript} exception <TICKET_ID> --reason "<reason>"\n`
     );
     process.exit(2);
   }
