@@ -206,11 +206,11 @@ async function main() {
   // block until TDD is initialized. This catches cases where auto-init didn't run.
   if (tddPhaseResult === 'no-file' && !isFileAllowed(filePath) && hasDeveloperAgentBeenInvoked(transcriptPath)) {
     const tddScript = require('path').join(__dirname, '..', 'tdd-phase-state.js');
-    process.stderr.write(
+    const msg =
       'TDD not initialized. Production file writes are blocked until TDD state exists.\n' +
       `Run: node ${tddScript} init <TICKET_ID>\n` +
-      `Or use: node ${tddScript} exception <TICKET_ID> --reason "<reason>"\n`
-    );
+      `Or use: node ${tddScript} exception <TICKET_ID> --reason "<reason>"\n`;
+    process.stderr.write(msg);
     process.exit(2);
   }
 
