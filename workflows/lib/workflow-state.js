@@ -319,4 +319,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { WorkflowState, _legacyWarned };
+module.exports = { WorkflowState, _resetLegacyWarnings: () => _legacyWarned.clear() };

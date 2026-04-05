@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const { WorkflowState, _legacyWarned } = require('../workflow-state');
+const { WorkflowState, _resetLegacyWarnings } = require('../workflow-state');
 
 const TEST_BASE = path.join(os.tmpdir(), 'workflow-state-test-' + process.pid);
 const STEPS = ['1_parse', '2_draft', '3_review', '4_publish'];
@@ -388,7 +388,7 @@ describe('WorkflowState', () => {
     afterEach(() => {
       const instanceDir = path.join(ISOLATION_DIR, INSTANCE);
       fs.rmSync(instanceDir, { recursive: true, force: true });
-      _legacyWarned.clear();
+      _resetLegacyWarnings();
     });
 
     it('two workflows with different names produce separate state files and load only their own state', () => {
