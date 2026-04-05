@@ -552,7 +552,9 @@ async function main() {
   }
 }
 
-main().catch(() => process.exit(0));
+if (require.main === module) {
+  main().catch(() => process.exit(0));
+}
 
 module.exports = {
   loadState,

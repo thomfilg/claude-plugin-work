@@ -776,15 +776,11 @@ function transitionStep(ticket, targetStep) {
     } catch (e) {
       if (e && e.code !== 'ENOENT') { /* ignore errors */ }
     }
-    // Re-initialize TDD in RED phase after cleanup so developer agent
-    // is forced to write tests first (mirrors autoInitTdd from work-state.js).
+    // Re-initialize TDD in RED phase after cleanup
     try {
-      const tddDir = path.join(TASKS_BASE, safeTicket);
-      fs.mkdirSync(tddDir, { recursive: true });
-      const initState = { currentPhase: 'red', currentCycle: 1, cycles: [] };
-      const tddPath = path.join(tddDir, 'tdd-phase.json');
-      fs.writeFileSync(tddPath, JSON.stringify(initState, null, 2), { flag: 'wx' });
-    } catch { /* fail-open: EEXIST or write error */ }
+      const { autoInitTdd } = require(path.join(__dirname, 'work-state'));
+      autoInitTdd(safeTicket);
+    } catch { /* fail-open: auto-init failure must not block transition */ }
   }
 
   // Initialize state if needed
