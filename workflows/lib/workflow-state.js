@@ -52,7 +52,10 @@ class WorkflowState {
     if (fs.existsSync(legacyPath)) {
       try {
         const state = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
-        if (state?.workflow === this.workflowName) return state;
+        if (state?.workflow === this.workflowName) {
+          process.stderr.write(`[workflow-state] DEPRECATED: loading from legacy .workflow-state.json for workflow "${this.workflowName}". Migrate to scoped file format.\n`);
+          return state;
+        }
       } catch { /* ignore */ }
     }
     return null;
