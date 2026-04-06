@@ -2249,9 +2249,9 @@ describe('enforce-step-workflow', () => {
       let script = '#!/bin/bash\nARGS="$*"\n';
       for (const [pattern, response] of Object.entries(responseMap)) {
         if (response === 'EXIT1') {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then exit 1; fi\n`;
         } else {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
         }
       }
       script += 'exit 1\n';
@@ -2263,9 +2263,9 @@ describe('enforce-step-workflow', () => {
       let script = '#!/bin/bash\nARGS="$*"\n';
       for (const [pattern, response] of Object.entries(responseMap)) {
         if (response === 'EXIT1') {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then exit 1; fi\n`;
         } else {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
         }
       }
       script += 'exit 1\n';
@@ -2286,6 +2286,7 @@ describe('enforce-step-workflow', () => {
         'PreToolUse',
         {
           PATH: `${FAKE_GIT_DIR}:${FAKE_GH_DIR}:${process.env.PATH}`,
+          TASKS_BASE,
           ...extraEnv,
         },
       );
@@ -2301,6 +2302,9 @@ describe('enforce-step-workflow', () => {
 
     it('allows transition via branch-name fallback when commit messages lack ticket ID', async () => {
       writeFakeGit({
+        'rev-parse --show-toplevel': process.cwd(),
+        'symbolic-ref': 'EXIT1',
+        'rev-parse --verify': 'EXIT1',
         'rev-parse HEAD': 'abc123',
         'log --oneline': '',  // No commits with ticket ID
         'branch --show-current': `${TEST_TICKET}-fix-something`,
@@ -2313,6 +2317,9 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when branch does not contain ticket ID', async () => {
       writeFakeGit({
+        'rev-parse --show-toplevel': process.cwd(),
+        'symbolic-ref': 'EXIT1',
+        'rev-parse --verify': 'EXIT1',
         'rev-parse HEAD': 'abc123',
         'log --oneline': '',
         'branch --show-current': 'some-unrelated-branch',
@@ -2326,6 +2333,9 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when branch matches but no committed changes (empty diff)', async () => {
       writeFakeGit({
+        'rev-parse --show-toplevel': process.cwd(),
+        'symbolic-ref': 'EXIT1',
+        'rev-parse --verify': 'EXIT1',
         'rev-parse HEAD': 'abc123',
         'log --oneline': '',
         'branch --show-current': `${TEST_TICKET}-fix-something`,
@@ -2339,6 +2349,9 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition on detached HEAD (branch --show-current returns empty)', async () => {
       writeFakeGit({
+        'rev-parse --show-toplevel': process.cwd(),
+        'symbolic-ref': 'EXIT1',
+        'rev-parse --verify': 'EXIT1',
         'rev-parse HEAD': 'abc123',
         'log --oneline': '',
         'branch --show-current': '',
@@ -2356,25 +2369,46 @@ describe('enforce-step-workflow', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('PR verify --head branch flag (GH-191)', () => {
+    const FAKE_GIT_DIR = path.join(os.tmpdir(), `fake-git-pr-191-${process.pid}`);
+    const FAKE_GIT_PATH = path.join(FAKE_GIT_DIR, 'git');
     const FAKE_GH_DIR = path.join(os.tmpdir(), `fake-gh-pr-191-${process.pid}`);
     const FAKE_GH_PATH = path.join(FAKE_GH_DIR, 'gh');
     const ORCHESTRATOR_PATH = path.join(__dirname, '..', '..', 'work', 'work.workflow.js');
+    const PR_TEST_BRANCH = `${TEST_TICKET}-pr-test`;
+
+    function writeFakeGit() {
+      if (!fs.existsSync(FAKE_GIT_DIR)) fs.mkdirSync(FAKE_GIT_DIR, { recursive: true });
+      // Provide controlled branch name so --head flag is always added,
+      // even in CI where the checkout may be in detached HEAD state.
+      const script = [
+        '#!/bin/bash',
+        'ARGS="$*"',
+        `if echo "$ARGS" | grep -qF -- "branch --show-current"; then echo '${PR_TEST_BRANCH}'; exit 0; fi`,
+        `if echo "$ARGS" | grep -qF -- "rev-parse --show-toplevel"; then echo '${process.cwd()}'; exit 0; fi`,
+        // Let symbolic-ref / rev-parse --verify fail so getBaseBranch falls through
+        'if echo "$ARGS" | grep -qF -- "symbolic-ref"; then exit 1; fi',
+        'if echo "$ARGS" | grep -qF -- "rev-parse --verify"; then exit 1; fi',
+        'exit 1',
+      ].join('\n');
+      fs.writeFileSync(FAKE_GIT_PATH, script, { mode: 0o755 });
+    }
 
     function writeFakeGh(responseMap) {
       if (!fs.existsSync(FAKE_GH_DIR)) fs.mkdirSync(FAKE_GH_DIR, { recursive: true });
       let script = '#!/bin/bash\nARGS="$*"\n';
       for (const [pattern, response] of Object.entries(responseMap)) {
         if (response === 'EXIT1') {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then exit 1; fi\n`;
         } else {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
         }
       }
       script += 'exit 1\n';
       fs.writeFileSync(FAKE_GH_PATH, script, { mode: 0o755 });
     }
 
-    function cleanupFakeGh() {
+    function cleanup() {
+      try { fs.rmSync(FAKE_GIT_DIR, { recursive: true, force: true }); } catch {}
       try { fs.rmSync(FAKE_GH_DIR, { recursive: true, force: true }); } catch {}
     }
 
@@ -2385,16 +2419,17 @@ describe('enforce-step-workflow', () => {
           tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} ready` },
         },
         'PreToolUse',
-        { PATH: `${FAKE_GH_DIR}:${process.env.PATH}`, ...extraEnv },
+        { PATH: `${FAKE_GIT_DIR}:${FAKE_GH_DIR}:${process.env.PATH}`, TASKS_BASE, ...extraEnv },
       );
     }
 
     beforeEach(() => {
+      writeFakeGit();
       writeWorkState(makeStepStatus('pr', WORK_STEPS));
     });
 
     afterEach(() => {
-      cleanupFakeGh();
+      cleanup();
     });
 
     it('passes --head flag with current branch name to gh pr view', async () => {
@@ -2413,25 +2448,46 @@ describe('enforce-step-workflow', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('follow_up verify --head branch flag (GH-191)', () => {
+    const FAKE_GIT_DIR = path.join(os.tmpdir(), `fake-git-followup-191-${process.pid}`);
+    const FAKE_GIT_PATH = path.join(FAKE_GIT_DIR, 'git');
     const FAKE_GH_DIR = path.join(os.tmpdir(), `fake-gh-followup-191-${process.pid}`);
     const FAKE_GH_PATH = path.join(FAKE_GH_DIR, 'gh');
     const ORCHESTRATOR_PATH = path.join(__dirname, '..', '..', 'work', 'work.workflow.js');
+    const FOLLOWUP_TEST_BRANCH = `${TEST_TICKET}-followup-test`;
+
+    function writeFakeGit() {
+      if (!fs.existsSync(FAKE_GIT_DIR)) fs.mkdirSync(FAKE_GIT_DIR, { recursive: true });
+      // Provide controlled branch name so --head flag is always added,
+      // even in CI where the checkout may be in detached HEAD state.
+      const script = [
+        '#!/bin/bash',
+        'ARGS="$*"',
+        `if echo "$ARGS" | grep -qF -- "branch --show-current"; then echo '${FOLLOWUP_TEST_BRANCH}'; exit 0; fi`,
+        `if echo "$ARGS" | grep -qF -- "rev-parse --show-toplevel"; then echo '${process.cwd()}'; exit 0; fi`,
+        // Let symbolic-ref / rev-parse --verify fail so getBaseBranch falls through
+        'if echo "$ARGS" | grep -qF -- "symbolic-ref"; then exit 1; fi',
+        'if echo "$ARGS" | grep -qF -- "rev-parse --verify"; then exit 1; fi',
+        'exit 1',
+      ].join('\n');
+      fs.writeFileSync(FAKE_GIT_PATH, script, { mode: 0o755 });
+    }
 
     function writeFakeGh(responseMap) {
       if (!fs.existsSync(FAKE_GH_DIR)) fs.mkdirSync(FAKE_GH_DIR, { recursive: true });
       let script = '#!/bin/bash\nARGS="$*"\n';
       for (const [pattern, response] of Object.entries(responseMap)) {
         if (response === 'EXIT1') {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then exit 1; fi\n`;
         } else {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
         }
       }
       script += 'exit 1\n';
       fs.writeFileSync(FAKE_GH_PATH, script, { mode: 0o755 });
     }
 
-    function cleanupFakeGh() {
+    function cleanup() {
+      try { fs.rmSync(FAKE_GIT_DIR, { recursive: true, force: true }); } catch {}
       try { fs.rmSync(FAKE_GH_DIR, { recursive: true, force: true }); } catch {}
     }
 
@@ -2442,16 +2498,17 @@ describe('enforce-step-workflow', () => {
           tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} ci` },
         },
         'PreToolUse',
-        { PATH: `${FAKE_GH_DIR}:${process.env.PATH}`, ...extraEnv },
+        { PATH: `${FAKE_GIT_DIR}:${FAKE_GH_DIR}:${process.env.PATH}`, TASKS_BASE, ...extraEnv },
       );
     }
 
     beforeEach(() => {
+      writeFakeGit();
       writeWorkState(makeStepStatus('follow_up', WORK_STEPS));
     });
 
     afterEach(() => {
-      cleanupFakeGh();
+      cleanup();
     });
 
     it('passes --head flag to initial gh pr view in follow_up verify', async () => {
