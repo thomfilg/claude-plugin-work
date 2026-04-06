@@ -2391,9 +2391,9 @@ describe('enforce-step-workflow', () => {
     }
 
     beforeEach(() => {
-      // Create a bare repo as "origin"
+      // Create a bare repo as "origin" with default branch "main"
       bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'commit-verify-bare-'));
-      execSync('git init --bare', { cwd: bareDir, stdio: 'pipe' });
+      execSync('git init --bare --initial-branch=main', { cwd: bareDir, stdio: 'pipe' });
 
       // Clone it
       gitRepoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'commit-verify-work-'));
