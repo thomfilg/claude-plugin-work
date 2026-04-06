@@ -824,7 +824,8 @@ function handlePreToolUse(hookData) {
           // Only block when a *different* step is currently active.
           // null currentStep (no workflow running) deliberately skips gating —
           // scripts are unrestricted outside of an active workflow.
-          if (currentStep && currentStep !== requiredStep) {
+          const wrongStepActive = currentStep && currentStep !== requiredStep;
+          if (wrongStepActive) {
             didBlock = true;
             process.stderr.write(
               `BLOCKED: Cannot issue write token — step '${currentStep}' is active, not '${requiredStep}'.\n` +
