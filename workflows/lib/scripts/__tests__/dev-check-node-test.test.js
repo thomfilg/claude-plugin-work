@@ -308,11 +308,9 @@ describe('get_changed_files', () => {
   it('deduplicates files present in multiple states', () => {
     const run = (cmd) => execSync(cmd, { cwd: repoDir, encoding: 'utf8', stdio: 'pipe' });
 
-    // Commit a file on the feature branch, then also modify it (uncommitted)
+    // Stage a file (appears in --cached) and also leave it modified (appears in unstaged diff)
     fs.writeFileSync(path.join(repoDir, 'dup.ts'), 'v1');
     run('git add dup.ts');
-    run('git commit -m "add dup"');
-    // Now modify it again (unstaged) — it appears in both committed diff and unstaged diff
     fs.writeFileSync(path.join(repoDir, 'dup.ts'), 'v2');
 
     const result = runGetChangedFiles(repoDir, '\\.(ts|tsx)$');

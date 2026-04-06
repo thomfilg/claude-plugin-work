@@ -2395,7 +2395,7 @@ describe('enforce-step-workflow', () => {
       bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'commit-verify-bare-'));
       execSync('git init --bare --initial-branch=main', { cwd: bareDir, stdio: 'pipe' });
 
-      // Clone it
+      // Clone bare repo (default branch is explicitly "main" via --initial-branch)
       gitRepoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'commit-verify-work-'));
       execSync(`git clone "${bareDir}" .`, { cwd: gitRepoDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: gitRepoDir, stdio: 'pipe' });
