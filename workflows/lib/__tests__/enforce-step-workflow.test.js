@@ -1476,6 +1476,15 @@ describe('enforce-step-workflow', () => {
       assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
+    it('allows Write when no .work-state.json exists (fail-open)', async () => {
+      // Do NOT call writeWorkState — simulates no active work workflow
+      const { code } = await runHook(
+        { tool_name: 'Write', tool_input: { file_path: '/tmp/.claude/follow-up-pr-my-repo-42.json', content: '{}' } },
+        'PreToolUse',
+      );
+      assert.equal(code, 0, 'Should allow when no work state exists (fail-open)');
+    });
+
     it('allows Write to non-matching files', async () => {
       writeWorkState(makeStepStatus('implement', WORK_STEPS));
 
