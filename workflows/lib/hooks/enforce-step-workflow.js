@@ -478,7 +478,7 @@ const followUpStateProtector = createFileProtector({
       if (!state?.stepStatus) return true; // fail-open: no active work workflow
       const stepInProgress = state.stepStatus[STEPS.follow_up] === 'in_progress';
       if (!stepInProgress) return false;
-      return isRunningInAgent(hookData?.transcript_path, ['follow-up-pr'], hookData);
+      return isRunningInAgent(hookData?.transcript_path, ['follow-up-pr'], hookData); // Note: review-accountability.json is protected separately by Rule 4 (ARTIFACT_RULES)
     } catch {
       return true; // fail-open
     }

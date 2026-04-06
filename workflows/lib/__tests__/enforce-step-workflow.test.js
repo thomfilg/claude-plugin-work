@@ -1495,6 +1495,17 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Should allow Write to non-matching files');
     });
 
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Rule 4 verification: review-accountability.json Bash protection
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('Rule 4 verification: review-accountability.json Bash protection', () => {
+    // These tests verify that the existing artifactProtector (Rule 4) correctly
+    // blocks Bash writes to review-accountability.json. The file is protected
+    // via ARTIFACT_RULES, not followUpStateProtector (Rule 3c).
+
     it('blocks Bash redirect to review-accountability.json from non-follow-up-pr agent', async () => {
       writeWorkState(makeStepStatus('implement', WORK_STEPS));
 
