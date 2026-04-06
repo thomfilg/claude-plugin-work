@@ -374,7 +374,7 @@ Steps:
  */
 function getNextSubtaskStatePath(ticketId) {
   const taskDir = path.join(TASKS_BASE, safeId(ticketId));
-  const prefix = `.work-state-${ticketId}-subtask-`;
+  const prefix = `.work-state-${safeId(ticketId)}-subtask-`;
   let maxIndex = 0;
 
   if (fs.existsSync(taskDir)) {
@@ -444,7 +444,7 @@ function initSubtaskState(ticketId, description = '') {
  */
 function loadActiveSubtaskState(ticketId) {
   const taskDir = path.join(TASKS_BASE, safeId(ticketId));
-  const prefix = `.work-state-${ticketId}-subtask-`;
+  const prefix = `.work-state-${safeId(ticketId)}-subtask-`;
 
   if (!fs.existsSync(taskDir)) return null;
 
@@ -484,7 +484,7 @@ function loadActiveSubtaskState(ticketId) {
  */
 function completeSubtask(ticketId, subtaskIndex) {
   const taskDir = path.join(TASKS_BASE, safeId(ticketId));
-  const prefix = `.work-state-${ticketId}-subtask-`;
+  const prefix = `.work-state-${safeId(ticketId)}-subtask-`;
   const statePath = path.join(taskDir, `${prefix}${subtaskIndex}.json`);
 
   if (!fs.existsSync(statePath)) {

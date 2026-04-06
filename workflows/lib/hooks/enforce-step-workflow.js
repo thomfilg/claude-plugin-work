@@ -63,10 +63,15 @@ const TASKS_BASE = getConfig('TASKS_BASE') || (() => {
 
 // Sanitize ticket ID for file-system paths (#N → GH-N for GitHub Issues)
 const tp = require(path.join(__dirname, '..', 'ticket-provider'));
+let _cachedProviderConfig;
+let _providerConfigLoaded = false;
 function safeTicketPath(ticketId) {
   try {
-    const providerConfig = tp.getProviderConfig({ skipPrompt: true });
-    return tp.sanitizeTicketIdForPath(ticketId, providerConfig);
+    if (!_providerConfigLoaded) {
+      _cachedProviderConfig = tp.getProviderConfig({ skipPrompt: true });
+      _providerConfigLoaded = true;
+    }
+    return tp.sanitizeTicketIdForPath(ticketId, _cachedProviderConfig);
   } catch { return ticketId; }
 }
 
@@ -114,7 +119,7 @@ const WORKFLOWS = [
         try {
           const stateFile = path.join(TASKS_BASE, safeTicketPath(ticketId), '.work-state.json');
           const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          return state?.status === 'in_progress' && state?.ticketId === ticketId;
+          return state?.status === 'in_progress' && (state?.ticketId === ticketId || state?.ticketId === safeTicketPath(ticketId));
         } catch { return false; }
       }},
       { step: STEPS.brief, verify: (ticketId) => {
