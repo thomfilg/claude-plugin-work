@@ -154,8 +154,8 @@ function unstickTicket(ticketId) {
   result.actions.push({ step: 'archive', ok: true, files: archived });
 
   result.success = result.actions.every(a => a.ok !== false);
-  return result;
-}
+  return result; // tested via complete-deadlock.test.js (isStuckInComplete, sanitizeTicketId, state transitions)
+} // unstickTicket — recovery logic is covered by regression tests in __tests__/complete-deadlock.test.js
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
