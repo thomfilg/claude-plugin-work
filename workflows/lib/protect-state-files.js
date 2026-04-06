@@ -202,9 +202,15 @@ function createFileProtector(opts) {
    * @param {object} [hookData]
    * @returns {CheckResult}
    */
+  /** Test file path pattern — skip Vector 3 for test/mock files (GH-191) */
+  const TEST_PATH_PATTERN = /(?:__tests__|__mocks__)[\\/]|\.(?:test|spec)\.[cm]?[jt]sx?$/;
+
   function checkScriptBypass(cmd, toolInput, hookData) {
     const scripts = extractScriptPaths(cmd);
     for (const scriptPath of scripts) {
+      // Skip Vector 3 for test/mock files — they are not attack vectors (GH-191)
+      if (TEST_PATH_PATTERN.test(scriptPath)) continue;
+
       let content;
       try {
         if (!fs.existsSync(scriptPath)) continue;

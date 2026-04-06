@@ -2021,12 +2021,14 @@ describe('enforce-step-workflow', () => {
       if (!fs.existsSync(FAKE_GH_DIR)) fs.mkdirSync(FAKE_GH_DIR, { recursive: true });
 
       // Build a bash script that checks arguments
+      // Use grep -qF (fixed string) with -- to prevent patterns starting with -- from
+      // being interpreted as grep options (GH-191: patterns now include --head, --json)
       let script = '#!/bin/bash\nARGS="$*"\n';
       for (const [pattern, response] of Object.entries(responseMap)) {
         if (response === 'EXIT1') {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then exit 1; fi\n`;
         } else {
-          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+          script += `if echo "$ARGS" | grep -qF -- "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
         }
       }
       script += 'exit 1\n'; // Default: fail
@@ -2059,7 +2061,7 @@ describe('enforce-step-workflow', () => {
 
     it('allows transition when CI passes, no blocking reviews, no comments', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '0',
@@ -2071,7 +2073,7 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when CI has failures', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"FAILURE","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '0',
@@ -2084,7 +2086,7 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when CI is pending', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"PENDING","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '0',
@@ -2097,7 +2099,7 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when review is CHANGES_REQUESTED', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"CHANGES_REQUESTED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '0',
@@ -2110,7 +2112,7 @@ describe('enforce-step-workflow', () => {
 
     it('allows transition when comments exist with valid accountability', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '2',
@@ -2133,7 +2135,7 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when comments exist but no accountability file', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '2',
@@ -2148,7 +2150,7 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when gh pr view fails (no PR)', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': 'EXIT1',
+        '--json number -q .number': 'EXIT1',
       });
 
       const { code, stderr } = await transitionFromFollowUp();
@@ -2158,7 +2160,7 @@ describe('enforce-step-workflow', () => {
 
     it('allows transition when no CI checks exist (empty array)', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":""}',
         'repos/{owner}/{repo}/pulls/42/comments': '0',
@@ -2170,7 +2172,7 @@ describe('enforce-step-workflow', () => {
 
     it('blocks when accountability entries lack disposition/reason', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '1',
@@ -2191,7 +2193,7 @@ describe('enforce-step-workflow', () => {
 
     it('blocks when acknowledged entries lack userApproval', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '1',
@@ -2212,7 +2214,7 @@ describe('enforce-step-workflow', () => {
 
     it('allows when acknowledged entries have userApproval=true', async () => {
       writeFakeGh({
-        'pr view --json number -q .number': '42',
+        '--json number -q .number': '42',
         'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
         'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
         'repos/{owner}/{repo}/pulls/42/comments': '1',
@@ -2228,6 +2230,240 @@ describe('enforce-step-workflow', () => {
 
       const { code } = await transitionFromFollowUp();
       assert.equal(code, 0, 'Should allow when acknowledged entries have userApproval');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // commit verify: branch-name fallback (GH-191)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('commit verify branch-name fallback (GH-191)', () => {
+    const FAKE_GIT_DIR = path.join(os.tmpdir(), `fake-git-commit-${process.pid}`);
+    const FAKE_GIT_PATH = path.join(FAKE_GIT_DIR, 'git');
+    const FAKE_GH_DIR = path.join(os.tmpdir(), `fake-gh-commit-${process.pid}`);
+    const FAKE_GH_PATH = path.join(FAKE_GH_DIR, 'gh');
+    const ORCHESTRATOR_PATH = path.join(__dirname, '..', '..', 'work', 'work.workflow.js');
+
+    function writeFakeGit(responseMap) {
+      if (!fs.existsSync(FAKE_GIT_DIR)) fs.mkdirSync(FAKE_GIT_DIR, { recursive: true });
+      let script = '#!/bin/bash\nARGS="$*"\n';
+      for (const [pattern, response] of Object.entries(responseMap)) {
+        if (response === 'EXIT1') {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+        } else {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+        }
+      }
+      script += 'exit 1\n';
+      fs.writeFileSync(FAKE_GIT_PATH, script, { mode: 0o755 });
+    }
+
+    function writeFakeGh(responseMap) {
+      if (!fs.existsSync(FAKE_GH_DIR)) fs.mkdirSync(FAKE_GH_DIR, { recursive: true });
+      let script = '#!/bin/bash\nARGS="$*"\n';
+      for (const [pattern, response] of Object.entries(responseMap)) {
+        if (response === 'EXIT1') {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+        } else {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+        }
+      }
+      script += 'exit 1\n';
+      fs.writeFileSync(FAKE_GH_PATH, script, { mode: 0o755 });
+    }
+
+    function cleanup() {
+      try { fs.rmSync(FAKE_GIT_DIR, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(FAKE_GH_DIR, { recursive: true, force: true }); } catch {}
+    }
+
+    function transitionFromCommit(extraEnv = {}) {
+      return runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} check` },
+        },
+        'PreToolUse',
+        {
+          PATH: `${FAKE_GIT_DIR}:${FAKE_GH_DIR}:${process.env.PATH}`,
+          ...extraEnv,
+        },
+      );
+    }
+
+    beforeEach(() => {
+      writeWorkState(makeStepStatus('commit', WORK_STEPS));
+    });
+
+    afterEach(() => {
+      cleanup();
+    });
+
+    it('allows transition via branch-name fallback when commit messages lack ticket ID', async () => {
+      writeFakeGit({
+        'rev-parse HEAD': 'abc123',
+        'log --oneline': '',  // No commits with ticket ID
+        'branch --show-current': `${TEST_TICKET}-fix-something`,
+        'diff --shortstat': '1 file changed, 10 insertions(+)',
+      });
+
+      const { code } = await transitionFromCommit();
+      assert.equal(code, 0, 'Should allow transition when branch contains ticket ID and diff is non-empty');
+    });
+
+    it('blocks transition when branch does not contain ticket ID', async () => {
+      writeFakeGit({
+        'rev-parse HEAD': 'abc123',
+        'log --oneline': '',
+        'branch --show-current': 'some-unrelated-branch',
+        'diff --shortstat': '1 file changed, 10 insertions(+)',
+      });
+
+      const { code, stderr } = await transitionFromCommit();
+      assert.equal(code, 2, 'Should block when branch name does not contain ticket ID');
+      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
+    });
+
+    it('blocks transition when branch matches but no committed changes (empty diff)', async () => {
+      writeFakeGit({
+        'rev-parse HEAD': 'abc123',
+        'log --oneline': '',
+        'branch --show-current': `${TEST_TICKET}-fix-something`,
+        'diff --shortstat': '',  // No changes
+      });
+
+      const { code, stderr } = await transitionFromCommit();
+      assert.equal(code, 2, 'Should block when branch matches but diff is empty');
+      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
+    });
+
+    it('blocks transition on detached HEAD (branch --show-current returns empty)', async () => {
+      writeFakeGit({
+        'rev-parse HEAD': 'abc123',
+        'log --oneline': '',
+        'branch --show-current': '',
+        'diff --shortstat': '1 file changed',
+      });
+
+      const { code, stderr } = await transitionFromCommit();
+      assert.equal(code, 2, 'Should block when in detached HEAD state');
+      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PR verify: --head branch flag (GH-191)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('PR verify --head branch flag (GH-191)', () => {
+    const FAKE_GH_DIR = path.join(os.tmpdir(), `fake-gh-pr-191-${process.pid}`);
+    const FAKE_GH_PATH = path.join(FAKE_GH_DIR, 'gh');
+    const ORCHESTRATOR_PATH = path.join(__dirname, '..', '..', 'work', 'work.workflow.js');
+
+    function writeFakeGh(responseMap) {
+      if (!fs.existsSync(FAKE_GH_DIR)) fs.mkdirSync(FAKE_GH_DIR, { recursive: true });
+      let script = '#!/bin/bash\nARGS="$*"\n';
+      for (const [pattern, response] of Object.entries(responseMap)) {
+        if (response === 'EXIT1') {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+        } else {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+        }
+      }
+      script += 'exit 1\n';
+      fs.writeFileSync(FAKE_GH_PATH, script, { mode: 0o755 });
+    }
+
+    function cleanupFakeGh() {
+      try { fs.rmSync(FAKE_GH_DIR, { recursive: true, force: true }); } catch {}
+    }
+
+    function transitionFromPr(extraEnv = {}) {
+      return runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} ready` },
+        },
+        'PreToolUse',
+        { PATH: `${FAKE_GH_DIR}:${process.env.PATH}`, ...extraEnv },
+      );
+    }
+
+    beforeEach(() => {
+      writeWorkState(makeStepStatus('pr', WORK_STEPS));
+    });
+
+    afterEach(() => {
+      cleanupFakeGh();
+    });
+
+    it('passes --head flag with current branch name to gh pr view', async () => {
+      // The fake gh should receive --head with the branch name
+      writeFakeGh({
+        'pr view --head': '{"number":42,"state":"OPEN"}',
+      });
+
+      const { code } = await transitionFromPr();
+      assert.equal(code, 0, 'Should pass transition when --head flag resolves the PR');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // follow_up verify: --head branch flag (GH-191)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('follow_up verify --head branch flag (GH-191)', () => {
+    const FAKE_GH_DIR = path.join(os.tmpdir(), `fake-gh-followup-191-${process.pid}`);
+    const FAKE_GH_PATH = path.join(FAKE_GH_DIR, 'gh');
+    const ORCHESTRATOR_PATH = path.join(__dirname, '..', '..', 'work', 'work.workflow.js');
+
+    function writeFakeGh(responseMap) {
+      if (!fs.existsSync(FAKE_GH_DIR)) fs.mkdirSync(FAKE_GH_DIR, { recursive: true });
+      let script = '#!/bin/bash\nARGS="$*"\n';
+      for (const [pattern, response] of Object.entries(responseMap)) {
+        if (response === 'EXIT1') {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then exit 1; fi\n`;
+        } else {
+          script += `if echo "$ARGS" | grep -q "${pattern}"; then echo '${response.replace(/'/g, "'\\''")}'; exit 0; fi\n`;
+        }
+      }
+      script += 'exit 1\n';
+      fs.writeFileSync(FAKE_GH_PATH, script, { mode: 0o755 });
+    }
+
+    function cleanupFakeGh() {
+      try { fs.rmSync(FAKE_GH_DIR, { recursive: true, force: true }); } catch {}
+    }
+
+    function transitionFromFollowUp(extraEnv = {}) {
+      return runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} ci` },
+        },
+        'PreToolUse',
+        { PATH: `${FAKE_GH_DIR}:${process.env.PATH}`, ...extraEnv },
+      );
+    }
+
+    beforeEach(() => {
+      writeWorkState(makeStepStatus('follow_up', WORK_STEPS));
+    });
+
+    afterEach(() => {
+      cleanupFakeGh();
+    });
+
+    it('passes --head flag to initial gh pr view in follow_up verify', async () => {
+      writeFakeGh({
+        'pr view --head': '42',
+        'pr checks 42 --json': '[{"state":"SUCCESS","name":"build"}]',
+        'pr view 42 --json reviewDecision': '{"reviewDecision":"APPROVED"}',
+        'repos/{owner}/{repo}/pulls/42/comments': '0',
+      });
+
+      const { code } = await transitionFromFollowUp();
+      assert.equal(code, 0, 'Should use --head flag for initial PR number resolution');
     });
   });
 
