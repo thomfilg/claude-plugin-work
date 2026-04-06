@@ -821,11 +821,13 @@ function handlePreToolUse(hookData) {
             ? WORK_STEPS.find(s => state.stepStatus[s] === 'in_progress') || null
             : null;
           const requiredStep = gatedEntry.step;
+          // Block when a different step is active. When no step is in_progress
+          // (currentStep is null), gating is skipped — no active workflow means
+          // no constraint applies.
           if (currentStep && currentStep !== requiredStep) {
             didBlock = true;
             process.stderr.write(
-              `BLOCKED: Cannot issue write token — step '${requiredStep}' is not in_progress.\n` +
-              `Current step: ${currentStep}\n` +
+              `BLOCKED: Cannot issue write token — step '${currentStep}' is active, not '${requiredStep}'.\n` +
               `Script ${scriptBase} can only be called during the ${requiredStep} step.\n`
             );
             process.exit(2);

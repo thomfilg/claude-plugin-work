@@ -2330,8 +2330,9 @@ describe('enforce-step-workflow', () => {
         'PreToolUse',
         { CLAUDE_CURRENT_AGENT: 'developer-nodejs-tdd' },
       );
-      // The error should say implement is not in_progress, not check
-      assert.ok(stderr.includes("'implement'"), 'error should reference implement step for tdd-phase-state.js');
+      // Error should say 'check' is active (not 'implement'), and reference the required step
+      assert.ok(stderr.includes("'check' is active"), 'error should show current active step');
+      assert.ok(stderr.includes("'implement'"), 'error should reference required implement step');
       assert.ok(!stderr.includes('Report writer scripts'), 'should not use generic report writer message');
     });
   });
