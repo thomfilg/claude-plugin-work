@@ -142,11 +142,7 @@ function checkTddPhase(filePath) {
     }
     // Use TASKS_BASE from env, config module, or default HOME-based fallback
     let safeTicketId = ticketId;
-    try {
-      const tp = require(require('path').join(__dirname, '..', '..', 'lib', 'ticket-provider'));
-      const pc = tp.getProviderConfig({ skipPrompt: true });
-      safeTicketId = tp.sanitizeTicketIdForPath(ticketId, pc);
-    } catch {}
+    try { safeTicketId = require(require('path').join(__dirname, '..', '..', 'lib', 'config')).safeTicketId(ticketId); } catch {}
     const statePath = require('path').join(taskBase, safeTicketId, 'tdd-phase.json');
     if (!require('fs').existsSync(statePath)) return 'no-file';
 

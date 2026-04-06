@@ -36,11 +36,8 @@ const TOKEN_MAX_AGE_MS = 10_000; // 10 seconds
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function sanitizeId(ticketId) {
-  try {
-    const tp = require('../lib/ticket-provider');
-    const providerConfig = tp.getProviderConfig({ skipPrompt: true });
-    return tp.sanitizeTicketIdForPath(ticketId, providerConfig);
-  } catch { return ticketId; }
+  try { return require('../lib/config').safeTicketId(ticketId); }
+  catch { return ticketId; }
 }
 
 function getStatePath(ticketId) {

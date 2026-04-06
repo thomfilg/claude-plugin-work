@@ -22,11 +22,8 @@ function getTasksBase() {
 // TASKS_BASE is lazy-resolved on first use via getTasksBase() — safe at require() time
 
 function safeId(ticketId) {
-  try {
-    const tp = require('../lib/ticket-provider');
-    const providerConfig = tp.getProviderConfig({ skipPrompt: true });
-    return tp.sanitizeTicketIdForPath(ticketId, providerConfig);
-  } catch { return ticketId; }
+  try { return require('../lib/config').safeTicketId(ticketId); }
+  catch { return ticketId; }
 }
 
 /**

@@ -25,14 +25,13 @@ const { execSync } = require('child_process');
 const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
 const WORKTREES_BASE = getConfig.require('WORKTREES_BASE');
 const TASKS_BASE = getConfig('TASKS_BASE') || path.join(WORKTREES_BASE, 'tasks');
-const tp = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
-const { normalizeTicketId } = tp;
+const { normalizeTicketId } = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
+const safeTicketId = require(path.join(__dirname, '..', 'lib', 'config')).safeTicketId;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getTasksDir(ticketId) {
-  const providerConfig = tp.getProviderConfig({ skipPrompt: true });
-  return path.join(TASKS_BASE, tp.sanitizeTicketIdForPath(ticketId, providerConfig));
+  return path.join(TASKS_BASE, safeTicketId(ticketId));
 }
 
 function getWorktreeDir(ticketId) {

@@ -135,12 +135,27 @@ config.worktreeDir = (ticketId) =>
 config.repoDir = () =>
   config.WORKTREES_BASE ? path.join(config.WORKTREES_BASE, config.REPO_NAME) : null;
 
+/**
+ * Sanitize ticket ID for file-system paths (#N → GH-N for GitHub Issues).
+ * Cached: provider config is resolved once per process.
+ */
+let _cachedProviderConfig;
+let _providerConfigLoaded = false;
+config.safeTicketId = (ticketId) => {
+  try {
+    if (!_providerConfigLoaded) {
+      const tp = require('./ticket-provider');
+      _cachedProviderConfig = tp.getProviderConfig({ skipPrompt: true });
+      _providerConfigLoaded = true;
+    }
+    const tp = require('./ticket-provider');
+    return tp.sanitizeTicketIdForPath(ticketId, _cachedProviderConfig);
+  } catch { return ticketId; }
+};
+
 config.tasksDir = (ticketId) => {
   if (!config.TASKS_BASE) return null;
-  const tp = require('./ticket-provider');
-  const providerConfig = tp.getProviderConfig({ skipPrompt: true });
-  const safeId = tp.sanitizeTicketIdForPath(ticketId, providerConfig);
-  return path.join(config.TASKS_BASE, safeId);
+  return path.join(config.TASKS_BASE, config.safeTicketId(ticketId));
 };
 
 config.webAppNames = () =>

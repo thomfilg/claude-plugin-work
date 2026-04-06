@@ -24,12 +24,9 @@ process.on('unhandledRejection', () => process.exit(0));
 
 const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
 const TASKS_BASE = getConfig.orExit('TASKS_BASE');
-const tp = require(path.join(__dirname, '..', '..', 'lib', 'ticket-provider'));
 function safeId(ticketId) {
-  try {
-    const providerConfig = tp.getProviderConfig({ skipPrompt: true });
-    return tp.sanitizeTicketIdForPath(ticketId, providerConfig);
-  } catch { return ticketId; }
+  try { return require(path.join(__dirname, '..', '..', 'lib', 'config')).safeTicketId(ticketId); }
+  catch { return ticketId; }
 }
 
 /**

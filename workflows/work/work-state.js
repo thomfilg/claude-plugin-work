@@ -65,16 +65,7 @@ const CHECK_AGENTS = [
   // QA agents are dynamic based on impacted apps
 ];
 
-/**
- * Sanitize ticket ID for file-system paths (#N → GH-N for GitHub Issues).
- */
-function safeId(ticketId) {
-  try {
-    const tp = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
-    const providerConfig = tp.getProviderConfig({ skipPrompt: true });
-    return tp.sanitizeTicketIdForPath(ticketId, providerConfig);
-  } catch { return ticketId; }
-}
+const safeId = config.safeTicketId;
 
 /**
  * Get state file path for a ticket

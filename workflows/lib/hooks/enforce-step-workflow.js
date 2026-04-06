@@ -61,18 +61,9 @@ const TASKS_BASE = getConfig('TASKS_BASE') || (() => {
   return path.join(wb, 'tasks');
 })();
 
-// Sanitize ticket ID for file-system paths (#N → GH-N for GitHub Issues)
-const tp = require(path.join(__dirname, '..', 'ticket-provider'));
-let _cachedProviderConfig;
-let _providerConfigLoaded = false;
 function safeTicketPath(ticketId) {
-  try {
-    if (!_providerConfigLoaded) {
-      _cachedProviderConfig = tp.getProviderConfig({ skipPrompt: true });
-      _providerConfigLoaded = true;
-    }
-    return tp.sanitizeTicketIdForPath(ticketId, _cachedProviderConfig);
-  } catch { return ticketId; }
+  try { return require(path.join(__dirname, '..', 'config')).safeTicketId(ticketId); }
+  catch { return ticketId; }
 }
 
 // ─── Workflow Definitions ───────────────────────────────────────────────────
