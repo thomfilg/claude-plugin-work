@@ -3010,18 +3010,10 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Should allow forward transition from commit to check with evidence');
     });
 
-    it('allows forward transition from commit to check via verify fallback (branch has commits)', async () => {
-      writeWorkState(makeStepStatus('commit', WORK_STEPS));
-      // No explicit evidence, but the commit verify function (GH-144/191) passes
-      // when the branch has any commits with file changes vs base branch.
-      // Since tests run in a real worktree with commits, verify returns true.
-
-      const { code } = await runHook({
-        tool_name: 'Bash',
-        tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} check` },
-      });
-      assert.equal(code, 0, 'Commit verify passes via branch-commit fallback (GH-144)');
-    });
+    // Note: The commit verify fallback (GH-144) — which passes when the branch has
+    // commits vs base — is tested by the 'commit verifier fallback (GH-144)' describe
+    // block above, using an isolated git repo. We don't duplicate that here since it
+    // requires a real git setup that CI environments may not have.
   });
 
   describe('check -> pr and check -> implement (#95)', () => {

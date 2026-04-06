@@ -517,58 +517,32 @@ describe('createFileProtector — exemptions', () => {
   });
 });
 
-// ─── Vector 3: Test file exclusion (GH-141 false-positive fix) ──────────────
+// ─── Vector 3: isTrustedTestScript integration (GH-141 + GH-191) ────────────
+// The false-positive fix for GH-141 is now handled by isTrustedTestScript (GH-191),
+// which skips Vector 3 for in-repo, git-tracked files inside __tests__/ or __mocks__/.
+// Dedicated isTrustedTestScript tests exist above (GH-191 block). Here we verify
+// that the integration with checkScriptBypass works end-to-end using real repo files.
 
-describe('checkScriptBypass — test file exclusion', () => {
-  const os = require('os');
+describe('checkScriptBypass — isTrustedTestScript integration (GH-141)', () => {
   const protector = createFileProtector({
     isProtected: basenameProtector(new Set(['.state.json', '.work-state.json', '.step-evidence.json'])),
   });
 
-  it('skips scanning *.test.js files (node --test false-positive fix)', () => {
-    // Create a test file that writes to protected files (as all test files do)
-    const tmpDir = path.join(os.tmpdir(), `test-fp-${process.pid}`);
-    fs.mkdirSync(tmpDir, { recursive: true });
-    const testFile = path.join(tmpDir, 'workflow-state.test.js');
-    fs.writeFileSync(testFile, 'const fs = require("fs"); fs.writeFileSync(".work-state.json", "{}");');
-    try {
-      const result = protector.check('Bash', { command: `node --test ${testFile}` });
-      assert.equal(result.blocked, false, 'node --test of .test.js file should not be blocked');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+  it('skips scanning in-repo test files that reference protected filenames (GH-141 false-positive)', () => {
+    // Use THIS test file — it's in __tests__/, git-tracked, and contains writeFileSync calls
+    const thisTestFile = path.resolve(__dirname, 'protect-state-files.test.js');
+    const result = protector.check('Bash', { command: `node --test ${thisTestFile}` });
+    assert.equal(result.blocked, false, 'In-repo __tests__/ files should be skipped by isTrustedTestScript');
   });
 
-  it('skips scanning *.spec.js files', () => {
-    const tmpDir = path.join(os.tmpdir(), `test-fp-spec-${process.pid}`);
-    fs.mkdirSync(tmpDir, { recursive: true });
-    const specFile = path.join(tmpDir, 'my-module.spec.js');
-    fs.writeFileSync(specFile, 'const fs = require("fs"); fs.writeFileSync(".state.json", "{}");');
-    try {
-      const result = protector.check('Bash', { command: `node ${specFile}` });
-      assert.equal(result.blocked, false, '*.spec.js files should be skipped by Vector 3');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+  it('skips scanning in-repo enforce-step-workflow test file', () => {
+    const enforceTest = path.resolve(__dirname, 'enforce-step-workflow.test.js');
+    const result = protector.check('Bash', { command: `node --test ${enforceTest}` });
+    assert.equal(result.blocked, false, 'In-repo __tests__/ files should be skipped');
   });
 
-  // Note: Skipping Vector 3 (script content scanning) for test files does NOT
-  // skip Vectors 1-2 (direct state file path detection). Test files that directly
-  // target state files are still blocked by those earlier vectors.
-  it('skips scanning files in __tests__/ directories', () => {
-    const tmpDir = path.join(os.tmpdir(), `test-fp-dir-${process.pid}`, '__tests__');
-    fs.mkdirSync(tmpDir, { recursive: true });
-    const testFile = path.join(tmpDir, 'helper.js');
-    fs.writeFileSync(testFile, 'const fs = require("fs"); fs.writeFileSync(".state.json", "{}");');
-    try {
-      const result = protector.check('Bash', { command: `node ${testFile}` });
-      assert.equal(result.blocked, false, 'files in __tests__/ should be skipped by Vector 3');
-    } finally {
-      fs.rmSync(path.join(os.tmpdir(), `test-fp-dir-${process.pid}`), { recursive: true, force: true });
-    }
-  });
-
-  it('still blocks non-test scripts that write to protected files', () => {
+  it('still blocks non-test scripts outside the repo that write to protected files', () => {
+    const os = require('os');
     const tmpDir = path.join(os.tmpdir(), `test-fp-prod-${process.pid}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     const prodScript = path.join(tmpDir, 'evil-script.js');
@@ -576,19 +550,6 @@ describe('checkScriptBypass — test file exclusion', () => {
     try {
       const result = protector.check('Bash', { command: `node ${prodScript}` });
       assert.equal(result.blocked, true, 'non-test scripts should still be blocked');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  it('skips scanning *.test.mjs files', () => {
-    const tmpDir = path.join(os.tmpdir(), `test-fp-mjs-${process.pid}`);
-    fs.mkdirSync(tmpDir, { recursive: true });
-    const testFile = path.join(tmpDir, 'module.test.mjs');
-    fs.writeFileSync(testFile, 'import fs from "fs"; fs.writeFileSync(".state.json", "{}");');
-    try {
-      const result = protector.check('Bash', { command: `node --test ${testFile}` });
-      assert.equal(result.blocked, false, '*.test.mjs files should be skipped by Vector 3');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

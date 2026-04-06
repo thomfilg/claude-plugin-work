@@ -258,6 +258,8 @@ function createFileProtector(opts) {
     for (const scriptPath of scripts) {
       // Skip Vector 3 for trusted in-repo test/mock files (GH-191).
       // Scoped to __tests__/__mocks__ dirs within repo root; symlink-safe via realpathSync.
+      // This handles the GH-141 false positive (node --test workflow-state.test.js) since
+      // those test files live in __tests__/ directories and are git-tracked.
       if (isTrustedTestScript(scriptPath)) continue;
 
       let content;
