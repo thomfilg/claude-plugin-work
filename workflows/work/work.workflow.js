@@ -125,7 +125,7 @@ const { parseTicketInput } = require(path.join(__dirname, '..', 'lib', 'ticket-p
 const STEP_ARTIFACTS = {
   [STEPS.check]:    [/^.*\.check\.md$/],
   [STEPS.pr]:       [/^\.pr-update-sha$/, /^\.post-pr-update-sha$/],
-  [STEPS.complete]: [/^.*\.check\.md$/, /^\.work-actions\.json$/, /^tdd-phase\.json$/, /^\.step-evidence\.json$/], // GH-106: archive enforcement artifacts on complete
+  [STEPS.complete]: [/^.*\.check\.md$/, /^\.work-actions\.json$/, /^tdd-phase\.json$/, /^\.step-evidence\.json$/], // patterns used by unstick-complete.js for manual recovery archival
 };
 
 function archiveStepArtifacts(tasksDir, stepsToArchive) {

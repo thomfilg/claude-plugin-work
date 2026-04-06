@@ -38,6 +38,18 @@ const { loadState, completeWork, addError } = require(path.join(__dirname, 'work
 const SESSION_GUARD_PATH = require('path').resolve(__dirname, '..', 'lib', 'hooks', 'session-guard.js');
 
 /**
+ * Validate and sanitize a ticket ID to prevent path traversal.
+ * Only allows alphanumeric, hyphens, and underscores.
+ */
+function sanitizeTicketId(ticketId) {
+  if (!ticketId || typeof ticketId !== 'string') return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(ticketId)) return null;
+  const resolved = path.resolve(TASKS_BASE, ticketId);
+  if (!resolved.startsWith(path.resolve(TASKS_BASE) + path.sep)) return null;
+  return ticketId;
+}
+
+/**
  * Determine if a ticket is stuck in the complete step.
  * Stuck means: status is 'in_progress' and the complete step is 'in_progress'
  * (or all other steps are completed but complete is pending/in_progress).
@@ -60,7 +72,9 @@ function isStuckInComplete(state) {
  * Archive enforcement artifacts to tasks/TICKET/archive/
  */
 function archiveArtifacts(ticketId) {
-  const dir = path.join(TASKS_BASE, ticketId);
+  const safe = sanitizeTicketId(ticketId);
+  if (!safe) return [];
+  const dir = path.join(TASKS_BASE, safe);
   const archiveDir = path.join(dir, 'archive');
 
   const patterns = [
@@ -99,8 +113,10 @@ function archiveArtifacts(ticketId) {
  * Finish the session guard for a ticket.
  */
 function finishSessionGuard(ticketId) {
+  const safe = sanitizeTicketId(ticketId);
+  if (!safe) return { ok: false, error: 'Invalid ticket ID' };
   try {
-    execFileSync('node', [SESSION_GUARD_PATH, 'finish', ticketId], {
+    execFileSync('node', [SESSION_GUARD_PATH, 'finish', safe], {
       encoding: 'utf-8',
       timeout: 10000,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -115,26 +131,31 @@ function finishSessionGuard(ticketId) {
  * Unstick a single ticket.
  */
 function unstickTicket(ticketId) {
-  const result = { ticketId, actions: [] };
+  const safe = sanitizeTicketId(ticketId);
+  if (!safe) return { ticketId, actions: [], success: false, error: 'Invalid ticket ID' };
+  const result = { ticketId: safe, actions: [] };
 
   // Step 1: Complete work state
-  const completeResult = completeWork(ticketId);
+  const completeResult = completeWork(safe);
   if (completeResult && completeResult.error) {
     result.actions.push({ step: 'completeWork', ok: false, error: completeResult.error });
-    addError(ticketId, 'complete', `unstick-complete: completeWork failed — ${completeResult.error}`);
+    // Don't call addError for 'No state found' — it would create state for a nonexistent ticket
+    if (completeResult.error !== 'No state found') {
+      addError(safe, 'complete', `unstick-complete: completeWork failed — ${completeResult.error}`);
+    }
   } else {
     result.actions.push({ step: 'completeWork', ok: true });
   }
 
   // Step 2: Finish session guard
-  const guardResult = finishSessionGuard(ticketId);
+  const guardResult = finishSessionGuard(safe);
   result.actions.push({ step: 'sessionGuard', ...guardResult });
   if (!guardResult.ok) {
-    addError(ticketId, 'complete', `unstick-complete: session-guard finish failed — ${guardResult.error}`);
+    addError(safe, 'complete', `unstick-complete: session-guard finish failed — ${guardResult.error}`);
   }
 
   // Step 3: Archive artifacts
-  const archived = archiveArtifacts(ticketId);
+  const archived = archiveArtifacts(safe);
   result.actions.push({ step: 'archive', ok: true, files: archived });
 
   result.success = result.actions.every(a => a.ok !== false);
@@ -147,7 +168,12 @@ function main() {
   const targetTicket = process.argv[2];
 
   if (targetTicket) {
-    // Single ticket mode
+    // Single ticket mode — validate early
+    if (!sanitizeTicketId(targetTicket)) {
+      process.stderr.write(`Invalid ticket ID: ${targetTicket}\n`);
+      process.exit(1);
+      return;
+    }
     const result = unstickTicket(targetTicket);
     console.log(JSON.stringify(result, null, 2));
     process.exit(result.success ? 0 : 1);
@@ -188,4 +214,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { isStuckInComplete, unstickTicket, archiveArtifacts, finishSessionGuard };
+module.exports = { isStuckInComplete, unstickTicket, archiveArtifacts, finishSessionGuard, sanitizeTicketId };
