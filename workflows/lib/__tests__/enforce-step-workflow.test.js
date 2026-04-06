@@ -3010,16 +3010,17 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Should allow forward transition from commit to check with evidence');
     });
 
-    it('blocks forward transition from commit to check without evidence (no new commits)', async () => {
+    it('allows forward transition from commit to check via verify fallback (branch has commits)', async () => {
       writeWorkState(makeStepStatus('commit', WORK_STEPS));
-      // No evidence — commit verify checks for new commits with ticket ID
+      // No explicit evidence, but the commit verify function (GH-144/191) passes
+      // when the branch has any commits with file changes vs base branch.
+      // Since tests run in a real worktree with commits, verify returns true.
 
-      const { code, stderr } = await runHook({
+      const { code } = await runHook({
         tool_name: 'Bash',
         tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} check` },
       });
-      assert.equal(code, 2, 'Should block forward transition without evidence');
-      assert.ok(stderr.includes('BLOCKED'));
+      assert.equal(code, 0, 'Commit verify passes via branch-commit fallback (GH-144)');
     });
   });
 
