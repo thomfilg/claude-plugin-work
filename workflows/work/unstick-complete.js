@@ -77,12 +77,8 @@ function archiveArtifacts(ticketId) {
   const dir = path.join(TASKS_BASE, safe);
   const archiveDir = path.join(dir, 'archive');
 
-  const patterns = [
-    /^.*\.check\.md$/,
-    /^\.work-actions\.json$/,
-    /^tdd-phase\.json$/,
-    /^\.step-evidence\.json$/,
-  ];
+  // Enforcement artifact patterns to archive (ticketId is sanitized above)
+  const patterns = [/^.*\.check\.md$/, /^\.work-actions\.json$/, /^tdd-phase\.json$/, /^\.step-evidence\.json$/];
 
   const files = [];
   try {
@@ -116,12 +112,8 @@ function finishSessionGuard(ticketId) {
   const safe = sanitizeTicketId(ticketId);
   if (!safe) return { ok: false, error: 'Invalid ticket ID' };
   try {
-    execFileSync('node', [SESSION_GUARD_PATH, 'finish', safe], {
-      encoding: 'utf-8',
-      timeout: 10000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    return { ok: true };
+    execFileSync('node', [SESSION_GUARD_PATH, 'finish', safe], { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] });
+    return { ok: true }; // ticketId is sanitized at function entry
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -143,11 +135,9 @@ function unstickTicket(ticketId) {
     if (completeResult.error !== 'No state found') {
       addError(safe, 'complete', `unstick-complete: completeWork failed — ${completeResult.error}`);
     }
-  } else {
-    result.actions.push({ step: 'completeWork', ok: true });
-  }
+  } else { result.actions.push({ step: 'completeWork', ok: true }); }
 
-  // Step 2: Finish session guard
+  // Step 2: Finish session guard (ticketId already sanitized)
   const guardResult = finishSessionGuard(safe);
   result.actions.push({ step: 'sessionGuard', ...guardResult });
   if (!guardResult.ok) {
