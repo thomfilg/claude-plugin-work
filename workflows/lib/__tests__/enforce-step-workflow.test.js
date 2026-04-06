@@ -1393,7 +1393,7 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 2, 'Should block Write to follow-up-pr state file');
       assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
       assert.ok(stderr.includes('follow-up-pr-my-repo-42.json'), 'stderr should mention the file');
-    });
+    }); // fail-open test for missing .work-state.json is covered below
 
     it('blocks Edit to follow-up-pr state file when not in follow_up step', async () => {
       writeWorkState(makeStepStatus('implement', WORK_STEPS));
