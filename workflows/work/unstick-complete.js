@@ -143,14 +143,12 @@ function unstickTicket(ticketId) {
     addError(safe, 'complete', `unstick-complete: completeWork failed — ${completeResult.error}`);
   } else { result.actions.push({ step: 'completeWork', ok: true }); }
 
-  // Step 2: Finish session guard (ticketId already sanitized)
+  // Step 2: Finish session guard (safe is validated, addError only called when state exists)
   const guardResult = finishSessionGuard(safe);
   result.actions.push({ step: 'sessionGuard', ...guardResult });
-  if (!guardResult.ok && completeResult && !completeResult.error) {
-    addError(safe, 'complete', `unstick-complete: session-guard finish failed — ${guardResult.error}`);
-  }
+  if (!guardResult.ok && completeResult && !completeResult.error) { addError(safe, 'complete', `unstick-complete: session-guard finish failed — ${guardResult.error}`); }
 
-  // Step 3: Archive artifacts
+  // Step 3: Archive artifacts (only for existing tickets with state)
   const archived = archiveArtifacts(safe);
   result.actions.push({ step: 'archive', ok: true, files: archived });
 
@@ -188,13 +186,10 @@ function main() {
   }
 
   for (const dir of dirs) {
-    // Check base ticket
+    // Check base ticket (sanitized by unstickTicket internally)
     const state = loadState(dir);
-    if (isStuckInComplete(state)) {
-      process.stderr.write(`Found stuck ticket: ${dir}\n`);
-      results.push(unstickTicket(dir));
-    }
-    // Check suffix tickets (e.g. GH-145/phase1)
+    if (isStuckInComplete(state)) { process.stderr.write(`Found stuck ticket: ${dir}\n`); results.push(unstickTicket(dir)); }
+    // Also check suffix tickets (e.g. GH-145/phase1) stored under subdirectories
     const subDir = path.join(TASKS_BASE, dir);
     try {
       const subs = fs.readdirSync(subDir, { withFileTypes: true });
