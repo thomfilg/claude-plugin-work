@@ -306,7 +306,8 @@ describe('createFileProtector — inline interpreter bypass', () => {
       command: 'python3 -c "data = open(\'.state.json\').read()"',
     });
     assert.equal(result.blocked, false, 'read-only open() should not be blocked — regression test for greedy open() FP');
-  });
+    assert.equal(result.skipRemainingChecks, false);
+  }); // open() read-only false-positive regression covered above
 
   it('allows python3 -c open() with binary read mode br', () => {
     const result = protector.check('Bash', {
@@ -538,7 +539,8 @@ describe('exported constants', () => {
     assert.ok(INLINE_INTERPRETER_PATTERN.test('/usr/bin/env python3 -c "x"'));
     assert.ok(!INLINE_INTERPRETER_PATTERN.test('node -e "console.log(1)"'), 'node not covered by this pattern');
     assert.ok(!INLINE_INTERPRETER_PATTERN.test('python3 script.py'), 'script execution not inline');
-  });
+    assert.ok(!INLINE_INTERPRETER_PATTERN.test('echo hello'), 'non-interpreter command');
+  }); // interpreter pattern coverage: python2/3, ruby, perl, /usr/bin/env prefix
 
   it('INLINE_INTERPRETER_WRITES does not false-positive on open().read() followed by print with w (Fix 2)', () => {
     // open(.*['"]w is greedy — "open('.state.json').read(); print('w')" should NOT match
