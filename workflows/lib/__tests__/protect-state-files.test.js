@@ -345,6 +345,22 @@ describe('createFileProtector — inline interpreter bypass', () => {
     assert.equal(typeof protector.checkInlineInterpreterBypass, 'function');
   });
 
+  it('blocks python3 -c open() with exclusive create mode x', () => {
+    const result = protector.check('Bash', {
+      command: "python3 -c \"open('.state.json','x').write('{}')\"",
+    });
+    assert.equal(result.blocked, true);
+    assert.equal(result.match, '.state.json');
+  });
+
+  it('blocks python3 -c open() with read+write mode r+', () => {
+    const result = protector.check('Bash', {
+      command: "python3 -c \"open('.state.json','r+').write('{}')\"",
+    });
+    assert.equal(result.blocked, true);
+    assert.equal(result.match, '.state.json');
+  });
+
   it('blocks piped stdin python3 -c writing to protected file', () => {
     const result = protector.check('Bash', {
       command: 'echo "data" | python3 -c "import sys; open(\'.state.json\',\'w\').write(sys.stdin.read())"',
@@ -499,6 +515,15 @@ describe('exported constants', () => {
     assert.ok(!INLINE_INTERPRETER_WRITES.test("open('.state.json','rb')"), 'open with rb mode should NOT match');
     assert.ok(!INLINE_INTERPRETER_WRITES.test("open('.state.json','r')"), 'open with r mode should NOT match');
     assert.ok(!INLINE_INTERPRETER_WRITES.test("open('.state.json','b')"), 'open with bare binary mode should NOT match');
+
+    // Write-capable modes added for Fix 2
+    assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','x')"), 'open with exclusive create mode x');
+    assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','xb')"), 'open with exclusive binary create mode xb');
+    assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','r+')"), 'open with read+write mode r+');
+    assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','rb+')"), 'open with binary read+write mode rb+');
+    assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','w+')"), 'open with write+read mode w+');
+    assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','a+')"), 'open with append+read mode a+');
+    assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','x+')"), 'open with exclusive create+read mode x+');
   });
 
   it('BASE64_EVASION_PATTERN matches base64 references', () => {

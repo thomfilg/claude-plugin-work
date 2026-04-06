@@ -46,10 +46,10 @@ const SCRIPT_WRITE_OPS = /\b(?:writeFileSync|appendFileSync|writeFile|createWrit
 const INTERPRETER_PATTERN = /\b(?:node|python[23]?|ruby|perl|bash|sh)\s+(?:--?\w[\w-]*(?:=\S+)?\s+)*["']?([/\w._-]+\.(?:js|mjs|cjs|py|rb|pl|sh))["']?/g;
 
 /** Inline interpreter invocations: python3 -c, ruby -e, perl -e (with optional /usr/bin/env prefix) */
-const INLINE_INTERPRETER_PATTERN = /(?:\/usr\/bin\/env\s+)?(?:python[23]?)\s+-c\b|(?:\/usr\/bin\/env\s+)?(?:ruby|perl)\s+-e\b/;
+const INLINE_INTERPRETER_PATTERN = /(?:\/usr\/bin\/env\s+)?\b(?:python[23]?)\s+-c\b|(?:\/usr\/bin\/env\s+)?\b(?:ruby|perl)\s+-e\b/;
 
 /** Write operations in inline interpreter code */
-const INLINE_INTERPRETER_WRITES = /open\(.*['"](?:[wWaA>]|[wWaA][bB]|[bB][wWaA])|\bFile\.write\b|\bIO\.write\b|\bos\.rename\b|\bshutil\.copy\b|\bshutil\.move\b/;
+const INLINE_INTERPRETER_WRITES = /open\(.*['"](?:[wWaAxX>]|[wWaAxX][bB]?[+]?|[bB][wWaAxX]|[rR][bB]?[+])|\bFile\.write\b|\bIO\.write\b|\bos\.rename\b|\bshutil\.copy\b|\bshutil\.move\b/;
 
 /** Base64 evasion patterns */
 const BASE64_EVASION_PATTERN = /\bbase64\b|\bb64decode\b|\bb64encode\b|\batob\b|\bbtoa\b/;
@@ -283,7 +283,10 @@ function createFileProtector(opts) {
       }
     }
 
-    // Check for base64 evasion: interpreter + base64 + write op (no visible filename needed)
+    // Base64 evasion: block when all three signals present (interpreter + base64 keyword + write op)
+    // even without a visible protected filename, since the filename may be base64-encoded.
+    // This is an intentional over-blocking tradeoff — see GH-107 spec "Open Questions" section.
+    // False positives on non-protected file writes are accepted to prevent evasion.
     if (BASE64_EVASION_PATTERN.test(cmd) && hasWriteOp) {
       if (!isExempt('Bash', toolInput, hookData)) {
         return {
