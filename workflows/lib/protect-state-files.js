@@ -308,7 +308,7 @@ function createFileProtector(opts) {
           skipRemainingChecks: false,
         };
       }
-    }
+    } // end base64 evasion check
 
     return { blocked: false, skipRemainingChecks: false };
   }

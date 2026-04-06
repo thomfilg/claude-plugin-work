@@ -286,7 +286,7 @@ describe('createFileProtector — inline interpreter bypass', () => {
     assert.equal(result.blocked, true);
     assert.ok(result.vector.includes('base64'));
   });
-
+  // Tests below verify non-blocking cases for inline interpreter detection
   it('allows benign python3 -c (no write, no protected file)', () => {
     const result = protector.check('Bash', {
       command: 'python3 -c "print(\'hello\')"',
