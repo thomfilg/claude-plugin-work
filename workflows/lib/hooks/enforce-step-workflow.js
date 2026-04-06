@@ -410,15 +410,17 @@ function getNodeInvocations(cmd) {
   return [...cmd.matchAll(new RegExp(NODE_INVOKE_PATTERN_SRC, 'g'))];
 }
 
-// Agent-gated writer scripts — map script basename to authorized agents.
-// When a Bash command invokes one of these scripts, the hook verifies agent identity.
+// Agent-gated writer scripts — map script basename to { agents, step }.
+// When a Bash command invokes one of these scripts, the hook verifies:
+//   1. The caller is an authorized agent (from `agents`)
+//   2. The correct workflow step is active (from `step`) — enforced per script (GH-184)
 // The script itself also validates, providing defense-in-depth.
 const AGENT_GATED_SCRIPTS = {
-  'write-qa-report.js':         { agents: ['qa-feature-tester', 'qa-api-tester'], step: 'check' },
-  'write-tests-report.js':      { agents: ['quality-checker'], step: 'check' },
-  'write-code-review.js':       { agents: ['code-checker'], step: 'check' },
-  'write-completion-report.js':  { agents: ['completion-checker'], step: 'check' },
-  'tdd-phase-state.js':         { agents: ['developer-nodejs-tdd', 'developer-react-senior', 'developer-react-ui-architect', 'developer-devops'], step: 'implement' },
+  'write-qa-report.js':         { agents: ['qa-feature-tester', 'qa-api-tester'], step: STEPS.check },
+  'write-tests-report.js':      { agents: ['quality-checker'], step: STEPS.check },
+  'write-code-review.js':       { agents: ['code-checker'], step: STEPS.check },
+  'write-completion-report.js':  { agents: ['completion-checker'], step: STEPS.check },
+  'tdd-phase-state.js':         { agents: ['developer-nodejs-tdd', 'developer-react-senior', 'developer-react-ui-architect', 'developer-devops'], step: STEPS.implement },
 };
 
 const stateFileProtector = createFileProtector({
