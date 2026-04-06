@@ -48,9 +48,8 @@ const INTERPRETER_PATTERN = /\b(?:node|python[23]?|ruby|perl|bash|sh)\s+(?:--?\w
 /** Inline interpreter invocations: python3 -c, ruby -e, perl -e (with optional /usr/bin/env prefix) */
 const INLINE_INTERPRETER_PATTERN = /(?:\/usr\/bin\/env\s+)?\b(?:python[23]?)\s+-c\b|(?:\/usr\/bin\/env\s+)?\b(?:ruby|perl)\s+-e\b/;
 
-/** Write operations in inline interpreter code */
+/** Write operations in inline interpreter code (w/a/x/r+/rb+ modes, File.write, os.rename, etc.) */
 const INLINE_INTERPRETER_WRITES = /open\(.*['"](?:[wWaAxX>]|[wWaAxX][bB]?[+]?|[bB][wWaAxX]|[rR][bB]?[+])|\bFile\.write\b|\bIO\.write\b|\bos\.rename\b|\bshutil\.copy\b|\bshutil\.move\b/;
-
 /** Base64 evasion patterns */
 const BASE64_EVASION_PATTERN = /\bbase64\b|\bb64decode\b|\bb64encode\b|\batob\b|\bbtoa\b/;
 
