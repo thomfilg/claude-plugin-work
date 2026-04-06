@@ -387,6 +387,22 @@ describe('createFileProtector — inline interpreter bypass', () => {
     assert.equal(result.blocked, false, 'base64 outside inline -c code should not trigger base64 evasion blocking');
   });
 
+  it('allows python3 -c open().read() with print containing w (Fix 2)', () => {
+    // open('.state.json').read() is read-only; the 'w' in print('w') is not a write mode
+    const result = protector.check('Bash', {
+      command: "python3 -c \"open('.state.json').read(); print('w')\"",
+    });
+    assert.equal(result.blocked, false, 'read-only open() with print("w") should not be blocked');
+  });
+
+  it('does not trigger base64 evasion when base64 is piped after -c code (Fix 1)', () => {
+    // base64 is a separate command in the pipeline, not part of the inline code
+    const result = protector.check('Bash', {
+      command: 'python3 -c "print(\'hello\')" | base64',
+    });
+    assert.equal(result.blocked, false, 'base64 in pipeline after -c code should not trigger base64 evasion');
+  });
+
   it('still blocks base64 evasion inside inline python3 -c code', () => {
     const result = protector.check('Bash', {
       command: 'python3 -c "import base64; open(base64.b64decode(\'LnN0YXRlLmpzb24=\').decode(),\'w\').write(\'{}\')"',
@@ -524,6 +540,15 @@ describe('exported constants', () => {
     assert.ok(!INLINE_INTERPRETER_PATTERN.test('python3 script.py'));
   });
 
+  it('INLINE_INTERPRETER_WRITES does not false-positive on open().read() followed by print with w (Fix 2)', () => {
+    // open(.*['"]w is greedy — "open('.state.json').read(); print('w')" should NOT match
+    // because the 'w' is in print(), not in open()'s mode argument
+    assert.ok(
+      !INLINE_INTERPRETER_WRITES.test("open('.state.json').read(); print('w')"),
+      'greedy open() should not match w in print() after close-paren'
+    );
+  });
+
   it('INLINE_INTERPRETER_WRITES matches write operations', () => {
     assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','w')"), 'open with write mode');
     assert.ok(INLINE_INTERPRETER_WRITES.test("open('.state.json','W')"), 'open with uppercase W mode');
@@ -559,5 +584,14 @@ describe('exported constants', () => {
     assert.ok(BASE64_EVASION_PATTERN.test('atob'));
     assert.ok(BASE64_EVASION_PATTERN.test('btoa'));
     assert.ok(!BASE64_EVASION_PATTERN.test('print("hello")'));
+  });
+
+  it('BASE64_EVASION_PATTERN is case-insensitive (Fix 3)', () => {
+    assert.ok(BASE64_EVASION_PATTERN.test('Base64'), 'mixed case Base64');
+    assert.ok(BASE64_EVASION_PATTERN.test('BASE64'), 'uppercase BASE64');
+    assert.ok(BASE64_EVASION_PATTERN.test('B64decode'), 'mixed case B64decode');
+    assert.ok(BASE64_EVASION_PATTERN.test('B64ENCODE'), 'uppercase B64ENCODE');
+    assert.ok(BASE64_EVASION_PATTERN.test('Atob'), 'mixed case Atob');
+    assert.ok(BASE64_EVASION_PATTERN.test('BTOA'), 'uppercase BTOA');
   });
 });

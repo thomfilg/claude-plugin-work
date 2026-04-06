@@ -48,10 +48,12 @@ const INTERPRETER_PATTERN = /\b(?:node|python[23]?|ruby|perl|bash|sh)\s+(?:--?\w
 /** Inline interpreter invocations: python3 -c, ruby -e, perl -e (with optional /usr/bin/env prefix) */
 const INLINE_INTERPRETER_PATTERN = /(?:\/usr\/bin\/env\s+)?\b(?:python[23]?)\s+-c\b|(?:\/usr\/bin\/env\s+)?\b(?:ruby|perl)\s+-e\b/;
 
-/** Write operations in inline interpreter code (w/a/x/r+/rb+ modes, File.write, os.rename, etc.) */
-const INLINE_INTERPRETER_WRITES = /open\(.*['"](?:[wWaAxX>]|[wWaAxX][bB]?[+]?|[bB][wWaAxX]|[rR][bB]?[+])|\bFile\.write\b|\bIO\.write\b|\bos\.rename\b|\bshutil\.copy\b|\bshutil\.move\b/;
-/** Base64 evasion patterns */
-const BASE64_EVASION_PATTERN = /\bbase64\b|\bb64decode\b|\bb64encode\b|\batob\b|\bbtoa\b/;
+/** Write operations in inline interpreter code (w/a/x/r+/rb+ modes, File.write, os.rename, etc.)
+ *  open() pattern uses (?:[^()]*|\([^()]*\))* to allow one level of nested parens (e.g. b64decode())
+ *  without matching across statement boundaries like open(...).read(); print('w'). */
+const INLINE_INTERPRETER_WRITES = /open\((?:[^()]*|\([^()]*\))*['"](?:[wWaAxX>]|[wWaAxX][bB]?[+]?|[bB][wWaAxX]|[rR][bB]?[+])|\bFile\.write\b|\bIO\.write\b|\bos\.rename\b|\bshutil\.copy\b|\bshutil\.move\b/;
+/** Base64 evasion patterns (case-insensitive to catch MIME::Base64, Base64.decode64, etc.) */
+const BASE64_EVASION_PATTERN = /\bbase64\b|\bb64decode\b|\bb64encode\b|\batob\b|\bbtoa\b/i;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -266,14 +268,18 @@ function createFileProtector(opts) {
     // Remove /usr/bin/env prefix if present to get bare interpreter + flag
     const bareInterpreter = matchStr.replace(/^\/usr\/bin\/env\s+/, '');
 
-    // Extract the inline code portion (everything after -c/-e flag)
+    // Extract the inline code portion (everything after -c/-e flag).
     // This scopes filename and base64 checks to only the interpreter code,
     // avoiding false positives when protected filenames or base64 appear
     // in other command segments (e.g. `echo .state.json; python3 -c "..."`)
+    // or in pipeline stages (e.g. `python3 -c "print('hello')" | base64`).
     const flagIdx = cmd.indexOf(interpreterMatch[0]);
     const afterFlag = cmd.slice(flagIdx);
-    const codeMatch = afterFlag.match(/\s-[ce]\s+(.*)/s);
-    const inlineCode = codeMatch ? codeMatch[1] : cmd; // fallback to full cmd
+    // Try to extract the quoted code argument first (respects quotes around inline code).
+    // If unquoted, capture up to the first unquoted shell operator (|, ;, &&, ||).
+    const quotedMatch = afterFlag.match(/\s-[ce]\s+(["'])([\s\S]*?)\1/);
+    const unquotedMatch = !quotedMatch && afterFlag.match(/\s-[ce]\s+(.*?)(?:\s*(?:\||;|&&|\|\|)\s|$)/s);
+    const inlineCode = quotedMatch ? quotedMatch[2] : (unquotedMatch ? unquotedMatch[1] : cmd); // fallback to full cmd
 
     // Check tokens from inline code only (not full cmd)
     const tokens = extractTokens(inlineCode);
