@@ -3182,7 +3182,7 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Should allow backward transition via RETRY_EDGES with evidence');
     });
 
-    it('blocks transition from follow_up to reports (skip forward)', async () => {
+    it('allows transition from follow_up to reports (anti-skip is orchestrator concern)', async () => {
       writeWorkState(makeStepStatus('follow_up', WORK_STEPS));
       // Provide evidence so transition is not blocked by evidence gate
       writeEvidence({
@@ -3261,7 +3261,7 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Should allow forward transition with cleanup evidence');
     });
 
-    it('blocks transition from cleanup without evidence and active tmux session', async () => {
+    it('allows transition when no tmux session exists in test environment', async () => {
       writeWorkState(makeStepStatus('cleanup', WORK_STEPS));
       // No evidence — cleanup verify checks for tmux session absence
       // Without mock tmux, the verify function will likely return true (no session exists)
@@ -3366,10 +3366,10 @@ describe('enforce-step-workflow', () => {
     });
   });
 
-  describe('anti-skip negative tests (GH-141)', () => {
+  describe('anti-skip transitions allowed by hook (GH-141)', () => {
     const ORCHESTRATOR_PATH = path.join(__dirname, '..', '..', 'work', 'work.workflow.js');
 
-    it('blocks transition from commit to pr (skipping check)', async () => {
+    it('allows transition from commit to pr (anti-skip is orchestrator concern)', async () => {
       writeWorkState(makeStepStatus('commit', WORK_STEPS));
       writeEvidence({
         'commit': { executed: true, tool: 'Task', timestamp: new Date().toISOString() },
@@ -3385,7 +3385,7 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Hook allows transition with evidence — anti-skip is orchestrator concern');
     });
 
-    it('blocks transition from implement to pr (skipping commit and check)', async () => {
+    it('allows transition from implement to pr (anti-skip is orchestrator concern)', async () => {
       writeWorkState(makeStepStatus('implement', WORK_STEPS));
       // With TDD evidence
       fs.writeFileSync(path.join(TASKS_DIR, 'tdd-phase.json'), JSON.stringify({
@@ -3401,7 +3401,7 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Hook allows transition with evidence — anti-skip is orchestrator concern');
     });
 
-    it('blocks transition from implement to ci (skipping multiple steps)', async () => {
+    it('allows transition from implement to ci (anti-skip is orchestrator concern)', async () => {
       writeWorkState(makeStepStatus('implement', WORK_STEPS));
       fs.writeFileSync(path.join(TASKS_DIR, 'tdd-phase.json'), JSON.stringify({
         cycles: [{ red: { timestamp: '2026-01-01' }, green: { timestamp: '2026-01-01' } }],
@@ -3415,7 +3415,7 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Hook allows transition with evidence — anti-skip is orchestrator concern');
     });
 
-    it('blocks transition from bootstrap to implement (skipping brief and spec)', async () => {
+    it('allows transition from bootstrap to implement (anti-skip is orchestrator concern)', async () => {
       writeWorkState(makeStepStatus('bootstrap', WORK_STEPS));
       writeEvidence({
         'bootstrap': { executed: true, tool: 'Bash', timestamp: new Date().toISOString() },
