@@ -1526,7 +1526,7 @@ describe('enforce-step-workflow', () => {
         { CLAUDE_CURRENT_AGENT: 'follow-up-pr' },
       );
       assert.equal(code, 0, 'Should allow Bash to review-accountability.json from follow-up-pr agent during follow_up step');
-    });
+    }); // Verified: these tests are under Rule 4, not Rule 3c (moved per copilot review)
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
