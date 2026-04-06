@@ -1439,6 +1439,20 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'Should allow Write from follow-up-pr agent during follow_up step');
     });
 
+    it('allows Write from follow-up-pr agent during follow_up step (hookData path)', async () => {
+      writeWorkState(makeStepStatus('follow_up', WORK_STEPS));
+
+      const { code } = await runHook(
+        {
+          tool_name: 'Write',
+          tool_input: { file_path: '/tmp/.claude/follow-up-pr-my-repo-42.json', content: '{}', subagent_type: 'follow-up-pr' },
+          transcript_path: '/tmp/fake-transcript.txt',
+        },
+        'PreToolUse',
+      );
+      assert.equal(code, 0, 'Should allow Write from follow-up-pr agent via hookData during follow_up step');
+    });
+
     it('allows Bash from follow-up-pr agent during follow_up step', async () => {
       writeWorkState(makeStepStatus('follow_up', WORK_STEPS));
 
@@ -1470,6 +1484,28 @@ describe('enforce-step-workflow', () => {
         'PreToolUse',
       );
       assert.equal(code, 0, 'Should allow Write to non-matching files');
+    });
+
+    it('blocks Bash redirect to review-accountability.json from non-follow-up-pr agent', async () => {
+      writeWorkState(makeStepStatus('implement', WORK_STEPS));
+
+      const { code, stderr } = await runHook(
+        { tool_name: 'Bash', tool_input: { command: `echo '{"userApproval":true}' > ${TASKS_DIR}/review-accountability.json` } },
+        'PreToolUse',
+      );
+      assert.equal(code, 2, 'Should block Bash redirect to review-accountability.json outside follow_up step');
+      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
+    });
+
+    it('allows Bash to review-accountability.json from follow-up-pr agent during follow_up step', async () => {
+      writeWorkState(makeStepStatus('follow_up', WORK_STEPS));
+
+      const { code } = await runHook(
+        { tool_name: 'Bash', tool_input: { command: `echo '{"userApproval":true}' > ${TASKS_DIR}/review-accountability.json` } },
+        'PreToolUse',
+        { CLAUDE_CURRENT_AGENT: 'follow-up-pr' },
+      );
+      assert.equal(code, 0, 'Should allow Bash to review-accountability.json from follow-up-pr agent during follow_up step');
     });
   });
 

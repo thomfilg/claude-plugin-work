@@ -470,17 +470,14 @@ const followUpStateProtector = createFileProtector({
     const bn = path.basename(filePath);
     return /^follow-up-pr-.+\.json$/.test(bn) ? bn : null;
   },
-  isExempt: () => {
+  isExempt: (_toolName, _toolInput, hookData) => {
     try {
       const ticketId = getTicketId();
-      if (!ticketId) return true; // fail-open
+      if (!ticketId) return true; // fail-open: no ticket context means not in a work workflow
       const state = loadStateFile(ticketId, '.work-state.json');
       const stepInProgress = state?.stepStatus?.[STEPS.follow_up] === 'in_progress';
       if (!stepInProgress) return false;
-      const agentInfo = isRunningInAgent();
-      if (!agentInfo) return false;
-      const normalized = normalizeAgentName(agentInfo.agentName || '');
-      return normalized === 'follow-up-pr';
+      return isRunningInAgent(hookData?.transcript_path, ['follow-up-pr'], hookData);
     } catch {
       return true; // fail-open
     }
