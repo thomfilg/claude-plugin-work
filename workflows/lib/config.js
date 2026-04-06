@@ -135,8 +135,13 @@ config.worktreeDir = (ticketId) =>
 config.repoDir = () =>
   config.WORKTREES_BASE ? path.join(config.WORKTREES_BASE, config.REPO_NAME) : null;
 
-config.tasksDir = (ticketId) =>
-  config.TASKS_BASE ? path.join(config.TASKS_BASE, ticketId) : null;
+config.tasksDir = (ticketId) => {
+  if (!config.TASKS_BASE) return null;
+  const tp = require('./ticket-provider');
+  const providerConfig = tp.getProviderConfig({ skipPrompt: true });
+  const safeId = tp.sanitizeTicketIdForPath(ticketId, providerConfig);
+  return path.join(config.TASKS_BASE, safeId);
+};
 
 config.webAppNames = () =>
   config.WEB_APPS.filter(app => app && app.name).map(app => app.name);

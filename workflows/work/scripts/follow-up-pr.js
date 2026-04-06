@@ -1285,7 +1285,13 @@ async function main() {
                 ? 'Blocking comment addressed during follow-up'
                 : 'Non-blocking low-priority comment',
           }));
-          const accountabilityPath = path.join(tasksBase, ticketId, 'review-accountability.json');
+          let safeTicketId = ticketId;
+          try {
+            const tp = require(path.join(__dirname, '..', '..', 'lib', 'ticket-provider'));
+            const pc = tp.getProviderConfig({ skipPrompt: true });
+            safeTicketId = tp.sanitizeTicketIdForPath(ticketId, pc);
+          } catch {}
+          const accountabilityPath = path.join(tasksBase, safeTicketId, 'review-accountability.json');
           fs.mkdirSync(path.dirname(accountabilityPath), { recursive: true });
           fs.writeFileSync(accountabilityPath, JSON.stringify(entries, null, 2));
         }

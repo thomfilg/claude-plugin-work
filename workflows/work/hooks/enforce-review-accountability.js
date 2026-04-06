@@ -86,7 +86,13 @@ async function main() {
   // Check for accountability file
   const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
   const TASKS_BASE = getConfig('TASKS_BASE') || path.join(getConfig.orExit('WORKTREES_BASE'), 'tasks');
-  const accountabilityFile = path.join(TASKS_BASE, ticketId, 'review-accountability.json');
+  let safeTicketId = ticketId;
+  try {
+    const tp = require(path.join(__dirname, '..', '..', 'lib', 'ticket-provider'));
+    const pc = tp.getProviderConfig({ skipPrompt: true });
+    safeTicketId = tp.sanitizeTicketIdForPath(ticketId, pc);
+  } catch {}
+  const accountabilityFile = path.join(TASKS_BASE, safeTicketId, 'review-accountability.json');
 
   if (!fs.existsSync(accountabilityFile)) {
     process.stderr.write(

@@ -365,7 +365,13 @@ function isCheckWorkflowActive(ticketId) {
     if (!ticketId || /[/\\:\0]/.test(ticketId)) return false;
 
     const tasksBase = getTasksBase();
-    const resolved = path.resolve(tasksBase, ticketId, '.check.workflow-state.json');
+    let safeId = ticketId;
+    try {
+      const tp = require(path.join(__dirname, '..', 'ticket-provider'));
+      const pc = tp.getProviderConfig({ skipPrompt: true });
+      safeId = tp.sanitizeTicketIdForPath(ticketId, pc);
+    } catch {}
+    const resolved = path.resolve(tasksBase, safeId, '.check.workflow-state.json');
     // Guard against path traversal — resolved path must stay under tasksBase
     if (!resolved.startsWith(path.resolve(tasksBase) + path.sep)) return false;
 
