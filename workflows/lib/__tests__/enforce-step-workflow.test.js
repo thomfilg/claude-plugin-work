@@ -3434,14 +3434,16 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 0, 'node --test of test file should not be blocked');
     });
 
-    it('allows node --test of workflow-state.test.js', async () => {
-      // The hook inspects the command string at PreToolUse time (before execution).
-      // It does not need the file to exist — it only checks the pattern.
+    it('allows node --test of a real in-repo test file (GH-141 false-positive)', async () => {
+      // Use the real workflow-state.test.js — it exists, contains writeFileSync calls,
+      // and lives in __tests__/. Pre-fix, checkScriptBypass would scan it and block.
+      // Post-fix (isTrustedTestScript, GH-191), it's skipped as a trusted in-repo test file.
+      const realTestFile = path.resolve(__dirname, 'workflow-state.test.js');
       const { code } = await runHook({
         tool_name: 'Bash',
-        tool_input: { command: 'node --test workflow-state.test.js' },
+        tool_input: { command: `node --test ${realTestFile}` },
       });
-      assert.equal(code, 0, 'node --test of .test.js file should not be blocked');
+      assert.equal(code, 0, 'node --test of in-repo __tests__/ file should not be blocked');
     });
 
     it('still blocks actual write scripts targeting state files', async () => {
