@@ -229,7 +229,7 @@ Skip edges (forward):
   bootstrap → spec        (brief disabled, skip to spec)
   spec      → implement   (tasks disabled, skip to implement)
   bootstrap → implement   (brief/spec/tasks disabled or done)
-  bootstrap → commit      (resume: code already done)
+  bootstrap → commit      (resume: code already implemented)
   bootstrap → check       (resume: committed, need check)
   brief     → implement   (spec disabled, skip to implement)
   check     → pr          (check passed, go to PR)

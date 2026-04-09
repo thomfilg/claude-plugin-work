@@ -655,8 +655,9 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
   const taskData = s?.hasTasks ? parseTasks(tasksDir) : null;
   const taskState = s?.workState?.tasksMeta;
   const rawTaskIdx = taskState?.currentTaskIndex ?? 0;
+  const allTasksDone = taskData && rawTaskIdx >= taskData.length;
   const currentTaskIdx = taskData ? Math.min(rawTaskIdx, taskData.length - 1) : rawTaskIdx;
-  const currentTask = taskData?.[currentTaskIdx];
+  const currentTask = allTasksDone ? null : taskData?.[currentTaskIdx];
   // Task-scoped implementation: scope agent prompt to current task
   // Auto-initialize task tracking if tasks.md exists but tasksMeta doesn't
   if (taskData && !taskState && s?.workState) {
@@ -673,7 +674,9 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
       : `/work-implement <requirements>${planningContext}${getDocsPrompt('READ_DOCS_ON_DEV')}`,
   };
 
-  if (currentTask?.isCheckpoint) {
+  if (allTasksDone) {
+    add(STEPS.implement, 'SKIP', null, 'All tasks completed');
+  } else if (currentTask?.isCheckpoint) {
     add(STEPS.implement, 'SKIP', null, `Task ${currentTask.num} is a checkpoint — no implementation needed`);
   } else {
     const implementPreviouslyCompleted = s?.stepIs(STEPS.implement) === 'completed';
