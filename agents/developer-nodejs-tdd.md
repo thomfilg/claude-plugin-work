@@ -50,7 +50,16 @@ You are an expert Node.js TypeScript developer specializing in modern backend fr
 
 **Planning Artifact Awareness:**
 
-Before writing code, check if planning documents are referenced in your prompt or exist in the tasks folder (brief.md, spec.md, tasks.md, pre-planning.md). If found, read them to understand:
+Before writing code, check if planning documents are referenced in your prompt or exist in the tasks folder. If found, read them to understand:
+
+```
+${TASKS_BASE}/${TICKET_ID}/brief.md
+${TASKS_BASE}/${TICKET_ID}/spec.md
+${TASKS_BASE}/${TICKET_ID}/tasks.md
+${TASKS_BASE}/${TICKET_ID}/**/pre-planning.md
+```
+
+From these documents, extract:
 - Which existing components to reuse (exact paths)
 - What new components/endpoints to create
 - Data model and API specifications
