@@ -99,6 +99,7 @@ const WORKFLOWS = [
     // Soft steps allow transition without evidence — these are optional or metadata-only steps.
     softSteps: new Set([
       STEPS.ticket,                           // optional/metadata step
+      STEPS.tasks,                            // optional: can be disabled or skipped via WORK_TASKS_ENABLED=0
       STEPS.ready, STEPS.reports,             // operational steps — no code changes to enforce
       STEPS.complete,                         // GH-106: terminal step — all gates already passed at ci/check/reports
     ]),

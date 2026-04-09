@@ -510,6 +510,10 @@ function completeSubtask(ticketId, subtaskIndex) {
  * Called after tasks step completes.
  */
 function initTasksMeta(ticketId, taskCount) {
+  if (!Number.isInteger(taskCount) || taskCount <= 0) {
+    return { error: `Invalid taskCount: ${taskCount}. Must be a positive integer.` };
+  }
+
   let state = loadState(ticketId);
   if (!state) state = initState(ticketId);
 
@@ -556,6 +560,11 @@ function advanceTask(ticketId) {
 
   const meta = state.tasksMeta;
   const idx = meta.currentTaskIndex;
+
+  // Already past the end — idempotent return
+  if (idx >= meta.tasks.length) {
+    return { done: true, message: 'All tasks already completed' };
+  }
 
   // Mark current task as completed
   if (idx < meta.tasks.length) {
@@ -682,6 +691,10 @@ async function main() {
 
     case 'task-init':
       result = initTasksMeta(ticketId, parseInt(args[2], 10));
+      if (result && result.error) {
+        console.error(JSON.stringify(result));
+        process.exit(1);
+      }
       console.log(JSON.stringify({ success: true, tasksMeta: result.tasksMeta }));
       break;
 

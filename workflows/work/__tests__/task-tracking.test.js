@@ -96,6 +96,33 @@ describe('task tracking', () => {
     const { result } = await runWorkState(['task-current', 'TEST-NO-TASKS']);
     assert.ok(result.error);
   });
+
+  it('should reject invalid taskCount values', async () => {
+    const ticket2 = 'TEST-TASKS-INVALID';
+    await runWorkState(['init', ticket2]);
+
+    // taskCount = 0
+    const { code: code0, stderr: stderr0 } = await runWorkState(['task-init', ticket2, '0']);
+    assert.equal(code0, 1);
+    assert.ok(stderr0.includes('Invalid taskCount'));
+
+    // taskCount = -1
+    const { code: codeNeg, stderr: stderrNeg } = await runWorkState(['task-init', ticket2, '-1']);
+    assert.equal(codeNeg, 1);
+    assert.ok(stderrNeg.includes('Invalid taskCount'));
+
+    // taskCount = abc (NaN after parseInt)
+    const { code: codeNaN, stderr: stderrNaN } = await runWorkState(['task-init', ticket2, 'abc']);
+    assert.equal(codeNaN, 1);
+    assert.ok(stderrNaN.includes('Invalid taskCount'));
+  });
+
+  it('should return idempotent result when advancing past completion', async () => {
+    // All tasks for TEST-TASKS-001 are already complete from previous tests
+    const { result } = await runWorkState(['task-advance', ticket]);
+    assert.equal(result.done, true);
+    assert.ok(result.message.includes('already completed'));
+  });
 });
 
 describe('parseTasks', () => {

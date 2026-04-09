@@ -132,7 +132,10 @@ function parseTasks(tasksDir) {
   // parts[0] = preamble, then pairs of [taskNum, taskBody]
   for (let i = 1; i < parts.length; i += 2) {
     const num = parseInt(parts[i], 10);
-    const body = (parts[i + 1] || '').trim();
+    const rawBody = (parts[i + 1] || '').trim();
+
+    // Strip trailing non-task ## sections (e.g. ## Requirement Coverage, ## Extracted Requirements)
+    const body = rawBody.replace(/\n## (?!Task\s)\S[\s\S]*$/, '').trim();
 
     // Extract title from first line: " — <title>" or "— <title>"
     const titleMatch = body.match(/^[\s]*[—–-]+\s*(.+?)$/m);
@@ -178,7 +181,7 @@ function parseTasks(tasksDir) {
       requirementsCovered,
       acceptanceCriteria,
       suggestedScope,
-      rawContent: `## Task ${num} ${body.split('\n')[0]}\n${body}`,
+      rawContent: `## Task ${num}${body}`,
     });
   }
 
