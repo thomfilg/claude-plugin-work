@@ -658,7 +658,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
   const allTasksDone = taskData && rawTaskIdx >= taskData.length;
   const currentTaskIdx = taskData ? Math.min(rawTaskIdx, taskData.length - 1) : rawTaskIdx;
   const currentTask = allTasksDone ? null : taskData?.[currentTaskIdx];
-  // Task-scoped implementation: scope agent prompt to current task
+  // Task-scoped implementation: scope agent prompt to current task (allTasksDone handled above)
   // Auto-initialize task tracking if tasks.md exists but tasksMeta doesn't
   if (taskData && !taskState && s?.workState) {
     try {
