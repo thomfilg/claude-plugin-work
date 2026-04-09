@@ -232,6 +232,7 @@ Verify all prior tasks are correctly implemented.
         env: {
           ...process.env,
           TASKS_BASE: TEMP_TASKS_BASE,
+          WORKTREES_BASE: TEMP_TASKS_BASE,
           SESSION_GUARD_ENABLED: '0',
         },
       });

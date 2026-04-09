@@ -644,7 +644,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
     add(STEPS.tasks, 'SKIP', null, 'tasks.md already exists');
   } else if (!fileExists(specPath)) {
     add(STEPS.tasks, 'SKIP', null, 'No spec.md — cannot generate tasks');
-  } else {
+  } else { // spec.md exists and tasks not yet generated — plan is re-evaluated after each step
     add(STEPS.tasks, 'RUN', 'Skill(split-in-tasks)', 'Generate tasks from spec', {
       agentType: 'skill',
       agentPrompt: `/split-in-tasks ${safeName} --force`,
