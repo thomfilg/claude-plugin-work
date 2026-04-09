@@ -84,7 +84,7 @@ This order prevents false-positive findings where the reviewer flags something t
 
 ### Missing Task Docs
 
-If `brief.md` and `spec.md` are both missing:
+If `brief.md`, `spec.md`, and `tasks.md` are all missing:
 - Proceed with code-only review
 - State clearly that task-doc review was not possible
 - Lower confidence if scope or requirements are ambiguous
