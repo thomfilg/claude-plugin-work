@@ -41,8 +41,9 @@ async function main() {
       issues.push('Missing "## Playwright Verification" section');
     }
 
-    // Check: Evidence of browser MCP usage — require tool name + "Result:" on same line
-    const browserToolPattern = /`?mcp__(playwright|claude-in-chrome)__\w+`?\s*[-–—]\s*Result:\s*(SUCCESS|FAIL)/i;
+    // Check: Evidence of browser MCP usage — require tool name and "Result:" on the same line,
+    // allowing common separators like whitespace, colon, or dash variants
+    const browserToolPattern = /`?mcp__(playwright|claude-in-chrome)__\w+`?\s*(?:[-–—:]?\s*)Result:\s*(SUCCESS|FAIL)/i;
     const hasBrowserMCP = browserToolPattern.test(content);
 
     if (!hasBrowserMCP && !content.includes('INFRASTRUCTURE_FAILURE')) {

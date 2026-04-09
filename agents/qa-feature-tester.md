@@ -57,7 +57,7 @@ hooks:
       hooks:
         - type: command
           command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/agents/qa-feature-tester/screenshot-size-validator.js"
-    - matcher: "mcp__playwright__browser_snapshot|mcp__chrome-devtools__take_snapshot"
+    - matcher: "mcp__playwright__browser_snapshot|mcp__claude-in-chrome__read_page|mcp__claude-in-chrome__get_page_text|mcp__chrome-devtools__take_snapshot"
       hooks:
         - type: command
           command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/agents/qa-feature-tester/qa-screenshot-validator.js"

@@ -110,9 +110,14 @@ async function main() {
   //   preview: toolOutput.substring(0, 200)
   // });
 
-  // Only check browser_snapshot results
-  if (toolName !== 'mcp__playwright__browser_snapshot' &&
-      toolName !== 'mcp__chrome-devtools__take_snapshot') {
+  // Only check snapshot/page-read results
+  const VALIDATED_TOOLS = [
+    'mcp__playwright__browser_snapshot',
+    'mcp__chrome-devtools__take_snapshot',
+    'mcp__claude-in-chrome__read_page',
+    'mcp__claude-in-chrome__get_page_text',
+  ];
+  if (!VALIDATED_TOOLS.includes(toolName)) {
     console.log(JSON.stringify({}));
     return;
   }
@@ -240,10 +245,20 @@ async function main() {
     return;
   }
 
-  // No errors — clear retry state
+  // No errors — clear retry state for the current URL only (preserve other URLs' retry history)
   try {
     if (fs.existsSync(RETRY_STATE_FILE)) {
-      fs.unlinkSync(RETRY_STATE_FILE);
+      let currentUrl = 'unknown';
+      try {
+        currentUrl = fs.readFileSync(LAST_URL_FILE, 'utf8').trim();
+      } catch { /* no URL tracked */ }
+      const retryState = JSON.parse(fs.readFileSync(RETRY_STATE_FILE, 'utf8'));
+      delete retryState[currentUrl];
+      if (Object.keys(retryState).length === 0) {
+        fs.unlinkSync(RETRY_STATE_FILE);
+      } else {
+        fs.writeFileSync(RETRY_STATE_FILE, JSON.stringify(retryState));
+      }
     }
   } catch { /* ignore */ }
 
