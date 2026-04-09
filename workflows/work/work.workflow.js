@@ -181,7 +181,7 @@ function parseTasks(tasksDir) {
       requirementsCovered,
       acceptanceCriteria,
       suggestedScope,
-      rawContent: `## Task ${num}${body}`,
+      rawContent: `## Task ${num}${body}`, // reconstructs original "## Task N — title" header
     });
   }
 
@@ -655,6 +655,14 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
   const currentTaskIdx = taskState?.currentTaskIndex ?? 0;
   const currentTask = taskData?.[currentTaskIdx];
 
+  // Auto-initialize task tracking if tasks.md exists but tasksMeta doesn't
+  if (taskData && !taskState && s?.workState) {
+    try {
+      const wsPath = path.join(__dirname, 'work-state.js');
+      run(`node "${wsPath}" task-init "${safeName}" ${taskData.length}`);
+    } catch { /* fail-open: task tracking init failure should not block plan */ }
+  }
+
   const implementMeta = {
     agentType: 'skill',
     agentPrompt: currentTask
@@ -726,7 +734,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
   if (taskData && currentTaskIdx < taskData.length - 1) {
     const checkEntry = plan.find(p => p.step === STEPS.check);
     if (checkEntry) {
-      checkEntry.nextAction = 'advance_task';
+      checkEntry.nextAction = 'advance_task'; // consumed by /work SKILL.md agent logic, not orchestrator code
       checkEntry.taskInfo = {
         current: currentTaskIdx + 1,
         total: taskData.length,

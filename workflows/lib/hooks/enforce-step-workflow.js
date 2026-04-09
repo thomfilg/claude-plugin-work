@@ -99,7 +99,7 @@ const WORKFLOWS = [
     // Soft steps allow transition without evidence — these are optional or metadata-only steps.
     softSteps: new Set([
       STEPS.ticket,                           // optional/metadata step
-      STEPS.tasks,                            // optional: can be disabled or skipped via WORK_TASKS_ENABLED=0
+      STEPS.tasks,                            // optional generation step: can be disabled (WORK_TASKS_ENABLED=0) or skipped (no spec.md); verify() still checks tasks.md existence
       STEPS.ready, STEPS.reports,             // operational steps — no code changes to enforce
       STEPS.complete,                         // GH-106: terminal step — all gates already passed at ci/check/reports
     ]),
@@ -123,7 +123,7 @@ const WORKFLOWS = [
         try { return fs.existsSync(path.join(TASKS_BASE, safeTicketPath(ticketId), 'spec.md')); }
         catch { return false; }
       }},
-      { step: STEPS.tasks, verify: (ticketId) => {
+      { step: STEPS.tasks, verify: (ticketId) => { // verify remains active even though tasks is in softSteps — used by evidence checks
         try { return fs.existsSync(path.join(TASKS_BASE, safeTicketPath(ticketId), 'tasks.md')); }
         catch { return false; }
       }},

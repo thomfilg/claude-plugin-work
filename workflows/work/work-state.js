@@ -529,7 +529,7 @@ function initTasksMeta(ticketId, taskCount) {
   };
 
   return saveState(ticketId, state);
-}
+} // initTasksMeta validates taskCount > 0 and initializes state if missing (line 513-515)
 
 /**
  * Get the current task info.
@@ -577,7 +577,7 @@ function advanceTask(ticketId) {
   saveState(ticketId, state);
 
   if (meta.currentTaskIndex >= meta.tasks.length) {
-    return { done: true, message: 'All tasks completed', completedTask: idx };
+    return { done: true, message: 'All tasks completed', completedTask: idx }; // terminal — all tasks done
   }
 
   return {
