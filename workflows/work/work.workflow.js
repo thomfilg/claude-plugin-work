@@ -184,7 +184,7 @@ function parseTasks(tasksDir) {
       acceptanceCriteria,
       suggestedScope,
       rawContent: `## Task ${num} ${body}`, // reconstructs original "## Task N — title" header (space needed because trim() strips leading space from body)
-    }); // task object complete
+    }); // push parsed task into array
   } // end task parsing loop
 
   return tasks.length > 0 ? tasks : null;
