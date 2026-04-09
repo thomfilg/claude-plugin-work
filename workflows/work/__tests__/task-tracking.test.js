@@ -93,8 +93,10 @@ describe('task tracking', () => {
   });
 
   it('should error on task-current when no task tracking', async () => {
-    const { result } = await runWorkState(['task-current', 'TEST-NO-TASKS']);
-    assert.ok(result.error);
+    const { code, stderr } = await runWorkState(['task-current', 'TEST-NO-TASKS']);
+    assert.equal(code, 1);
+    const errResult = JSON.parse(stderr.trim());
+    assert.ok(errResult.error);
   });
 
   it('should reject invalid taskCount values', async () => {

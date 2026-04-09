@@ -739,7 +739,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
   }
 
   // Task-advance: signal to the agent that more tasks remain after check passes
-  if (taskData && currentTaskIdx < taskData.length - 1) {
+  if (taskData && !allTasksDone && currentTaskIdx < taskData.length - 1) {
     const checkEntry = plan.find(p => p.step === STEPS.check);
     if (checkEntry) {
       checkEntry.nextAction = 'advance_task'; // consumed by /work SKILL.md agent logic, not orchestrator code
@@ -752,7 +752,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
   }
 
   // Mark final task completion when this is the last task
-  if (taskData && currentTaskIdx === taskData.length - 1) {
+  if (taskData && !allTasksDone && currentTaskIdx === taskData.length - 1) {
     const checkEntry = plan.find(p => p.step === STEPS.check);
     if (checkEntry) {
       checkEntry.finalTaskAction = 'complete_last_task'; // agent should call task-advance one final time

@@ -705,16 +705,28 @@ async function main() {
 
     case 'task-current':
       result = getTaskCurrent(ticketId);
+      if (result && result.error) {
+        console.error(JSON.stringify(result));
+        process.exit(1);
+      }
       console.log(JSON.stringify(result, null, 2));
       break;
 
     case 'task-advance':
       result = advanceTask(ticketId);
+      if (result && result.error) {
+        console.error(JSON.stringify(result));
+        process.exit(1);
+      }
       console.log(JSON.stringify(result, null, 2));
       break;
 
     case 'task-get':
       result = getTaskByIndex(ticketId, args[2]);
+      if (result && result.error) {
+        console.error(JSON.stringify(result));
+        process.exit(1);
+      }
       console.log(JSON.stringify(result, null, 2));
       break;
 
