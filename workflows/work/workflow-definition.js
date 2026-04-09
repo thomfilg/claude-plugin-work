@@ -44,10 +44,9 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
     // Soft steps allow transition without evidence -- these are optional or metadata-only steps.
     softSteps: new Set([
       STEPS.ticket,                           // optional/metadata step
-      STEPS.tasks,                            // optional generation step: can be disabled (WORK_TASKS_ENABLED=0) or skipped (no spec.md); verify() still checks tasks.md existence
-      STEPS.ready, STEPS.reports,             // operational steps -- no code changes to enforce; tasks is soft because WORK_TASKS_ENABLED=0 can skip it
+      STEPS.ready, STEPS.reports,             // operational steps -- no code changes to enforce
       STEPS.complete,                         // GH-106: terminal step -- all gates already passed at ci/check/reports
-    ]), // end softSteps
+    ]),
     // Tool can be a string or array -- some runtimes emit Agent instead of Task.
     commandMap: [
       { step: STEPS.bootstrap, verify: verifyBootstrap },
@@ -273,7 +272,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
     transitionPattern: /work(?:-orchestrator|.workflow)\.js\s+transition\s+(\S+)\s+(\S+)/,
     exemptPatterns: [
       /work(?:-orchestrator|.workflow)\.js\s+(plan|transitions|graph)/,
-      /work-state\.js\s+(get|resume-info|init)/,
+      /work-state\.js\s+(get|resume-info|init|task-current|task-advance|task-get|task-init)/,
     ],
     transitionHint: `node ${path.join(__dirname, 'work.workflow.js')} transition`,
   };
@@ -281,6 +280,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
   const artifactRules = [
     { basename: 'brief.md',          step: STEPS.brief, agents: ['brief-writer'] },
     { basename: 'spec.md',           step: STEPS.spec,  agents: ['spec-writer'] },
+    { basename: 'tasks.md',          step: STEPS.tasks, agents: [] },
     { basename: '.last-commit-sha',  step: STEPS.commit },
     { basename: 'code-review.check.md',  step: STEPS.check, agents: ['code-checker'] },
     { basename: 'tests.check.md',        step: STEPS.check, agents: ['quality-checker'] },
