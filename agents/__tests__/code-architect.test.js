@@ -139,19 +139,19 @@ describe('Strict Specificity Rule section', () => {
 
 describe('Role Boundary section', () => {
   it('exists in the document', () => {
-    assert.ok(content.includes('## ROLE BOUNDARY'));
+    assert.ok(content.includes('## Role Boundary'));
   });
 
   it('appears after CRITICAL: NEVER CALL YOURSELF', () => {
     const critIdx = content.indexOf('## CRITICAL: NEVER CALL YOURSELF');
-    const rbIdx = content.indexOf('## ROLE BOUNDARY');
-    assert.ok(rbIdx > critIdx, 'ROLE BOUNDARY must come after CRITICAL section');
+    const rbIdx = content.indexOf('## Role Boundary');
+    assert.ok(rbIdx > critIdx, 'Role Boundary must come after CRITICAL section');
   });
 
   it('appears before Core Capabilities', () => {
-    const rbIdx = content.indexOf('## ROLE BOUNDARY');
+    const rbIdx = content.indexOf('## Role Boundary');
     const ccIdx = content.indexOf('### Core Capabilities');
-    assert.ok(rbIdx < ccIdx, 'ROLE BOUNDARY must come before Core Capabilities');
+    assert.ok(rbIdx < ccIdx, 'Role Boundary must come before Core Capabilities');
   });
 });
 
