@@ -52,8 +52,8 @@ async function main() {
     }
 
     const stats = fs.statSync(filename);
+    // Use Math.ceil to ensure slightly-oversized files aren't rounded down past thresholds
     const sizeKB = Math.ceil(stats.size / 1024);
-
     if (sizeKB > DELETE_SIZE_KB) {
       // Auto-delete — almost certainly a full-page capture
       fs.unlinkSync(filename);
