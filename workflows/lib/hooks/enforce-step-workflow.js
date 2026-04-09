@@ -122,6 +122,10 @@ const WORKFLOWS = [
         try { return fs.existsSync(path.join(TASKS_BASE, safeTicketPath(ticketId), 'spec.md')); }
         catch { return false; }
       }},
+      { step: STEPS.tasks, verify: (ticketId) => {
+        try { return fs.existsSync(path.join(TASKS_BASE, safeTicketPath(ticketId), 'tasks.md')); }
+        catch { return false; }
+      }},
       { step: STEPS.implement, verify: (ticketId) => {
         // Implement is proven if tdd-phase.json has at least one cycle with red + green evidence
         try {
