@@ -162,6 +162,7 @@ async function main() {
     ) && !errors.some(e =>
       NON_TRANSIENT_ERROR_PATTERNS.some(p => e.includes(p.toString()))
     );
+    const isWarningOnly = errors.length === 0 && warnings.length > 0;
 
     // Track retry state for transient errors
     let retryCount = 0;
@@ -185,7 +186,7 @@ async function main() {
     }
 
     let actionLines;
-    if (errors.length === 0 && warnings.length > 0) {
+    if (isWarningOnly) {
       // Warning-only (e.g., loading indicators): suggest waiting, not failing
       actionLines = [
         'LOADING/WARNING detected — content may not have fully loaded:',

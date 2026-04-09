@@ -61,7 +61,7 @@ hooks:
       hooks:
         - type: command
           command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/agents/qa-feature-tester/screenshot-size-validator.js"
-  Stop:
+  Stop: # Cleanup and validation hooks
     - hooks:
         - type: command
           command: "rm -f /tmp/qa-agent-active"

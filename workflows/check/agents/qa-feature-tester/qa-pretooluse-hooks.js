@@ -106,7 +106,7 @@ const ALLOWED_FILE_PATTERNS = [
   /\.txt$/i,                              // Text files
   /README/i,                              // README files
   /package\.json$/i,                      // Package manifest
-];
+]; // All patterns are directory-anchored or extension-specific to prevent overly broad matching
 
 function isAllowedNavHint(filePath) {
   return ALLOWED_FILE_PATTERNS.some(p => p.test(filePath));
