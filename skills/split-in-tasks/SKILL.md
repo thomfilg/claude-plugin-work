@@ -1,7 +1,7 @@
 ---
 name: split-in-tasks
 description: Split a spec into small, ordered, deliverable tasks with requirement traceability
-argument-hint: [TICKET_ID or folder name]
+argument-hint: <TICKET_ID or folder name> [--force]
 user-invocable: true
 allowed-tools: Task, Bash, Read, Grep, Glob
 ---
@@ -27,20 +27,16 @@ Split a technical specification into small, ordered, dependency-aware tasks. Eac
 
 Resolve the tasks folder:
 
-1. If an argument is provided and looks like a ticket ID (e.g., `PROJ-123`, `#42`): use as folder name
+1. If an argument is provided and looks like a ticket ID (e.g., `PROJ-123`, `#42`): sanitize it for use as folder name (e.g., `#42` → `GH-42`) to match how other workflow commands resolve task paths
 2. If an argument is provided and is a slug/folder name: use directly
 3. If no argument: detect from current branch — `git branch --show-current | grep -oE '[A-Z]+-[0-9]+'`
 4. If detection fails: stop with error "Could not determine ticket ID. Provide one as argument."
 
-Resolve the tasks base directory:
+Resolve the tasks base directory using the workflow config module (same as `/brief` and `/spec`):
 
 ```bash
-TASKS_BASE="${HOME}/worktrees/tasks"
-```
-
-If `CLAUDE_PLUGIN_ROOT` is set, try loading config for the canonical path:
-```bash
-node -e "try { const c = require('${CLAUDE_PLUGIN_ROOT}/workflows/lib/config'); console.log(c.TASKS_BASE); } catch { console.log('${HOME}/worktrees/tasks'); }"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+node -e "const c = require('$PLUGIN_ROOT/workflows/lib/config'); console.log(JSON.stringify({ TASKS_BASE: c.TASKS_BASE }))"
 ```
 
 Set `TASKS_DIR="${TASKS_BASE}/${FOLDER_NAME}"`.
