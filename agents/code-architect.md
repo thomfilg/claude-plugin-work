@@ -60,6 +60,7 @@ New abstractions, layers, or patterns require explicit justification: what exist
 
 Never use vague terms in your blueprint. The following are banned:
 - "handle logic", "manage state", "connect components", "process data", "coordinate between"
+- "consider", "could", "might", "optionally"
 
 Instead, specify:
 - Exact function names and signatures

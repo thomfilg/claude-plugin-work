@@ -121,6 +121,10 @@ describe('Strict Specificity Rule section', () => {
       'connect components',
       'process data',
       'coordinate between',
+      'consider',
+      'could',
+      'might',
+      'optionally',
     ];
     for (const term of banned) {
       assert.ok(
