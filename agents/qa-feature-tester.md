@@ -57,11 +57,11 @@ hooks:
       hooks:
         - type: command
           command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/agents/qa-feature-tester/qa-screenshot-validator.js"
-    - matcher: "mcp__playwright__browser_take_screenshot"
+    - matcher: "mcp__playwright__browser_take_screenshot" # Validates screenshot file size (warns >150KB, deletes >200KB)
       hooks:
         - type: command
           command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/agents/qa-feature-tester/screenshot-size-validator.js"
-  Stop: # Cleanup and validation hooks
+  Stop:
     - hooks:
         - type: command
           command: "rm -f /tmp/qa-agent-active"

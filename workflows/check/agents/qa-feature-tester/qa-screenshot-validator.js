@@ -163,8 +163,7 @@ async function main() {
       NON_TRANSIENT_ERROR_PATTERNS.some(p => e.includes(p.toString()))
     );
     const isWarningOnly = errors.length === 0 && warnings.length > 0;
-
-    // Track retry state for transient errors
+    // Track retry state for transient errors (only for actual errors, not warnings)
     let retryCount = 0;
     let currentUrl = 'unknown';
     try {

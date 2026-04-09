@@ -52,7 +52,7 @@ async function main() {
     }
 
     const stats = fs.statSync(filename);
-    const sizeKB = Math.round(stats.size / 1024);
+    const sizeKB = Math.ceil(stats.size / 1024);
 
     if (sizeKB > DELETE_SIZE_KB) {
       // Auto-delete — almost certainly a full-page capture
