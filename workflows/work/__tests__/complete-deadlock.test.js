@@ -188,14 +188,14 @@ describe('GH-106: complete step deadlock fix', () => {
 
   // ─── Test 6: complete step prompt includes archival ───────────────────────
 
-  describe('6. work.workflow.js: complete step prompt includes archival', () => {
+  describe('6. workflows/work/steps/complete.js: complete step prompt includes archival', () => {
     it('complete step agentPrompt mentions archiving artifacts', () => {
-      const src = fs.readFileSync(path.join(__dirname, '..', 'work.workflow.js'), 'utf-8');
-      // The complete step prompt should mention archiving or archive
-      const completeSection = src.match(/add\(STEPS\.complete[\s\S]*?\);.*?complete/);
-      assert.ok(completeSection, 'complete step definition should exist');
+      const src = fs.readFileSync(
+        path.join(__dirname, '..', 'steps', 'complete.js'),
+        'utf-8'
+      );
       assert.match(
-        completeSection[0],
+        src,
         /archive|archiv/i,
         'complete step prompt should reference archiving artifacts'
       );
