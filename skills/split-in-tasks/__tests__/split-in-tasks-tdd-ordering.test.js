@@ -8,9 +8,14 @@ const content = fs.readFileSync(SKILL_PATH, 'utf-8'); // discoverable via script
 
 describe('split-in-tasks SKILL.md — TDD ordering enforcement', () => {
 
-  it('contains Rule 10 with TDD ordering requirement', () => {
-    assert.match(content, /Rule 10.*TDD/i,
-      'SKILL.md must contain Rule 10 referencing TDD ordering');
+  it('contains Rule 10 with TDD ordering requirement after Rule 9', () => {
+    const rule9Idx = content.indexOf('**Rule 9');
+    const rule10Idx = content.indexOf('**Rule 10');
+    assert.ok(rule9Idx > -1, 'SKILL.md must contain Rule 9');
+    assert.ok(rule10Idx > -1, 'SKILL.md must contain Rule 10');
+    assert.ok(rule9Idx < rule10Idx, 'Rule 10 must appear after Rule 9');
+    assert.match(content.slice(rule10Idx), /TDD/i,
+      'Rule 10 must reference TDD ordering');
   });
 
   it('contains phase-labeled deliverables template with RED, GREEN, REFACTOR prefixes', () => {
