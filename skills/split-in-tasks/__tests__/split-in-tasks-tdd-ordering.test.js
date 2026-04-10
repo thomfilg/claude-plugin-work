@@ -65,7 +65,7 @@ describe('split-in-tasks SKILL.md — TDD ordering enforcement', () => {
     const rule10Section = content.match(/\*\*Rule 10[\s\S]*?(?=\*\*(?:Rule|Anti-patterns))/);
     assert.ok(rule10Section, 'Rule 10 section must exist');
     assert.match(rule10Section[0], /triplet|multiple behaviors[\s\S]*?RED[\s\S]*?GREEN[\s\S]*?REFACTOR|each behavior[\s\S]*?own/i,
-      'Rule 10 must include guidance for multi-behavior triplets');
+      'Rule 10 section must include guidance for multi-behavior triplets');
   });
 
 });
