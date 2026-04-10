@@ -83,7 +83,10 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
     const patterns = STEP_ARTIFACTS[step];
     if (!patterns) continue;
 
-    const files = patterns.flatMap((p) => listFiles(tasksDir, p));
+    // Dedupe paths across patterns — multiple regex/substring patterns can
+    // match the same file, which would otherwise cause fs.renameSync to fail
+    // on the second attempt (file already moved) and log a spurious warning.
+    const files = [...new Set(patterns.flatMap((p) => listFiles(tasksDir, p)))];
     if (files.length === 0) continue;
 
     if (!archived) {

@@ -105,6 +105,59 @@ describe('safeExec — shell injection safety', () => {
   });
 });
 
+// ─── Input validation ──────────────────────────────────────────────────────
+
+describe('safeExec — input validation', () => {
+  it('throws TypeError when args is not an array', () => {
+    assert.throws(
+      () => safeExec('cmd', 'not-array'),
+      (err) => err instanceof TypeError && /array of strings/.test(err.message)
+    );
+  });
+
+  it('throws TypeError when args contains a non-string element', () => {
+    assert.throws(
+      () => safeExec('cmd', [123]),
+      (err) => err instanceof TypeError && /array of strings/.test(err.message)
+    );
+  });
+
+  it('throws TypeError when args is an object', () => {
+    assert.throws(
+      () => safeExec('cmd', { 0: 'foo' }),
+      (err) => err instanceof TypeError && /array of strings/.test(err.message)
+    );
+  });
+
+  it('throws TypeError when command is null', () => {
+    assert.throws(
+      () => safeExec(null),
+      (err) => err instanceof TypeError && /non-empty string/.test(err.message)
+    );
+  });
+
+  it('throws TypeError when command is undefined', () => {
+    assert.throws(
+      () => safeExec(undefined),
+      (err) => err instanceof TypeError && /non-empty string/.test(err.message)
+    );
+  });
+
+  it('throws TypeError when command is an empty string', () => {
+    assert.throws(
+      () => safeExec(''),
+      (err) => err instanceof TypeError && /non-empty string/.test(err.message)
+    );
+  });
+
+  it('throws TypeError when command is a number', () => {
+    assert.throws(
+      () => safeExec(42),
+      (err) => err instanceof TypeError && /non-empty string/.test(err.message)
+    );
+  });
+});
+
 // ─── Custom options passthrough ─────────────────────────────────────────────
 
 describe('safeExec — custom options', () => {

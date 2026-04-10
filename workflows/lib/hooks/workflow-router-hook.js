@@ -29,6 +29,13 @@ process.on('unhandledRejection', (err) => {
 const WORKFLOWS_DIR = path.join(__dirname, '..', '..');
 const ENGINE_PATH = path.join(__dirname, '..', 'workflow-engine.js');
 
+// Tokenize args string into positional single-token values.
+// Quoted multi-word args are NOT supported by design — matches pre-execFileSync
+// shell tokenization behavior. Used by both /work and /work2 slash commands.
+function tokenizeArgs(rawArgs) {
+  return rawArgs.split(/\s+/).filter((token) => token.length > 0);
+}
+
 function main() {
   const userPrompt = process.env.CLAUDE_USER_PROMPT || '';
 
@@ -58,11 +65,9 @@ function main() {
     process.exit(0); // Not a workflow command, pass through
   }
 
-  // Args are positional single-token values (ticket IDs, flags only).
-  // Quoted multi-word arguments are not supported — match pre-execFileSync
-  // behavior where such inputs would have been shell-tokenized the same way.
-  // This is an intentional, documented scope constraint of the /work command.
-  const parsedArgs = args.split(/\s+/).filter((token) => token.length > 0);
+  // Tokenize via the named helper to make the intent obvious at the call site.
+  // See tokenizeArgs() above for the scope-constraint rationale.
+  const parsedArgs = tokenizeArgs(args);
 
   // Run the workflow engine via safeExec (uses execFileSync internally, no shell).
   // Use a null fallback so we can distinguish a failure from empty output.

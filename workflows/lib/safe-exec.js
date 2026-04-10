@@ -18,6 +18,20 @@ const { execFileSync } = require('node:child_process');
  * @returns {string} trimmed stdout on success, or `opts.fallback` on error
  */
 function safeExec(command, args = [], opts = {}) {
+  // Validate command: must be a non-empty string. Passing arbitrary types to
+  // execFileSync would either throw cryptically or coerce unsafely — fail fast
+  // at the boundary with a clear TypeError so callers surface misuse early.
+  if (typeof command !== 'string' || command.length === 0) {
+    throw new TypeError('safeExec command must be a non-empty string');
+  }
+
+  // Validate args: must be an array of strings. execFileSync will throw on
+  // non-array input, but the error is opaque; similarly, non-string entries
+  // (e.g. numbers) would be coerced. Enforce the contract explicitly.
+  if (!Array.isArray(args) || !args.every((arg) => typeof arg === 'string')) {
+    throw new TypeError('safeExec args must be an array of strings');
+  }
+
   // Strip fallback and shell/stdio from caller opts to prevent dangerous overrides:
   //   - shell: would enable shell interpolation (injection risk)
   //   - stdio: would allow leaking stdout/stderr to parent
