@@ -11,6 +11,7 @@
 const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const { STEPS } = require('../../step-registry');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ const path = require('path');
  */
 function makeCtx(overrides = {}) {
   return {
+    STEPS,
     ticket: 'TEST-100',
     description: null,
     rework: false,
@@ -78,7 +80,7 @@ describe('step modules', () => {
     const expectedModules = [
       'ticket', 'bootstrap', 'transition', 'brief', 'spec', 'tasks',
       'implement', 'commit', 'check', 'task-advance', 'pr', 'ready',
-      'follow-up', 'ci-cleanup-reports-complete',
+      'follow-up', 'ci', 'cleanup', 'reports', 'complete',
     ];
 
     for (const mod of expectedModules) {
