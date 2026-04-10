@@ -190,15 +190,22 @@ After saving, output:
 - <requirement ID from Step 4.0>
 
 ### Deliverables
-- [ ] N.1 **RED:** Write failing tests for <behavior>
-  - Test: Tests fail — <expected behavior> is not yet implemented
-  - _Requirements: <requirement ID> (<context>)_
-- [ ] N.2 **GREEN:** Implement <behavior> to pass tests
-  - Test: All tests from N.1 pass
-  - _Requirements: <requirement ID> (<context>)_
-- [ ] N.3 **REFACTOR:** Refactor <component> for clarity
-  - Test: All tests still pass after refactoring
-  - _Requirements: <requirement ID> (<context>)_
+- [ ] N.1 <subtask description>
+  - [ ] N.1.1 **RED:** Write failing tests for <behavior>
+    - Test: Tests fail — <expected behavior> is not yet implemented
+  - [ ] N.1.2 **GREEN:** Implement <behavior> to pass tests
+    - Test: All tests from N.1.1 pass
+  - [ ] N.1.3 **REFACTOR:** Refactor <component> for clarity
+    - Test: All tests still pass after refactoring
+  - _Requirements: <requirement ID> (<context>), <requirement ID> (<context>)_
+- [ ] N.2 <subtask description>
+  - [ ] N.2.1 **RED:** Write failing tests for <behavior>
+    - Test: Tests fail — <expected behavior> is not yet implemented
+  - [ ] N.2.2 **GREEN:** Implement <behavior> to pass tests
+    - Test: All tests from N.2.1 pass
+  - [ ] N.2.3 **REFACTOR:** Refactor <component> for clarity
+    - Test: All tests still pass after refactoring
+  - _Requirements: <requirement ID> (<context>), <requirement ID> (<context>)_
 
 ### Acceptance Criteria
 - <criterion 1>
@@ -271,10 +278,10 @@ _TDD Protocol: Every non-exempt implementation task follows RED -> GREEN -> REFA
 ### Format rules
 
 - Top-level tasks are numbered sequentially: Task 1, Task 2, ...
-- Subtasks use dot notation: 1.1, 1.2, 2.1, ...
-- Every subtask has a `Test:` line (acceptance criterion) and a `_Requirements:_` line with context annotations (e.g., `_Requirements: R1 (validation logic), R3 (error handling)_`)
+- Subtasks use dot notation: 1.1, 1.2, 2.1, ... Each subtask nests its own TDD cycle as sub-items: N.1.1 **RED:**, N.1.2 **GREEN:**, N.1.3 **REFACTOR:**
+- Every TDD sub-item has a `Test:` line (acceptance criterion). Each subtask ends with a `_Requirements:_` line with context annotations (e.g., `_Requirements: R1 (validation logic), R3 (error handling)_`)
 - Each deliverable must correspond to a concrete artifact: a file, function/class, API endpoint, CLI command, infrastructure resource, or configuration entry. Do not list abstract outcomes like "improved performance" as deliverables.
 - Dependencies reference task numbers, not subtask numbers
-- Implementation task deliverables use bold phase prefixes: `**RED:**`, `**GREEN:**`, `**REFACTOR:**` — each behavior gets its own triplet. Checkpoint tasks and config-only infrastructure tasks are exempt (see Rule 10).
+- Implementation task deliverables use bold phase prefixes: `**RED:**`, `**GREEN:**`, `**REFACTOR:**` nested within each subtask — each subtask gets its own small TDD cycle. Checkpoint tasks and config-only infrastructure tasks are exempt (see Rule 10).
 - The file starts with `# Tasks`, metadata, and the extracted requirements list
 - The file ends with the Requirement Coverage table
