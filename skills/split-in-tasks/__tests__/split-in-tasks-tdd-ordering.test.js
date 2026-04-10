@@ -14,11 +14,15 @@ describe('split-in-tasks SKILL.md — TDD ordering enforcement', () => {
   });
 
   it('contains phase-labeled deliverables template with RED, GREEN, REFACTOR prefixes', () => {
-    assert.match(content, /\*\*RED:\*\*/,
+    // Scope assertion to the Deliverables template section only
+    const deliverablesSection = content.match(/### Deliverables[\s\S]*?(?=###\s)/);
+    assert.ok(deliverablesSection, 'Deliverables template section must exist');
+    const section = deliverablesSection[0];
+    assert.match(section, /\*\*RED:\*\*/,
       'Deliverables template must include **RED:** prefix');
-    assert.match(content, /\*\*GREEN:\*\*/,
+    assert.match(section, /\*\*GREEN:\*\*/,
       'Deliverables template must include **GREEN:** prefix');
-    assert.match(content, /\*\*REFACTOR:\*\*/,
+    assert.match(section, /\*\*REFACTOR:\*\*/,
       'Deliverables template must include **REFACTOR:** prefix');
   });
 
@@ -49,12 +53,18 @@ describe('split-in-tasks SKILL.md — TDD ordering enforcement', () => {
   });
 
   it('contains exception for checkpoint/config-only tasks', () => {
-    assert.match(content, /checkpoint.*exempt|config.only.*exempt|exempt.*checkpoint|exempt.*config/i,
+    // Scope assertion to Rule 10 section only
+    const rule10Section = content.match(/\*\*Rule 10[\s\S]*?(?=\*\*(?:Rule|Anti-patterns))/);
+    assert.ok(rule10Section, 'Rule 10 section must exist');
+    assert.match(rule10Section[0], /checkpoint.*exempt|config.only.*exempt|exempt.*checkpoint|exempt.*config/i,
       'Rule 10 must include exception for checkpoint and config-only tasks');
   });
 
   it('contains multi-behavior triplet guidance', () => {
-    assert.match(content, /triplet|multiple behaviors.*RED.*GREEN.*REFACTOR|each behavior.*own/i,
+    // Scope assertion to Rule 10 section only
+    const rule10Section = content.match(/\*\*Rule 10[\s\S]*?(?=\*\*(?:Rule|Anti-patterns))/);
+    assert.ok(rule10Section, 'Rule 10 section must exist');
+    assert.match(rule10Section[0], /triplet|multiple behaviors.*RED.*GREEN.*REFACTOR|each behavior.*own/i,
       'Rule 10 must include guidance for multi-behavior triplets');
   });
 

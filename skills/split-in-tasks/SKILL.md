@@ -122,7 +122,9 @@ A task can be marked `Parallel: Yes` ONLY if ALL of these are true:
 Otherwise mark `Parallel: No` or `Parallel: Partial` with explanation.
 
 **Rule 10 — TDD Ordering:**
-Implementation tasks MUST order deliverables following the TDD cycle: RED (write failing tests) -> GREEN (implement to pass) -> REFACTOR (clean up). Each deliverable gets a bold phase prefix: `**RED:**`, `**GREEN:**`, `**REFACTOR:**`. When a task covers multiple behaviors, each behavior gets its own RED/GREEN/REFACTOR triplet. Checkpoint tasks and config-only infrastructure tasks are exempt from this rule.
+Standard implementation tasks MUST order deliverables following the TDD cycle: RED (write failing tests) -> GREEN (implement to pass) -> REFACTOR (clean up). Each deliverable gets a bold phase prefix: `**RED:**`, `**GREEN:**`, `**REFACTOR:**`. When a task covers multiple behaviors, each behavior gets its own RED/GREEN/REFACTOR triplet.
+
+Checkpoint tasks and config-only infrastructure tasks are exempt from the RED/GREEN/REFACTOR deliverables requirement. For those exempt tasks, use a non-phase deliverables list that describes the concrete verifiable work in execution order, for example: `- Update config`, `- Validate config`, `- Document rollout/usage` as applicable.
 
 **Anti-patterns — DO NOT generate tasks like these:**
 - "Implement backend logic" (too vague, spans multiple components)
@@ -273,6 +275,6 @@ _TDD Protocol: Every implementation task follows RED -> GREEN -> REFACTOR orderi
 - Every subtask has a `Test:` line (acceptance criterion) and a `_Requirements:_` line with context annotations (e.g., `_Requirements: R1 (validation logic), R3 (error handling)_`)
 - Each deliverable must correspond to a concrete artifact: a file, function/class, API endpoint, CLI command, infrastructure resource, or configuration entry. Do not list abstract outcomes like "improved performance" as deliverables.
 - Dependencies reference task numbers, not subtask numbers
-- Implementation task deliverables use bold phase prefixes: `**RED:**`, `**GREEN:**`, `**REFACTOR:**` — each behavior gets its own triplet
+- Implementation task deliverables use bold phase prefixes: `**RED:**`, `**GREEN:**`, `**REFACTOR:**` — each behavior gets its own triplet. Checkpoint tasks and config-only infrastructure tasks are exempt (see Rule 10).
 - The file starts with `# Tasks`, metadata, and the extracted requirements list
 - The file ends with the Requirement Coverage table
