@@ -12,9 +12,10 @@
  * Pattern follows work2-orchestrator-hook.js.
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', 'hook-error-log'));
 
 process.on('uncaughtException', () => process.exit(0));
 process.on('unhandledRejection', () => process.exit(0));
@@ -51,10 +52,15 @@ function main() {
     process.exit(0); // Not a workflow command, pass through
   }
 
+  // Args are positional single-token values (ticket IDs, flags).
+  // Quoted multi-word arguments are not supported by this CLI interface.
+  const parsedArgs = args.split(/\s+/).filter(Boolean);
+
   try {
-    // Run the workflow engine
-    const result = execSync(
-      `node "${ENGINE_PATH}" ${matched} plan ${args}`,
+    // Run the workflow engine — execFileSync avoids shell injection
+    const result = execFileSync(
+      process.execPath,
+      [ENGINE_PATH, matched, 'plan', ...parsedArgs],
       { encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
     );
 
@@ -74,6 +80,7 @@ function main() {
     }
 
   } catch (err) {
+    logHookError(__filename, err);
     console.log(`WORKFLOW ENGINE FAILED: ${err.message}`);
   }
 

@@ -7,9 +7,10 @@
  * when /work2 is invoked, injecting the plan into the context.
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const path = require('path');
 const { appendAction } = require(path.join(__dirname, '..', 'workflows', 'work', 'work-actions'));
+const { logHookError } = require(path.join(__dirname, '..', 'workflows', 'lib', 'hook-error-log'));
 
 // Use CLAUDE_PLUGIN_ROOT if available, otherwise fallback to __dirname
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
@@ -26,10 +27,13 @@ function main() {
   }
 
   const args = work2Match[1].trim();
+  // Args are positional single-token values (ticket IDs, flags).
+  // Quoted multi-word arguments are not supported by this CLI interface.
+  const parsedArgs = args.split(/\s+/).filter(Boolean);
 
   try {
-    // Run the orchestrator
-    const result = execSync(`node "${ORCHESTRATOR_PATH}" ${args}`, {
+    // Run the orchestrator — execFileSync avoids shell injection
+    const result = execFileSync(process.execPath, [ORCHESTRATOR_PATH, ...parsedArgs], {
       encoding: 'utf-8',
       timeout: 30000,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -59,6 +63,7 @@ function main() {
     console.log(output);
 
   } catch (err) {
+    logHookError(__filename, err);
     console.log(`ORCHESTRATOR FAILED: ${err.message}`);
   }
 
