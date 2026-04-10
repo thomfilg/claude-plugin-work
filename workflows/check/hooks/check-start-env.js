@@ -16,9 +16,10 @@ const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const config = require(path.join(__dirname, '..', '..', 'lib', 'config'));
+const { logHookError } = require(path.join(__dirname, '..', '..', 'lib', 'hook-error-log'));
 
-process.on('uncaughtException', () => { console.log(JSON.stringify({ error: 'uncaught exception', apps: {} })); process.exit(0); });
-process.on('unhandledRejection', () => { console.log(JSON.stringify({ error: 'unhandled rejection', apps: {} })); process.exit(0); });
+process.on('uncaughtException', (err) => { logHookError(__filename, err); console.log(JSON.stringify({ error: 'uncaught exception', apps: {} })); process.exit(0); });
+process.on('unhandledRejection', (err) => { logHookError(__filename, err); console.log(JSON.stringify({ error: 'unhandled rejection', apps: {} })); process.exit(0); });
 
 // Get impacted apps from args
 let IMPACTED_APPS;
@@ -374,4 +375,4 @@ async function main() {
   console.log(JSON.stringify(result, null, 2));
 }
 
-main().catch(() => process.exit(0));
+main().catch((err) => { logHookError(__filename, err); process.exit(0); });

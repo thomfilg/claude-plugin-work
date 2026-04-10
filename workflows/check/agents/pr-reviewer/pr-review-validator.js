@@ -5,6 +5,9 @@
  * Blocks if review contains "Critical Issues" but recommends "APPROVE"
  */
 
+const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', '..', '..', 'lib', 'hook-error-log'));
+
 function extractTextContent(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -74,6 +77,7 @@ Either:
   process.exit(0);
 }
 
-main().catch(() => {
+main().catch((err) => {
+  logHookError(__filename, err);
   process.exit(0);
 });

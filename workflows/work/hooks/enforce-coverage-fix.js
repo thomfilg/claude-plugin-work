@@ -12,9 +12,11 @@
  */
 
 const fs = require('fs');
+const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', '..', 'lib', 'hook-error-log'));
 
-process.on('uncaughtException', () => process.exit(0));
-process.on('unhandledRejection', () => process.exit(0));
+process.on('uncaughtException', (err) => { logHookError(__filename, err); process.exit(0); });
+process.on('unhandledRejection', (err) => { logHookError(__filename, err); process.exit(0); });
 
 let config;
 try {
@@ -129,4 +131,4 @@ Per /follow-up-pr section 4.3: ANY coverage-related CI failure → /test-coordin
   }
 }
 
-main().catch(() => process.exit(0));
+main().catch((err) => { logHookError(__filename, err); process.exit(0); });

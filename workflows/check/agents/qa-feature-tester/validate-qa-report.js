@@ -11,6 +11,8 @@
  */
 
 const fs = require('fs');
+const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', '..', '..', 'lib', 'hook-error-log'));
 
 async function main() {
   let input = '';
@@ -82,6 +84,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => {
+main().catch((err) => {
+  logHookError(__filename, err);
   process.exit(0);
 });

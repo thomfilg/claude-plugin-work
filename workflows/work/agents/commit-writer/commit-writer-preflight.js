@@ -13,10 +13,11 @@
 
 const { execSync } = require('child_process');
 const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', '..', '..', 'lib', 'hook-error-log'));
 
 let didBlock = false;
-process.on('uncaughtException', () => process.exit(didBlock ? 2 : 0));
-process.on('unhandledRejection', () => process.exit(didBlock ? 2 : 0));
+process.on('uncaughtException', (err) => { logHookError(__filename, err); process.exit(didBlock ? 2 : 0); });
+process.on('unhandledRejection', (err) => { logHookError(__filename, err); process.exit(didBlock ? 2 : 0); });
 
 let runQualityCheck, describeStrategy;
 try {
@@ -90,4 +91,4 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => process.exit(didBlock ? 2 : 0));
+main().catch((err) => { logHookError(__filename, err); process.exit(didBlock ? 2 : 0); });

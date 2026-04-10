@@ -26,6 +26,7 @@ const crypto = require('crypto');
 
 // Cached TASKS_BASE resolution — loaded once per invocation
 const getConfig = require(path.join(__dirname, '..', 'get-config'));
+const { logHookError } = require(path.join(__dirname, '..', 'hook-error-log'));
 
 let _tasksBase;
 function getTasksBase() {
@@ -43,8 +44,8 @@ if (process.env.SESSION_GUARD_ENABLED === '0') {
 // CLI mode surfaces errors with non-zero exit codes for debuggability
 const isHookMode = Boolean(process.env.CLAUDE_HOOK_TYPE);
 if (isHookMode) {
-  process.on('uncaughtException', () => process.exit(0));
-  process.on('unhandledRejection', () => process.exit(0));
+  process.on('uncaughtException', (err) => { logHookError(__filename, err); process.exit(0); });
+  process.on('unhandledRejection', (err) => { logHookError(__filename, err); process.exit(0); });
 }
 
 // Session files live in /tmp by default. Files are created with mode 0o600 and
@@ -490,6 +491,7 @@ async function main() {
 
 main().catch((err) => {
   if (isHookMode) {
+    logHookError(__filename, err);
     process.exit(0); // fail-open in hook mode
   } else {
     process.stderr.write(`session-guard error: ${err.message}\n`);

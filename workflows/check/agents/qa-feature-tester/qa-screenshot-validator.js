@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', '..', '..', 'lib', 'hook-error-log'));
 
 /**
  * PostToolUse hook to validate QA screenshots
@@ -266,6 +268,7 @@ async function main() {
 }
 
 main().catch(err => {
+  logHookError(__filename, err);
   console.error('QA validator error:', err.message);
   console.log(JSON.stringify({}));
 });

@@ -21,10 +21,12 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { logHookError } = require(path.join(__dirname, '..', '..', 'lib', 'hook-error-log'));
 
 const DEBUG = !!process.env.ENFORCE_HOOK_DEBUG;
 
 process.on('uncaughtException', (err) => {
+  logHookError(__filename, err);
   if (DEBUG) process.stderr.write(`[enforce-review-accountability] uncaught: ${err?.message}\n`);
   process.exit(0); // fail-open
 });
@@ -146,5 +148,6 @@ async function main() {
 }
 
 main().catch((err) => {
+  logHookError(__filename, err);
   if (DEBUG) process.stderr.write(`[enforce-review-accountability] fatal: ${err?.message}\n`);
 });

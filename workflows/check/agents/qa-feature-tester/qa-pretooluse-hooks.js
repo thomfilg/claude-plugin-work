@@ -20,6 +20,8 @@
  */
 
 const fs = require('fs');
+const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', '..', '..', 'lib', 'hook-error-log'));
 
 // Block source code file extensions
 const BLOCKED_EXTENSIONS = [
@@ -210,6 +212,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => {
+main().catch((err) => {
+  logHookError(__filename, err);
   process.exit(0);
 });

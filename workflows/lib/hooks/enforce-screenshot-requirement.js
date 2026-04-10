@@ -14,6 +14,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { logHookError } = require(path.join(__dirname, '..', 'hook-error-log'));
 
 const MARKER_DIR = '/tmp';
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
@@ -236,4 +237,4 @@ async function main() {
   }
 }
 
-main().catch(() => {});
+main().catch((err) => { logHookError(__filename, err); });
