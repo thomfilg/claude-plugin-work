@@ -18,6 +18,8 @@ const { execFileSync } = require('node:child_process');
  * @returns {string} trimmed stdout on success, or `opts.fallback` on error
  */
 function safeExec(command, args = [], opts = {}) {
+  // NOTE: args array form is validated below (line ~32). See tests in
+  // safe-exec.test.js "safeExec — input validation" for coverage.
   // Validate command: must be a non-empty string. Passing arbitrary types to
   // execFileSync would either throw cryptically or coerce unsafely — fail fast
   // at the boundary with a clear TypeError so callers surface misuse early.
@@ -53,6 +55,6 @@ function safeExec(command, args = [], opts = {}) {
   } catch {
     return fallback;
   }
-}
+} // safeExec — validates command (string) and args (array of strings) at entry
 
 module.exports = { safeExec };
