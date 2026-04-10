@@ -36,7 +36,7 @@ function main() {
     const result = execFileSync(process.execPath, [ORCHESTRATOR_PATH, ...parsedArgs], {
       encoding: 'utf-8',
       timeout: 30000,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     // Parse the result
@@ -61,7 +61,6 @@ function main() {
     // Format the plan for injection
     const output = formatPlan(plan);
     console.log(output);
-
   } catch (err) {
     logHookError(__filename, err);
     console.log(`ORCHESTRATOR FAILED: ${err.message}`);
@@ -103,9 +102,14 @@ function formatPlan(plan) {
   // Plan steps
   lines.push('  PLAN:');
   for (const step of plan.plan) {
-    const icon = step.action === 'RUN' ? '🔄' :
-                 step.action === 'SKIP' ? '⏭️' :
-                 step.action === 'DEFER' ? '🔮' : '⏳';
+    const icon =
+      step.action === 'RUN'
+        ? '🔄'
+        : step.action === 'SKIP'
+          ? '⏭️'
+          : step.action === 'DEFER'
+            ? '🔮'
+            : '⏳';
     const cmd = step.command ? ` → ${step.command}` : '';
     lines.push(`    ${icon} ${step.step.padEnd(20)} ${step.action.padEnd(7)} ${step.reason}${cmd}`);
   }
@@ -113,7 +117,9 @@ function formatPlan(plan) {
 
   // Summary
   if (plan.summary) {
-    lines.push(`  SUMMARY: ${plan.summary.run} RUN, ${plan.summary.defer || 0} DEFER, ${plan.summary.skip} SKIP, ${plan.summary.pending} PENDING`);
+    lines.push(
+      `  SUMMARY: ${plan.summary.run} RUN, ${plan.summary.defer || 0} DEFER, ${plan.summary.skip} SKIP, ${plan.summary.pending} PENDING`
+    );
     lines.push(`  FIRST ACTION: ${plan.summary.firstAction}`);
     if (plan.summary.stepsToRun.length > 0) {
       lines.push(`  STEPS TO RUN: ${plan.summary.stepsToRun.join(' → ')}`);
@@ -125,8 +131,12 @@ function formatPlan(plan) {
 
   lines.push('');
   lines.push('═══════════════════════════════════════════════════════════════════');
-  lines.push('  INSTRUCTIONS: Execute RUN steps in order. DEFER steps: re-run plan first to resolve to RUN/SKIP.');
-  lines.push(`  TRANSITION: node ${PLUGIN_ROOT}/workflows/work/work.workflow.js transition ${plan.ticket} <step>`);
+  lines.push(
+    '  INSTRUCTIONS: Execute RUN steps in order. DEFER steps: re-run plan first to resolve to RUN/SKIP.'
+  );
+  lines.push(
+    `  TRANSITION: node ${PLUGIN_ROOT}/workflows/work/work.workflow.js transition ${plan.ticket} <step>`
+  );
   lines.push('═══════════════════════════════════════════════════════════════════');
   lines.push('');
 

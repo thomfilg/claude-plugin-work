@@ -33,7 +33,14 @@ function getCurrentStep(state, steps) {
  *
  * @returns {{ blocked: boolean, matchedStep?: string, currentStep?: string, cmdDesc?: string }}
  */
-function evaluateStepGate({ workflowName, matchedStep, currentStep, toolInput, checkAgents, checkStateActive }) {
+function evaluateStepGate({
+  workflowName,
+  matchedStep,
+  currentStep,
+  toolInput,
+  checkAgents,
+  checkStateActive,
+}) {
   if (matchedStep === currentStep) {
     return { blocked: false };
   }
@@ -54,7 +61,14 @@ function evaluateStepGate({ workflowName, matchedStep, currentStep, toolInput, c
 /**
  * Format the user-facing block message for a step-gate failure.
  */
-function formatStepBlockMessage({ workflowName, matchedStep, currentStep, cmdDesc, transitionHint, ticketId }) {
+function formatStepBlockMessage({
+  workflowName,
+  matchedStep,
+  currentStep,
+  cmdDesc,
+  transitionHint,
+  ticketId,
+}) {
   return (
     `BLOCKED [${workflowName}]: Cannot run '${cmdDesc}' — step ${matchedStep} is not in_progress.\n` +
     `Current step: ${currentStep} (in_progress)\n` +

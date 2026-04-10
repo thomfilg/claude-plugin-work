@@ -13,9 +13,7 @@ const baseWorkflow = {
   name: 'work',
   steps: ['plan', 'implement', 'check', 'pr'],
   softSteps: new Set(['plan']),
-  commandMap: [
-    { tool: 'Bash', field: 'command', pattern: /^pnpm test$/, step: 'check' },
-  ],
+  commandMap: [{ tool: 'Bash', field: 'command', pattern: /^pnpm test$/, step: 'check' }],
   transitionPattern: /work-orchestrator\.js\s+transition\s+(\S+)\s+(\S+)/,
   transitionHint: 'node work-orchestrator.js transition',
 };

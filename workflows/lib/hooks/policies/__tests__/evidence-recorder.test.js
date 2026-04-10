@@ -26,12 +26,19 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  try { fs.rmSync(TMP_BASE, { recursive: true, force: true }); } catch {}
+  try {
+    fs.rmSync(TMP_BASE, { recursive: true, force: true });
+  } catch {}
 });
 
 describe('evidence-recorder: loadEvidence', () => {
   it('returns empty object when file does not exist', () => {
-    const e = loadEvidence({ tasksBase: TMP_BASE, ticketId: TICKET, evidenceFile: '.x.json', safeTicketPath });
+    const e = loadEvidence({
+      tasksBase: TMP_BASE,
+      ticketId: TICKET,
+      evidenceFile: '.x.json',
+      safeTicketPath,
+    });
     assert.deepEqual(e, {});
   });
 
@@ -39,7 +46,12 @@ describe('evidence-recorder: loadEvidence', () => {
     const dir = path.join(TMP_BASE, TICKET);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, '.x.json'), JSON.stringify({ a: { executed: true } }));
-    const e = loadEvidence({ tasksBase: TMP_BASE, ticketId: TICKET, evidenceFile: '.x.json', safeTicketPath });
+    const e = loadEvidence({
+      tasksBase: TMP_BASE,
+      ticketId: TICKET,
+      evidenceFile: '.x.json',
+      safeTicketPath,
+    });
     assert.deepEqual(e, { a: { executed: true } });
   });
 
@@ -47,7 +59,12 @@ describe('evidence-recorder: loadEvidence', () => {
     const dir = path.join(TMP_BASE, TICKET);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, '.x.json'), '{not json');
-    const e = loadEvidence({ tasksBase: TMP_BASE, ticketId: TICKET, evidenceFile: '.x.json', safeTicketPath });
+    const e = loadEvidence({
+      tasksBase: TMP_BASE,
+      ticketId: TICKET,
+      evidenceFile: '.x.json',
+      safeTicketPath,
+    });
     assert.deepEqual(e, {});
   });
 });

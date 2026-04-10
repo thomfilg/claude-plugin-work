@@ -24,9 +24,17 @@ const path = require('path');
  */
 function inspect(ticket, providerConfig, suffix, deps) {
   const {
-    tp, run, fileExists, readFile, listFiles,
-    loadWorkState, getCurrentStep, REQUIRED_REPORTS,
-    WORKTREES_BASE, TASKS_BASE, MAIN_WORKTREE_FOLDER,
+    tp,
+    run,
+    fileExists,
+    readFile,
+    listFiles,
+    loadWorkState,
+    getCurrentStep,
+    REQUIRED_REPORTS,
+    WORKTREES_BASE,
+    TASKS_BASE,
+    MAIN_WORKTREE_FOLDER,
   } = deps;
 
   const s = {};
@@ -49,7 +57,11 @@ function inspect(ticket, providerConfig, suffix, deps) {
     s.branch = run(`git -C "${c}" branch --show-current`);
     s.headSha = run(`git -C "${c}" rev-parse HEAD`);
     let baseBranch = 'origin/main';
-    try { baseBranch = require(path.join(__dirname, '..', 'lib', 'config')).getBaseBranch({ cwd: c }); } catch { /* */ }
+    try {
+      baseBranch = require(path.join(__dirname, '..', 'lib', 'config')).getBaseBranch({ cwd: c });
+    } catch {
+      /* */
+    }
     const diff = run(`git -C "${c}" diff --shortstat ${baseBranch} -- . 2>/dev/null`);
     s.hasDiffVsMain = diff !== '';
     s.diffSummary = diff || 'no changes';
@@ -63,30 +75,49 @@ function inspect(ticket, providerConfig, suffix, deps) {
       : false;
   } else {
     Object.assign(s, {
-      branch: null, headSha: null, hasDiffVsMain: false, diffSummary: 'no worktree',
-      hasCommitWithTicket: false, hasUncommitted: false, uncommittedCount: 0,
-      hasUnpushed: false, lastCommitMsg: '',
+      branch: null,
+      headSha: null,
+      hasDiffVsMain: false,
+      diffSummary: 'no worktree',
+      hasCommitWithTicket: false,
+      hasUncommitted: false,
+      uncommittedCount: 0,
+      hasUnpushed: false,
+      lastCommitMsg: '',
     });
   }
 
   // PR
   s.pr = null;
   if (s.worktreeExists && s.branch) {
-    const j = run(`gh pr view "${s.branch}" --json number,state,isDraft,url 2>/dev/null`, { cwd: s.worktreeDir });
-    if (j) { try { s.pr = JSON.parse(j); } catch {} }
+    const j = run(`gh pr view "${s.branch}" --json number,state,isDraft,url 2>/dev/null`, {
+      cwd: s.worktreeDir,
+    });
+    if (j) {
+      try {
+        s.pr = JSON.parse(j);
+      } catch {}
+    }
   }
 
   // Reports
-  s.reports = {}; s.allReportsPass = true; s.missingReports = []; s.failedReports = [];
+  s.reports = {};
+  s.allReportsPass = true;
+  s.missingReports = [];
+  s.failedReports = [];
   for (const { file, passPattern } of REQUIRED_REPORTS) {
     const fp = path.join(s.tasksDir, file);
     if (!fileExists(fp)) {
       s.reports[file] = { exists: false, passes: false };
-      s.allReportsPass = false; s.missingReports.push(file);
+      s.allReportsPass = false;
+      s.missingReports.push(file);
     } else {
       const passes = passPattern.test(readFile(fp));
       s.reports[file] = { exists: true, passes };
-      if (!passes) { s.allReportsPass = false; s.failedReports.push(file); }
+      if (!passes) {
+        s.allReportsPass = false;
+        s.failedReports.push(file);
+      }
     }
   }
   for (const qp of listFiles(s.tasksDir, /^qa-.*\.check\.md$/)) {
@@ -94,28 +125,50 @@ function inspect(ticket, providerConfig, suffix, deps) {
     const passes = /Status:\s*APPROVED/i.test(readFile(qp));
     s.reports[name] = { exists: true, passes };
     s.qaReportCount = (s.qaReportCount || 0) + 1;
-    if (!passes) { s.allReportsPass = false; s.failedReports.push(name); }
+    if (!passes) {
+      s.allReportsPass = false;
+      s.failedReports.push(name);
+    }
   }
 
   // SHA tracking
   s.prUpdateSha = fileExists(path.join(s.tasksDir, '.pr-update-sha'))
-    ? readFile(path.join(s.tasksDir, '.pr-update-sha')).trim() : null;
+    ? readFile(path.join(s.tasksDir, '.pr-update-sha')).trim()
+    : null;
   s.postPrUpdateSha = fileExists(path.join(s.tasksDir, '.post-pr-update-sha'))
-    ? readFile(path.join(s.tasksDir, '.post-pr-update-sha')).trim() : null;
+    ? readFile(path.join(s.tasksDir, '.post-pr-update-sha')).trim()
+    : null;
   s.prEverUpdated = s.prUpdateSha !== null;
   s.prShaMatch = !!(s.headSha && s.prUpdateSha && s.headSha === s.prUpdateSha.split('|')[0]);
 
   // Content SHA
   if (s.tasksDirExists) {
-    const qaContent = listFiles(s.tasksDir, /^qa-.*\.check\.md$/).map(f => readFile(f)).join('');
+    const qaContent = listFiles(s.tasksDir, /^qa-.*\.check\.md$/)
+      .map((f) => readFile(f))
+      .join('');
     const ssDir = path.join(s.tasksDir, 'screenshots');
     let ssContent = '';
     if (fileExists(ssDir)) {
       const files = run(`find "${ssDir}" -type f 2>/dev/null | sort`);
-      if (files) ssContent = files.split('\n').map(f => { try { return fs.readFileSync(f); } catch { return ''; } }).join('');
+      if (files)
+        ssContent = files
+          .split('\n')
+          .map((f) => {
+            try {
+              return fs.readFileSync(f);
+            } catch {
+              return '';
+            }
+          })
+          .join('');
     }
-    s.contentSha = (qaContent || ssContent)
-      ? crypto.createHash('sha256').update(qaContent + ssContent).digest('hex') : null;
+    s.contentSha =
+      qaContent || ssContent
+        ? crypto
+            .createHash('sha256')
+            .update(qaContent + ssContent)
+            .digest('hex')
+        : null;
     s.postPrShaMatch = !!(s.contentSha && s.contentSha === s.postPrUpdateSha);
   }
 

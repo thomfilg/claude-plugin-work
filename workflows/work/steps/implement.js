@@ -8,8 +8,16 @@
  */
 module.exports = function implementStep(add, s, ctx) {
   const {
-    STEPS, safeName, tasksDir, planningContext, getDocsPrompt,
-    parseTasks, buildTaskPrompt, fileExists, path, execFileSync,
+    STEPS,
+    safeName,
+    tasksDir,
+    planningContext,
+    getDocsPrompt,
+    parseTasks,
+    buildTaskPrompt,
+    fileExists,
+    path,
+    execFileSync,
   } = ctx;
 
   const taskData = s?.hasTasks ? parseTasks(tasksDir) : null;
@@ -24,9 +32,13 @@ module.exports = function implementStep(add, s, ctx) {
     try {
       const wsPath = ctx.workStatePath;
       execFileSync(process.execPath, [wsPath, 'task-init', safeName, String(taskData.length)], {
-        encoding: 'utf-8', timeout: 5000, stdio: 'pipe',
+        encoding: 'utf-8',
+        timeout: 5000,
+        stdio: 'pipe',
       });
-    } catch { /* fail-open: task tracking init failure should not block plan */ }
+    } catch {
+      /* fail-open: task tracking init failure should not block plan */
+    }
   }
 
   const implementMeta = {
@@ -39,15 +51,28 @@ module.exports = function implementStep(add, s, ctx) {
   if (allTasksDone) {
     add(STEPS.implement, 'SKIP', null, 'All tasks completed');
   } else if (currentTask?.isCheckpoint) {
-    add(STEPS.implement, 'SKIP', null, `Task ${currentTask.num} is a checkpoint — no implementation needed`);
+    add(
+      STEPS.implement,
+      'SKIP',
+      null,
+      `Task ${currentTask.num} is a checkpoint — no implementation needed`
+    );
   } else {
     const implementPreviouslyCompleted = s?.stepIs(STEPS.implement) === 'completed';
     if (implementPreviouslyCompleted && s?.hasDiffVsMain) {
-      add(STEPS.implement, 'DEFER', '/work-implement <requirements>', `Previously completed; changes exist: ${s.diffSummary}`, implementMeta);
+      add(
+        STEPS.implement,
+        'DEFER',
+        '/work-implement <requirements>',
+        `Previously completed; changes exist: ${s.diffSummary}`,
+        implementMeta
+      );
     } else {
       const reason = currentTask
         ? `Task ${currentTaskIdx + 1}/${taskData.length}: ${currentTask.title}`
-        : (s?.hasDiffVsMain ? `Changes exist but implement not yet completed` : 'No changes vs main');
+        : s?.hasDiffVsMain
+          ? `Changes exist but implement not yet completed`
+          : 'No changes vs main';
       add(STEPS.implement, 'RUN', '/work-implement <requirements>', reason, implementMeta);
     }
   }

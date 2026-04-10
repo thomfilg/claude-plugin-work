@@ -12,10 +12,7 @@
  */
 
 const path = require('path');
-const {
-  basenameProtector,
-  createFileProtector,
-} = require('../../protect-state-files');
+const { basenameProtector, createFileProtector } = require('../../protect-state-files');
 const { isExemptScriptInvocation } = require('./agent-authorization');
 
 /**

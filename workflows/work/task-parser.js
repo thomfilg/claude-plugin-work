@@ -12,8 +12,20 @@ const path = require('path');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function fileExists(p) { try { return fs.existsSync(p); } catch { return false; } }
-function readFile(p) { try { return fs.readFileSync(p, 'utf-8'); } catch { return ''; } }
+function fileExists(p) {
+  try {
+    return fs.existsSync(p);
+  } catch {
+    return false;
+  }
+}
+function readFile(p) {
+  try {
+    return fs.readFileSync(p, 'utf-8');
+  } catch {
+    return '';
+  }
+}
 
 // ─── Task Parsing ────────────────────────────────────────────────────────────
 
@@ -39,7 +51,7 @@ function parseTasks(tasksDir) {
     const titleMatch = body.match(/^[\s]*[—–-]+\s*(.+?)$/m);
     // Fallback: use the first non-empty line as title if no dash pattern found
     const firstLine = body.split('\n')[0]?.trim();
-    const title = titleMatch ? titleMatch[1].trim() : (firstLine || `Task ${num}`);
+    const title = titleMatch ? titleMatch[1].trim() : firstLine || `Task ${num}`;
 
     // Extract ### Type section
     const typeMatch = body.match(/### Type\s*\n([^\n#]+)/);
@@ -51,7 +63,7 @@ function parseTasks(tasksDir) {
     const dependencies = [];
     const depNums = depsText.match(/Task\s+(\d+)/g);
     if (depNums) {
-      depNums.forEach(d => {
+      depNums.forEach((d) => {
         const n = parseInt(d.replace(/Task\s+/, ''), 10);
         if (!isNaN(n)) dependencies.push(n);
       });
@@ -99,11 +111,15 @@ function buildTaskPrompt(task, tasksDir) {
   lines.push('');
   lines.push('### Rules');
   lines.push('- Implement ONLY the deliverables listed in this task');
-  lines.push('- Do NOT modify files outside this task\'s suggested scope unless necessary for this task\'s deliverables');
+  lines.push(
+    "- Do NOT modify files outside this task's suggested scope unless necessary for this task's deliverables"
+  );
   lines.push('- Every acceptance criterion must be met before this task is complete');
   lines.push('');
   lines.push('### Reference Documents');
-  lines.push('The full brief and spec are available for context but your scope is LIMITED to this task:');
+  lines.push(
+    'The full brief and spec are available for context but your scope is LIMITED to this task:'
+  );
   lines.push(`- Brief: ${path.join(tasksDir, 'brief.md')}`);
   lines.push(`- Spec: ${path.join(tasksDir, 'spec.md')}`);
   lines.push(`- Full task plan: ${path.join(tasksDir, 'tasks.md')}`);

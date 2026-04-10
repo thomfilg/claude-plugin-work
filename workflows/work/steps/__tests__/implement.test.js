@@ -87,9 +87,7 @@ describe('implement step', () => {
 
   it('SKIPs when all tasks are done', () => {
     const { add, entries } = makeAdd();
-    const fakeTasks = [
-      { num: 1, title: 'Only task', isCheckpoint: false },
-    ];
+    const fakeTasks = [{ num: 1, title: 'Only task', isCheckpoint: false }];
     const ctx = makeCtx({ parseTasks: () => fakeTasks });
     const s = makeState({
       hasTasks: true,
@@ -102,9 +100,7 @@ describe('implement step', () => {
 
   it('SKIPs checkpoint tasks without running implementation', () => {
     const { add, entries } = makeAdd();
-    const fakeTasks = [
-      { num: 1, title: 'Review', isCheckpoint: true },
-    ];
+    const fakeTasks = [{ num: 1, title: 'Review', isCheckpoint: true }];
     const ctx = makeCtx({ parseTasks: () => fakeTasks });
     const s = makeState({
       hasTasks: true,

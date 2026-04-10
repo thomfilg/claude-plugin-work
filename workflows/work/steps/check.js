@@ -19,10 +19,16 @@ module.exports = function checkStep(add, s, ctx) {
       ],
     });
   } else if (s?.allReportsPass && Object.keys(s.reports).length >= 3) {
-    add(STEPS.check, 'DEFER', '/check', `RESUME: All ${Object.keys(s.reports).length} reports PASS`, {
-      agentType: 'skill',
-      agentPrompt: '/check',
-    });
+    add(
+      STEPS.check,
+      'DEFER',
+      '/check',
+      `RESUME: All ${Object.keys(s.reports).length} reports PASS`,
+      {
+        agentType: 'skill',
+        agentPrompt: '/check',
+      }
+    );
   } else {
     const p = [];
     if (s?.missingReports?.length) p.push(`missing: ${s.missingReports.join(', ')}`);

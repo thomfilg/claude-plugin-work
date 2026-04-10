@@ -14,15 +14,27 @@ module.exports = function prStep(add, s, ctx) {
       agentPrompt: `/work-pr ${ticket} --force`,
     });
   } else if (s?.prShaMatch && s?.prEverUpdated && (s?.postPrShaMatch || !s?.contentSha)) {
-    add(STEPS.pr, 'DEFER', `/work-pr ${ticket || t}`, `SHA match (${s.headSha?.substring(0, 8)}, content: ${s?.postPrShaMatch ? 'match' : 'n/a'})`, {
-      agentType: 'skill',
-      agentPrompt: `/work-pr ${ticket || t}`,
-    });
+    add(
+      STEPS.pr,
+      'DEFER',
+      `/work-pr ${ticket || t}`,
+      `SHA match (${s.headSha?.substring(0, 8)}, content: ${s?.postPrShaMatch ? 'match' : 'n/a'})`,
+      {
+        agentType: 'skill',
+        agentPrompt: `/work-pr ${ticket || t}`,
+      }
+    );
   } else if (s?.prEverUpdated) {
-    add(STEPS.pr, 'RUN', `/work-pr ${ticket}`, `HEAD: ${s.prUpdateSha?.substring(0, 8) || '?'} → ${s.headSha?.substring(0, 8) || '?'}`, {
-      agentType: 'skill',
-      agentPrompt: `/work-pr ${ticket}`,
-    });
+    add(
+      STEPS.pr,
+      'RUN',
+      `/work-pr ${ticket}`,
+      `HEAD: ${s.prUpdateSha?.substring(0, 8) || '?'} → ${s.headSha?.substring(0, 8) || '?'}`,
+      {
+        agentType: 'skill',
+        agentPrompt: `/work-pr ${ticket}`,
+      }
+    );
   } else {
     add(STEPS.pr, 'RUN', `/work-pr ${t}`, 'Must run once', {
       agentType: 'skill',

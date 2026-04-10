@@ -50,7 +50,7 @@ function evaluateTransitionGate({ workflow, ticketId, currentStep, transition, e
 
   // Inferred evidence: check verify() functions for this step
   const verifiers = workflow.commandMap.filter(
-    (m) => m.step === currentStep && typeof m.verify === 'function',
+    (m) => m.step === currentStep && typeof m.verify === 'function'
   );
   if (verifiers.some((m) => m.verify(ticketId))) {
     return { blocked: false };
@@ -58,15 +58,16 @@ function evaluateTransitionGate({ workflow, ticketId, currentStep, transition, e
 
   // BLOCKED: build expected hint lines
   const expectedMappings = workflow.commandMap.filter((m) => m.step === currentStep);
-  const expectedLines = expectedMappings.length > 0
-    ? expectedMappings.map((m) => {
-        if (typeof m.verify === 'function') return `${m.step} (inferred via verify)`;
-        const toolLabel = Array.isArray(m.tool) ? m.tool.join('/') : m.tool;
-        if (m.field == null) return `${toolLabel} (any call)`;
-        const pat = m.pattern ? m.pattern.toString() : '(any)';
-        return `${toolLabel}.${m.field} matches ${pat}`;
-      })
-    : [`No registered command for step '${currentStep}' — add to softSteps or commandMap.`];
+  const expectedLines =
+    expectedMappings.length > 0
+      ? expectedMappings.map((m) => {
+          if (typeof m.verify === 'function') return `${m.step} (inferred via verify)`;
+          const toolLabel = Array.isArray(m.tool) ? m.tool.join('/') : m.tool;
+          if (m.field == null) return `${toolLabel} (any call)`;
+          const pat = m.pattern ? m.pattern.toString() : '(any)';
+          return `${toolLabel}.${m.field} matches ${pat}`;
+        })
+      : [`No registered command for step '${currentStep}' — add to softSteps or commandMap.`];
 
   return {
     blocked: true,

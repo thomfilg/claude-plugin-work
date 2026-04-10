@@ -16,7 +16,9 @@ async function main() {
   // Remove marker file
   try {
     fs.unlinkSync('/tmp/qa-agent-active');
-  } catch { /* file may not exist */ }
+  } catch {
+    /* file may not exist */
+  }
 
   console.log(JSON.stringify({}));
 }

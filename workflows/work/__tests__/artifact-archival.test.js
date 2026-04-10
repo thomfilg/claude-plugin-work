@@ -12,7 +12,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const { STEP_ARTIFACTS, archiveStepArtifacts } = require(path.join(__dirname, '..', 'artifact-archival'));
+const { STEP_ARTIFACTS, archiveStepArtifacts } = require(
+  path.join(__dirname, '..', 'artifact-archival')
+);
 const { STEPS } = require(path.join(__dirname, '..', 'step-registry'));
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -47,14 +49,14 @@ describe('STEP_ARTIFACTS', () => {
 
   it('check patterns match .check.md files', () => {
     const patterns = STEP_ARTIFACTS[STEPS.check];
-    assert.ok(patterns.some(p => p.test('dev-quality.check.md')));
-    assert.ok(patterns.some(p => p.test('lint.check.md')));
+    assert.ok(patterns.some((p) => p.test('dev-quality.check.md')));
+    assert.ok(patterns.some((p) => p.test('lint.check.md')));
   });
 
   it('pr patterns match .pr-update-sha and .post-pr-update-sha', () => {
     const patterns = STEP_ARTIFACTS[STEPS.pr];
-    assert.ok(patterns.some(p => p.test('.pr-update-sha')));
-    assert.ok(patterns.some(p => p.test('.post-pr-update-sha')));
+    assert.ok(patterns.some((p) => p.test('.pr-update-sha')));
+    assert.ok(patterns.some((p) => p.test('.post-pr-update-sha')));
   });
 
   it('does not have patterns for complete step', () => {

@@ -59,7 +59,7 @@ function matchToolToStep(toolName, toolInput, commandIndex) {
 
     // Safer field coercion — handle non-string values
     const raw = toolInput?.[mapping.field];
-    const value = typeof raw === 'string' ? raw : (raw == null ? '' : JSON.stringify(raw));
+    const value = typeof raw === 'string' ? raw : raw == null ? '' : JSON.stringify(raw);
     if (mapping.pattern && mapping.pattern.test(value)) return mapping.step;
   }
   return null;

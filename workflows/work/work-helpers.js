@@ -18,14 +18,30 @@ const path = require('path');
 function run(cmd, opts = {}) {
   try {
     return execSync(cmd, {
-      encoding: 'utf-8', timeout: 15000,
-      stdio: ['pipe', 'pipe', 'pipe'], ...opts,
+      encoding: 'utf-8',
+      timeout: 15000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      ...opts,
     }).trim();
-  } catch { return ''; }
+  } catch {
+    return '';
+  }
 }
 
-function fileExists(p) { try { return fs.existsSync(p); } catch { return false; } }
-function readFile(p) { try { return fs.readFileSync(p, 'utf-8'); } catch { return ''; } }
+function fileExists(p) {
+  try {
+    return fs.existsSync(p);
+  } catch {
+    return false;
+  }
+}
+function readFile(p) {
+  try {
+    return fs.readFileSync(p, 'utf-8');
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Lists files in `dir` matching a string substring or RegExp pattern.
@@ -34,17 +50,24 @@ function readFile(p) { try { return fs.readFileSync(p, 'utf-8'); } catch { retur
 function listFiles(dir, pattern) {
   if (!fileExists(dir)) return [];
   try {
-    return fs.readdirSync(dir)
-      .filter(f => pattern instanceof RegExp ? pattern.test(f) : f.includes(pattern))
-      .map(f => path.join(dir, f));
-  } catch { return []; }
+    return fs
+      .readdirSync(dir)
+      .filter((f) => (pattern instanceof RegExp ? pattern.test(f) : f.includes(pattern)))
+      .map((f) => path.join(dir, f));
+  } catch {
+    return [];
+  }
 }
 
 /** Loads .work-state.json for a ticket. Returns null if missing or unparseable. */
 function loadWorkState(tasksBase, ticket) {
   const p = path.join(tasksBase, ticket, '.work-state.json');
   if (!fileExists(p)) return null;
-  try { return JSON.parse(readFile(p)); } catch { return null; }
+  try {
+    return JSON.parse(readFile(p));
+  } catch {
+    return null;
+  }
 }
 
 /** Persists state to .work-state.json, creating the directory if needed. */
@@ -72,6 +95,11 @@ function getCurrentStep(workState, STEPS, ALL_STEPS) {
 }
 
 module.exports = {
-  run, fileExists, readFile, listFiles,
-  loadWorkState, saveWorkState, getCurrentStep,
+  run,
+  fileExists,
+  readFile,
+  listFiles,
+  loadWorkState,
+  saveWorkState,
+  getCurrentStep,
 };

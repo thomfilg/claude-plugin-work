@@ -20,10 +20,20 @@ const path = require('path');
  */
 function transitionStep(ticket, targetStep, deps) {
   const {
-    tp, STEPS, ALL_STEPS, STEP_TRANSITIONS, workflowCanTransition,
-    TDD_GATED_STEPS, readTddEvidence, validateTddEvidence,
-    validateCheckGate, archiveStepArtifacts, appendAction,
-    loadWorkState, saveWorkState, getCurrentStep,
+    tp,
+    STEPS,
+    ALL_STEPS,
+    STEP_TRANSITIONS,
+    workflowCanTransition,
+    TDD_GATED_STEPS,
+    readTddEvidence,
+    validateTddEvidence,
+    validateCheckGate,
+    archiveStepArtifacts,
+    appendAction,
+    loadWorkState,
+    saveWorkState,
+    getCurrentStep,
     TASKS_BASE,
   } = deps;
 
@@ -68,7 +78,7 @@ function transitionStep(ticket, targetStep, deps) {
   if (isForward && deferredSteps.length > 0) {
     const currentIdxGate = ALL_STEPS.indexOf(currentStep);
     const targetIdxGate = ALL_STEPS.indexOf(targetStep);
-    const deferredInRange = deferredSteps.filter(ds => {
+    const deferredInRange = deferredSteps.filter((ds) => {
       const idx = ALL_STEPS.indexOf(ds);
       return idx > currentIdxGate && idx <= targetIdxGate;
     });
@@ -109,22 +119,34 @@ function transitionStep(ticket, targetStep, deps) {
       const phasePath = path.join(TASKS_BASE, safeTicket, 'tdd-phase.json');
       fs.unlinkSync(phasePath);
     } catch (e) {
-      if (e && e.code !== 'ENOENT') { /* ignore errors */ }
+      if (e && e.code !== 'ENOENT') {
+        /* ignore errors */
+      }
     }
     try {
       const { autoInitTdd } = require(path.join(__dirname, 'work-state'));
       autoInitTdd(safeTicket);
-    } catch { /* fail-open */ }
+    } catch {
+      /* fail-open */
+    }
   }
 
   // Initialize state if needed
   if (!ws) {
     ws = {
-      ticketId: safeTicket, description: '', currentStep: 1, status: 'in_progress',
-      stepStatus: {}, checkProgress: {},
-      errors: [], startTime: new Date().toISOString(), lastUpdate: new Date().toISOString(),
+      ticketId: safeTicket,
+      description: '',
+      currentStep: 1,
+      status: 'in_progress',
+      stepStatus: {},
+      checkProgress: {},
+      errors: [],
+      startTime: new Date().toISOString(),
+      lastUpdate: new Date().toISOString(),
     };
-    ALL_STEPS.forEach(s => { ws.stepStatus[s] = 'pending'; });
+    ALL_STEPS.forEach((s) => {
+      ws.stepStatus[s] = 'pending';
+    });
     appendAction(safeTicket, { step: STEPS.ticket, what: 'workflow started' });
   }
 
@@ -169,7 +191,9 @@ function transitionStep(ticket, targetStep, deps) {
   saveWorkState(safeTicket, ws);
 
   return {
-    success: true, from: currentStep, to: targetStep,
+    success: true,
+    from: currentStep,
+    to: targetStep,
     direction: targetIdx > currentIdx ? 'forward' : 'backward',
     message: `${currentStep} → ${targetStep}`,
   };
@@ -182,7 +206,8 @@ function getAvailableTransitions(ticket, deps) {
   const ws = loadWorkState(safeTicket);
   const current = getCurrentStep(ws);
   return {
-    ticket, currentStep: current,
+    ticket,
+    currentStep: current,
     status: ws?.stepStatus?.[current] || 'unknown',
     allowed: STEP_TRANSITIONS[current] || [],
     allStatuses: ws?.stepStatus || {},

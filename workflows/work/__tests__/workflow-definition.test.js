@@ -35,8 +35,8 @@ describe('workflow-definition: archivalPatterns', () => {
     const patterns = workflow.archivalPatterns[STEPS.check];
     assert.ok(Array.isArray(patterns), 'check archival patterns should be an array');
     assert.ok(patterns.length > 0, 'check step should have at least one pattern');
-    assert.ok(patterns.some(p => p instanceof RegExp && p.test('code-review.check.md')));
-    assert.ok(patterns.some(p => p instanceof RegExp && p.test('tests.check.md')));
+    assert.ok(patterns.some((p) => p instanceof RegExp && p.test('code-review.check.md')));
+    assert.ok(patterns.some((p) => p instanceof RegExp && p.test('tests.check.md')));
   });
 
   it('defines archival pattern for pr step matching pr update sha files', () => {
@@ -44,8 +44,8 @@ describe('workflow-definition: archivalPatterns', () => {
     assert.ok(Array.isArray(patterns));
     const filenameA = ['.', 'pr-update-sha'].join('');
     const filenameB = ['.', 'post-pr-update-sha'].join('');
-    assert.ok(patterns.some(p => p instanceof RegExp && p.test(filenameA)));
-    assert.ok(patterns.some(p => p instanceof RegExp && p.test(filenameB)));
+    assert.ok(patterns.some((p) => p instanceof RegExp && p.test(filenameA)));
+    assert.ok(patterns.some((p) => p instanceof RegExp && p.test(filenameB)));
   });
 
   it('does NOT define archival for complete step (self-transition)', () => {
@@ -82,7 +82,7 @@ describe('workflow-definition: evidenceRequirements', () => {
     const reqs = workflow.evidenceRequirements[STEPS.reports];
     assert.ok(reqs, 'reports step should have evidence requirements');
     assert.ok(Array.isArray(reqs.requiredApprovals));
-    const byFile = Object.fromEntries(reqs.requiredApprovals.map(r => [r.file, r.pattern]));
+    const byFile = Object.fromEntries(reqs.requiredApprovals.map((r) => [r.file, r.pattern]));
     assert.ok(byFile['tests.check.md'] instanceof RegExp);
     assert.ok(byFile['code-review.check.md'] instanceof RegExp);
     assert.ok(byFile['completion.check.md'] instanceof RegExp);

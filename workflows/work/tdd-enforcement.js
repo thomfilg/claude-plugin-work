@@ -59,7 +59,9 @@ function readTddEvidence(tasksBase, ticketId, stepId) {
   const phasePath = path.join(tasksBase, ticketId, 'tdd-phase.json');
   try {
     if (!fs.existsSync(phasePath)) return { exists: false, parseError: false, evidence: null };
-  } catch { return { exists: false, parseError: false, evidence: null }; }
+  } catch {
+    return { exists: false, parseError: false, evidence: null };
+  }
   try {
     const state = JSON.parse(fs.readFileSync(phasePath, 'utf-8'));
     return { exists: true, parseError: false, evidence: state };
@@ -85,14 +87,22 @@ function validateTddEvidence(evidence) {
 
   const cycles = evidence.cycles;
   if (!Array.isArray(cycles) || cycles.length === 0) {
-    return { valid: false, reason: 'No TDD cycles found. Run at least one RED → GREEN cycle (REFACTOR is recommended but optional).' };
+    return {
+      valid: false,
+      reason:
+        'No TDD cycles found. Run at least one RED → GREEN cycle (REFACTOR is recommended but optional).',
+    };
   }
 
-  const completeCycle = cycles.find(c => c.red && c.green && c.refactor);
+  const completeCycle = cycles.find((c) => c.red && c.green && c.refactor);
   if (!completeCycle) {
-    const partialCycle = cycles.find(c => c.red && c.green);
+    const partialCycle = cycles.find((c) => c.red && c.green);
     if (!partialCycle) {
-      return { valid: false, reason: 'No cycle has both RED and GREEN evidence. Complete at least one RED → GREEN cycle.' };
+      return {
+        valid: false,
+        reason:
+          'No cycle has both RED and GREEN evidence. Complete at least one RED → GREEN cycle.',
+      };
     }
   }
 

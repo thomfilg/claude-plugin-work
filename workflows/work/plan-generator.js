@@ -24,9 +24,17 @@ const { STEP_PIPELINE } = require('./steps');
  */
 function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix, deps) {
   const {
-    tp, TDD_PROTOCOL, TDD_GATED_STEPS, STEPS,
-    parseTasks, buildTaskPrompt, fileExists, run,
-    WORKTREES_BASE, TASKS_BASE, MAIN_WORKTREE_FOLDER,
+    tp,
+    TDD_PROTOCOL,
+    TDD_GATED_STEPS,
+    STEPS,
+    parseTasks,
+    buildTaskPrompt,
+    fileExists,
+    run,
+    WORKTREES_BASE,
+    TASKS_BASE,
+    MAIN_WORKTREE_FOLDER,
   } = deps;
 
   const plan = [];
@@ -41,17 +49,27 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
   if (ticket && process.env.SESSION_GUARD_ENABLED !== '0') {
     try {
       const guardPath = path.join(__dirname, '..', 'lib', 'hooks', 'session-guard.js');
-      execFileSync(process.execPath, [guardPath, 'init', safeBase, '/work'], { stdio: 'pipe', timeout: 5000 });
-    } catch { /* fail-open */ }
+      execFileSync(process.execPath, [guardPath, 'init', safeBase, '/work'], {
+        stdio: 'pipe',
+        timeout: 5000,
+      });
+    } catch {
+      /* fail-open */
+    }
   }
 
   // TDD-augmenting add() wrapper
   function add(stepName, action, command, reason, extra = {}) {
-    if (TDD_GATED_STEPS.includes(stepName) && extra.agentPrompt && (action === 'RUN' || action === 'DEFER')) {
+    if (
+      TDD_GATED_STEPS.includes(stepName) &&
+      extra.agentPrompt &&
+      (action === 'RUN' || action === 'DEFER')
+    ) {
       const tddStatePath = path.join(__dirname, '..', 'work-implement', 'tdd-phase-state.js');
-      const resolvedProtocol = TDD_PROTOCOL
-        .replace(/<TDD_STATE_PATH>/g, tddStatePath)
-        .replace(/<TICKET_ID>/g, safeName);
+      const resolvedProtocol = TDD_PROTOCOL.replace(/<TDD_STATE_PATH>/g, tddStatePath).replace(
+        /<TICKET_ID>/g,
+        safeName
+      );
       extra.agentPrompt = `${extra.agentPrompt}\n\n${resolvedProtocol}`;
     }
     plan.push({ step: stepName, action, ...(command ? { command } : {}), reason, ...extra });
@@ -61,8 +79,11 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
   function getDocsPrompt(envVar) {
     const docs = process.env[envVar] || '';
     if (!docs.trim()) return '';
-    const paths = docs.split(',').map(p => p.trim()).filter(Boolean);
-    return `\n\nRead these docs before starting (from ${envVar}):\n${paths.map(p => `- ${p}`).join('\n')}`;
+    const paths = docs
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    return `\n\nRead these docs before starting (from ${envVar}):\n${paths.map((p) => `- ${p}`).join('\n')}`;
   }
 
   // Planning docs discovery
@@ -78,7 +99,9 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
     try {
       const found = run(`find "${tasksDir}" -name "pre-planning.md" -type f 2>/dev/null`);
       if (found) prePlanningFiles = found.split('\n').filter(Boolean);
-    } catch { /* race */ }
+    } catch {
+      /* race */
+    }
   }
   const planningDocs = [];
   if (fileExists(briefPath)) planningDocs.push(`- Brief: ${briefPath}`);
@@ -87,18 +110,34 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
   else if (specEnabled) planningDocs.push(`- Spec (if present after spec step): ${specPath}`);
   if (fileExists(tasksPath)) planningDocs.push(`- Tasks: ${tasksPath}`);
   else if (tasksEnabled) planningDocs.push(`- Tasks (if present after tasks step): ${tasksPath}`);
-  prePlanningFiles.forEach(f => planningDocs.push(`- Pre-planning: ${f}`));
-  const planningContext = planningDocs.length > 0
-    ? `\n\nPlanning documents — read these if they exist for requirements, test scenarios, reusable components:\n${planningDocs.join('\n')}`
-    : '';
+  prePlanningFiles.forEach((f) => planningDocs.push(`- Pre-planning: ${f}`));
+  const planningContext =
+    planningDocs.length > 0
+      ? `\n\nPlanning documents — read these if they exist for requirements, test scenarios, reusable components:\n${planningDocs.join('\n')}`
+      : '';
 
   // Shared context for step modules
   const ctx = {
-    ticket, description, t, rework, suffix, safeName, safeBase,
-    worktreeDir, tasksDir, plan,
-    STEPS, tp, providerConfig, planningContext,
-    getDocsPrompt, fileExists, path, execFileSync,
-    parseTasks, buildTaskPrompt,
+    ticket,
+    description,
+    t,
+    rework,
+    suffix,
+    safeName,
+    safeBase,
+    worktreeDir,
+    tasksDir,
+    plan,
+    STEPS,
+    tp,
+    providerConfig,
+    planningContext,
+    getDocsPrompt,
+    fileExists,
+    path,
+    execFileSync,
+    parseTasks,
+    buildTaskPrompt,
     sessionGuardPath: path.join(__dirname, '..', 'lib', 'hooks', 'session-guard.js'),
     workStatePath: path.join(__dirname, 'work-state.js'),
   };

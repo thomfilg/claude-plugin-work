@@ -153,7 +153,12 @@ describe('command-matching: parseTransition', () => {
 
   it('applies sanitizer to ticket id', () => {
     const cmd = 'node work-orchestrator.js transition #123 plan';
-    const r = parseTransition('Bash', { command: cmd }, pattern, (id) => `GH-${id.replace('#', '')}`);
+    const r = parseTransition(
+      'Bash',
+      { command: cmd },
+      pattern,
+      (id) => `GH-${id.replace('#', '')}`
+    );
     assert.equal(r.ticket, 'GH-123');
   });
 });

@@ -74,13 +74,26 @@ function makeState(overrides = {}) {
 // ─── Step Module Contract Tests ─────────────────────────────────────────────
 
 describe('step modules', () => {
-
   describe('each module exports a function', () => {
     const stepDir = path.join(__dirname, '..');
     const expectedModules = [
-      'ticket', 'bootstrap', 'transition', 'brief', 'spec', 'tasks',
-      'implement', 'commit', 'check', 'task-advance', 'pr', 'ready',
-      'follow-up', 'ci', 'cleanup', 'reports', 'complete',
+      'ticket',
+      'bootstrap',
+      'transition',
+      'brief',
+      'spec',
+      'tasks',
+      'implement',
+      'commit',
+      'check',
+      'task-advance',
+      'pr',
+      'ready',
+      'follow-up',
+      'ci',
+      'cleanup',
+      'reports',
+      'complete',
     ];
 
     for (const mod of expectedModules) {
@@ -99,7 +112,8 @@ describe('step modules', () => {
 
     it('should add RUN with general-purpose when ticket exists', () => {
       const entries = [];
-      const add = (step, action, command, reason, extra) => entries.push({ step, action, command, reason, ...extra });
+      const add = (step, action, command, reason, extra) =>
+        entries.push({ step, action, command, reason, ...extra });
       const ctx = makeCtx();
       const s = makeState();
       // Mock providerConfig and tp
@@ -118,7 +132,8 @@ describe('step modules', () => {
 
     it('should add RUN with create agent when no ticket (description mode)', () => {
       const entries = [];
-      const add = (step, action, command, reason, extra) => entries.push({ step, action, command, reason, ...extra });
+      const add = (step, action, command, reason, extra) =>
+        entries.push({ step, action, command, reason, ...extra });
       const ctx = makeCtx({ ticket: null, description: 'add login feature', t: '{TICKET}' });
       const s = makeState();
       ctx.providerConfig = {};
@@ -142,7 +157,8 @@ describe('step modules', () => {
 
     it('should SKIP when worktree + PR exist', () => {
       const entries = [];
-      const add = (step, action, command, reason, extra) => entries.push({ step, action, command, reason, ...extra });
+      const add = (step, action, command, reason, extra) =>
+        entries.push({ step, action, command, reason, ...extra });
       const s = makeState({ worktreeExists: true, pr: { number: 1 } });
       const ctx = makeCtx();
       bootstrapStep(add, s, ctx);
@@ -151,7 +167,8 @@ describe('step modules', () => {
 
     it('should RUN with /bootstrap when no worktree', () => {
       const entries = [];
-      const add = (step, action, command, reason, extra) => entries.push({ step, action, command, reason, ...extra });
+      const add = (step, action, command, reason, extra) =>
+        entries.push({ step, action, command, reason, ...extra });
       const s = makeState();
       const ctx = makeCtx();
       bootstrapStep(add, s, ctx);
@@ -168,7 +185,8 @@ describe('step modules', () => {
 
     it('should RUN when uncommitted files exist', () => {
       const entries = [];
-      const add = (step, action, command, reason, extra) => entries.push({ step, action, command, reason, ...extra });
+      const add = (step, action, command, reason, extra) =>
+        entries.push({ step, action, command, reason, ...extra });
       const s = makeState({ hasUncommitted: true, uncommittedCount: 3 });
       const ctx = makeCtx();
       commitStep(add, s, ctx);
@@ -178,7 +196,8 @@ describe('step modules', () => {
 
     it('should PENDING when no diff vs main', () => {
       const entries = [];
-      const add = (step, action, command, reason, extra) => entries.push({ step, action, command, reason, ...extra });
+      const add = (step, action, command, reason, extra) =>
+        entries.push({ step, action, command, reason, ...extra });
       const s = makeState({ hasDiffVsMain: false });
       const ctx = makeCtx();
       commitStep(add, s, ctx);
@@ -194,7 +213,8 @@ describe('step modules', () => {
 
     it('should RUN with preCommands in rework mode', () => {
       const entries = [];
-      const add = (step, action, command, reason, extra) => entries.push({ step, action, command, reason, ...extra });
+      const add = (step, action, command, reason, extra) =>
+        entries.push({ step, action, command, reason, ...extra });
       const s = makeState();
       const ctx = makeCtx({ rework: true });
       checkStep(add, s, ctx);

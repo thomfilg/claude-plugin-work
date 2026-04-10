@@ -79,8 +79,12 @@ function runHook(userPrompt) {
     });
     let stdout = '';
     let stderr = '';
-    proc.stdout.on('data', (d) => { stdout += d.toString(); });
-    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.stdout.on('data', (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on('data', (d) => {
+      stderr += d.toString();
+    });
     proc.on('close', (code) => resolve({ code, stdout, stderr }));
     proc.on('error', reject);
     proc.stdin.end();

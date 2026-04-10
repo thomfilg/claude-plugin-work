@@ -71,7 +71,7 @@ describe('workflow-router-hook source hardening', () => {
     assert.strictEqual(
       hasArrayPattern,
       true,
-      'execFileSync should receive args as an array [ENGINE_PATH, matched, \'plan\', ...parsedArgs]'
+      "execFileSync should receive args as an array [ENGINE_PATH, matched, 'plan', ...parsedArgs]"
     );
   });
 });
@@ -86,8 +86,12 @@ function runHook(userPrompt) {
     });
     let stdout = '';
     let stderr = '';
-    proc.stdout.on('data', (d) => { stdout += d.toString(); });
-    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.stdout.on('data', (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on('data', (d) => {
+      stderr += d.toString();
+    });
     proc.on('close', (code) => resolve({ code, stdout, stderr }));
     proc.on('error', reject);
     proc.stdin.end();

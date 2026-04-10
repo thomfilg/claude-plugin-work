@@ -58,11 +58,11 @@ function main() {
 
   try {
     // Run the workflow engine — execFileSync avoids shell injection
-    const result = execFileSync(
-      process.execPath,
-      [ENGINE_PATH, matched, 'plan', ...parsedArgs],
-      { encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
-    );
+    const result = execFileSync(process.execPath, [ENGINE_PATH, matched, 'plan', ...parsedArgs], {
+      encoding: 'utf-8',
+      timeout: 30000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
 
     const plan = JSON.parse(result);
 
@@ -78,7 +78,6 @@ function main() {
       // Fallback: output raw JSON
       console.log(JSON.stringify(plan, null, 2));
     }
-
   } catch (err) {
     logHookError(__filename, err);
     console.log(`WORKFLOW ENGINE FAILED: ${err.message}`);
@@ -99,13 +98,19 @@ function buildCommandMap() {
   // Scan the workflows dir and one level of subdirectories for *.workflow.js
   const searchDirs = [WORKFLOWS_DIR];
   for (const entry of fs.readdirSync(WORKFLOWS_DIR, { withFileTypes: true })) {
-    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules' && entry.name !== 'lib' && entry.name !== '__tests__') {
+    if (
+      entry.isDirectory() &&
+      !entry.name.startsWith('.') &&
+      entry.name !== 'node_modules' &&
+      entry.name !== 'lib' &&
+      entry.name !== '__tests__'
+    ) {
       searchDirs.push(path.join(WORKFLOWS_DIR, entry.name));
     }
   }
 
   for (const dir of searchDirs) {
-    const files = fs.readdirSync(dir).filter(f => f.endsWith('.workflow.js'));
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.workflow.js'));
     for (const file of files) {
       try {
         const wf = require(path.join(dir, file));
@@ -121,4 +126,8 @@ function buildCommandMap() {
   return map;
 }
 
-try { main(); } catch { process.exit(0); }
+try {
+  main();
+} catch {
+  process.exit(0);
+}

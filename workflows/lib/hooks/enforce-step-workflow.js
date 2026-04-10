@@ -47,7 +47,9 @@ process.on('unhandledRejection', (err) => {
 
 // (Patch 1) Lazy-load appendAction with fallback
 // Agent detection for report file protection
-const { isRunningInAgent, normalizeAgentName } = require(path.join(__dirname, '..', 'agent-detection'));
+const { isRunningInAgent, normalizeAgentName } = require(
+  path.join(__dirname, '..', 'agent-detection')
+);
 
 const { createArtifactProtector } = require(path.join(__dirname, '..', 'protect-artifact-files'));
 const { logHookError } = require(path.join(__dirname, '..', 'hook-error-log'));
@@ -60,25 +62,18 @@ const {
   isExempt,
   parseTransition,
 } = require(path.join(__dirname, 'policies', 'command-matching'));
-const {
-  isTrustedScriptPath,
-  expandPluginRoot,
-  extractSubCommand,
-  isSafeSubCommand,
-} = require(path.join(__dirname, 'policies', 'agent-authorization'));
-const {
-  buildBasenameToHintMap,
-  createStateFileProtector,
-  createFollowUpStateProtector,
-} = require(path.join(__dirname, 'policies', 'state-protection'));
-const {
-  evaluateTransitionGate,
-  formatTransitionBlockMessage,
-} = require(path.join(__dirname, 'policies', 'transition-gate'));
-const {
-  evaluateStepGate,
-  formatStepBlockMessage,
-} = require(path.join(__dirname, 'policies', 'step-gate'));
+const { isTrustedScriptPath, expandPluginRoot, extractSubCommand, isSafeSubCommand } = require(
+  path.join(__dirname, 'policies', 'agent-authorization')
+);
+const { buildBasenameToHintMap, createStateFileProtector, createFollowUpStateProtector } = require(
+  path.join(__dirname, 'policies', 'state-protection')
+);
+const { evaluateTransitionGate, formatTransitionBlockMessage } = require(
+  path.join(__dirname, 'policies', 'transition-gate')
+);
+const { evaluateStepGate, formatStepBlockMessage } = require(
+  path.join(__dirname, 'policies', 'step-gate')
+);
 const {
   loadEvidence: loadEvidencePolicy,
   saveEvidence: saveEvidencePolicy,
@@ -96,14 +91,19 @@ try {
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 const getConfig = require(path.join(__dirname, '..', 'get-config'));
-const TASKS_BASE = getConfig('TASKS_BASE') || (() => {
-  const wb = getConfig.orExit('WORKTREES_BASE'); // only required if TASKS_BASE isn't set
-  return path.join(wb, 'tasks');
-})();
+const TASKS_BASE =
+  getConfig('TASKS_BASE') ||
+  (() => {
+    const wb = getConfig.orExit('WORKTREES_BASE'); // only required if TASKS_BASE isn't set
+    return path.join(wb, 'tasks');
+  })();
 
 function safeTicketPath(ticketId) {
-  try { return require(path.join(__dirname, '..', 'config')).safeTicketId(ticketId); }
-  catch { return ticketId; }
+  try {
+    return require(path.join(__dirname, '..', 'config')).safeTicketId(ticketId);
+  } catch {
+    return ticketId;
+  }
 }
 
 // ─── Workflow Definitions ───────────────────────────────────────────────────
@@ -111,7 +111,9 @@ function safeTicketPath(ticketId) {
 // Auto-discovered from workflows/*/workflow-definition.js (Open/Closed Principle).
 // Each workflow directory exports a factory function that receives shared deps.
 
-const { STEPS, ALL_STEPS: WORK_STEPS } = require(path.join(__dirname, '..', '..', 'work', 'step-registry'));
+const { STEPS, ALL_STEPS: WORK_STEPS } = require(
+  path.join(__dirname, '..', '..', 'work', 'step-registry')
+);
 
 const workflowDeps = { TASKS_BASE, safeTicketPath, resolveGitHead };
 
@@ -133,7 +135,10 @@ function discoverWorkflows() {
         discovered.push(workflow);
         allArtifactRules.push(...artifactRules);
       } catch (err) {
-        if (DEBUG) process.stderr.write(`WARNING: Failed to load workflow from ${defPath}: ${err?.message}\n`);
+        if (DEBUG)
+          process.stderr.write(
+            `WARNING: Failed to load workflow from ${defPath}: ${err?.message}\n`
+          );
         // fail-open: broken workflow definitions don't block tool use
       }
     }
@@ -152,9 +157,16 @@ const { workflows: WORKFLOWS, artifactRules: ARTIFACT_RULES } = discoverWorkflow
 // which calls it for the state and follow-up protectors. Re-imported here so the
 // historical Patch tests (which inspect this source for `createFileProtector`) keep
 // passing — see (Patch 14)/Rule 3 source assertions.
-const { buildProtectedBasenames, createFileProtector } = require(path.join(__dirname, '..', 'protect-state-files')); // task-* commands allowlisted in SAFE_SUBCOMMANDS below
+const { buildProtectedBasenames, createFileProtector } = require(
+  path.join(__dirname, '..', 'protect-state-files')
+); // task-* commands allowlisted in SAFE_SUBCOMMANDS below
 void createFileProtector; // referenced for test introspection — actual usage lives in policies/state-protection.js
-const PROTECTED_STATE_BASENAMES = buildProtectedBasenames(WORKFLOWS, ['.work-actions.json', '.pr-update-sha', '.workflow-state.json', '.check.workflow-state.json']);
+const PROTECTED_STATE_BASENAMES = buildProtectedBasenames(WORKFLOWS, [
+  '.work-actions.json',
+  '.pr-update-sha',
+  '.workflow-state.json',
+  '.check.workflow-state.json',
+]);
 
 // Map each protected basename to its workflow's transition hint
 const BASENAME_TO_HINT = buildBasenameToHintMap(WORKFLOWS);
@@ -164,7 +176,7 @@ const artifactProtector = createArtifactProtector({
   getStepInProgress: (ticketId) => {
     const state = loadStateFile(ticketId, '.work-state.json');
     return state?.stepStatus
-      ? WORK_STEPS.find(s => state.stepStatus[s] === 'in_progress') || null
+      ? WORK_STEPS.find((s) => state.stepStatus[s] === 'in_progress') || null
       : null;
   },
   isRunningInAgent,
@@ -187,19 +199,29 @@ const EXEMPT_SCRIPTS = new Set([
 // workflow-state.js: exempt for get, resume-info, add-error (init blocked — not idempotent).
 // Mutating sub-commands (set-step, set-check, complete, etc.) must go through the orchestrator.
 const SAFE_SUBCOMMANDS = {
-  'work-state.js': new Set(['get', 'resume-info', 'init', 'active-subtask', 'add-error', 'task-init', 'task-current', 'task-advance', 'task-get']),
+  'work-state.js': new Set([
+    'get',
+    'resume-info',
+    'init',
+    'active-subtask',
+    'add-error',
+    'task-init',
+    'task-current',
+    'task-advance',
+    'task-get',
+  ]),
   'workflow-state.js': new Set(['get', 'resume-info', 'add-error']), // init excluded: not idempotent (resets all steps). exemptPatterns (line ~327) aligned.
 };
 
 // Trusted directories where exempt scripts are allowed to live.
 // Only scripts resolved under these paths are exempt — prevents basename spoofing.
 const TRUSTED_SCRIPT_DIRS = [
-  path.resolve(__dirname),                           // workflows/lib/hooks/
-  path.resolve(__dirname, '..'),                     // workflows/lib/
-  path.resolve(__dirname, '..', 'scripts'),          // workflows/lib/scripts/
-  path.resolve(__dirname, '..', '..', 'work'),       // workflows/work/
+  path.resolve(__dirname), // workflows/lib/hooks/
+  path.resolve(__dirname, '..'), // workflows/lib/
+  path.resolve(__dirname, '..', 'scripts'), // workflows/lib/scripts/
+  path.resolve(__dirname, '..', '..', 'work'), // workflows/work/
   path.resolve(__dirname, '..', '..', 'check', 'scripts'), // workflows/check/scripts/
-  path.resolve(__dirname, '..', '..', 'work-implement'),   // workflows/work-implement/
+  path.resolve(__dirname, '..', '..', 'work-implement'), // workflows/work-implement/
 ];
 
 // Agent-gated writer scripts — map script basename to { agents, step }.
@@ -245,7 +267,8 @@ function validateWorkflow(wf) {
   }
 
   for (const m of wf.commandMap) {
-    if (!stepSet.has(m.step)) throw new Error(`[${wf.name}] commandMap references unknown step: ${m.step}`);
+    if (!stepSet.has(m.step))
+      throw new Error(`[${wf.name}] commandMap references unknown step: ${m.step}`);
     // Entries must have either a verify function or a field for pattern matching
     if (m.field === undefined && typeof m.verify !== 'function') {
       throw new Error(`[${wf.name}] commandMap missing field or verify for step: ${m.step}`);
@@ -262,11 +285,16 @@ try {
 
 // Agents legitimately used by /check that should bypass /work step blocking
 const CHECK_AGENTS = new Set([
-  'quality-checker', 'work-workflow:quality-checker',
-  'code-checker', 'work-workflow:code-checker',
-  'completion-checker', 'work-workflow:completion-checker',
-  'qa-feature-tester', 'work-workflow:qa-feature-tester',
-  'qa-api-tester', 'work-workflow:qa-api-tester',
+  'quality-checker',
+  'work-workflow:quality-checker',
+  'code-checker',
+  'work-workflow:code-checker',
+  'completion-checker',
+  'work-workflow:completion-checker',
+  'qa-feature-tester',
+  'work-workflow:qa-feature-tester',
+  'qa-api-tester',
+  'work-workflow:qa-api-tester',
 ]);
 
 // Pre-index commandMap by tool name for O(1) lookup — delegated to command-matching policy
@@ -305,7 +333,12 @@ function getTicketId() {
     _cachedTicketId = process.env.ENFORCE_HOOK_TICKET_ID || null;
     // Compose with suffix when present (GH-146: phase-aware state paths)
     // Only append if ticketId doesn't already contain a '/' (prevent double-suffixing)
-    if (_cachedTicketId && !_cachedTicketId.includes('/') && process.env.ENFORCE_HOOK_SUFFIX && /^[a-zA-Z0-9_-]+$/.test(process.env.ENFORCE_HOOK_SUFFIX)) {
+    if (
+      _cachedTicketId &&
+      !_cachedTicketId.includes('/') &&
+      process.env.ENFORCE_HOOK_SUFFIX &&
+      /^[a-zA-Z0-9_-]+$/.test(process.env.ENFORCE_HOOK_SUFFIX)
+    ) {
       _cachedTicketId = _cachedTicketId + '/' + process.env.ENFORCE_HOOK_SUFFIX;
     }
     return _cachedTicketId;
@@ -328,7 +361,12 @@ function getTicketId() {
   }
   // Compose with suffix when present (GH-146: phase-aware state paths)
   // Only append if ticketId doesn't already contain a '/' (prevent double-suffixing)
-  if (_cachedTicketId && !_cachedTicketId.includes('/') && process.env.ENFORCE_HOOK_SUFFIX && /^[a-zA-Z0-9_-]+$/.test(process.env.ENFORCE_HOOK_SUFFIX)) {
+  if (
+    _cachedTicketId &&
+    !_cachedTicketId.includes('/') &&
+    process.env.ENFORCE_HOOK_SUFFIX &&
+    /^[a-zA-Z0-9_-]+$/.test(process.env.ENFORCE_HOOK_SUFFIX)
+  ) {
     _cachedTicketId = _cachedTicketId + '/' + process.env.ENFORCE_HOOK_SUFFIX;
   }
   return _cachedTicketId;
@@ -347,7 +385,9 @@ function loadStateFile(ticketId, stateFile) {
       try {
         const legacy = JSON.parse(fs.readFileSync(legacyPath, 'utf-8'));
         // Derive expected workflow name from stateFile: .work-pr.workflow-state.json -> work-pr
-        const expectedWorkflow = stateFile.replace(/^\./, '').replace(/\.workflow-state\.json$/, '');
+        const expectedWorkflow = stateFile
+          .replace(/^\./, '')
+          .replace(/\.workflow-state\.json$/, '');
         if (legacy?.workflow === expectedWorkflow) return legacy;
       } catch {} /* no legacy file either */
     }
@@ -358,9 +398,12 @@ function loadStateFile(ticketId, stateFile) {
 // Dual in_progress detection — warn but still fail-open
 function getCurrentStep(state, steps) {
   if (!state?.stepStatus) return null;
-  const active = steps.filter(s => state.stepStatus[s] === 'in_progress');
+  const active = steps.filter((s) => state.stepStatus[s] === 'in_progress');
   if (active.length > 1) {
-    if (DEBUG) process.stderr.write(`WARNING: Multiple steps in_progress: ${active.join(', ')}. Using first.\n`);
+    if (DEBUG)
+      process.stderr.write(
+        `WARNING: Multiple steps in_progress: ${active.join(', ')}. Using first.\n`
+      );
   }
   return active[0] || null;
 }
@@ -383,7 +426,7 @@ function saveEvidence(ticketId, evidenceFile, evidence) {
 function isExemptLocal(toolName, toolInput, exemptPatterns) {
   if (toolName !== 'Bash') return false;
   const cmd = String(toolInput?.command || '');
-  return exemptPatterns.some(p => p.test(cmd));
+  return exemptPatterns.some((p) => p.test(cmd));
 }
 // Source-marker reference: function isExempt — see policies/command-matching.js for canonical impl.
 // (Patch 13) The inlined isExemptLocal above mirrors the policy and is what tests inspect.
@@ -398,7 +441,9 @@ function parseTransitionLocal(toolName, toolInput, transitionPattern) {
       const tp = require(path.join(__dirname, '..', 'ticket-provider'));
       const providerConfig = tp.getProviderConfig({ skipPrompt: true });
       return tp.sanitizeTicketIdForPath(rawTicket, providerConfig);
-    } catch { return rawTicket; }
+    } catch {
+      return rawTicket;
+    }
   };
   const result = parseTransition(toolName, toolInput, transitionPattern, sanitize);
   // result.raw is the cmd from inside the policy — kept for source-pattern test (raw: cmd)
@@ -421,10 +466,7 @@ function handlePreToolUse(hookData) {
   if (rule3.blocked) {
     didBlock = true;
     const hint = BASENAME_TO_HINT[rule3.match] || WORKFLOWS[0].transitionHint;
-    process.stderr.write(
-      rule3.message +
-      `Use: ${hint} ${ticketId} <step>\n`
-    );
+    process.stderr.write(rule3.message + `Use: ${hint} ${ticketId} <step>\n`);
     process.exit(2);
   }
   // Rule 3b: Block unsafe sub-commands on state scripts invoked via node (GH-89)
@@ -448,7 +490,7 @@ function handlePreToolUse(hookData) {
           didBlock = true;
           process.stderr.write(
             `BLOCKED: Direct Bash call to ${scriptBase} with sub-command '${subCmd}' is not allowed.\n` +
-            `State files must only be modified through the orchestrator/workflow-engine scripts.\n`
+              `State files must only be modified through the orchestrator/workflow-engine scripts.\n`
           );
           process.exit(2);
         }
@@ -490,7 +532,7 @@ function handlePreToolUse(hookData) {
           didBlock = true;
           process.stderr.write(
             `BLOCKED: Script ${scriptBase} is not in a trusted directory.\n` +
-            `Resolved path must be under a trusted workflows directory.\n`
+              `Resolved path must be under a trusted workflows directory.\n`
           );
           process.exit(2);
         }
@@ -501,8 +543,8 @@ function handlePreToolUse(hookData) {
           didBlock = true;
           process.stderr.write(
             `BLOCKED: Cannot call ${scriptBase} — not running in an authorized agent.\n` +
-            `Allowed agents: ${allowedAgents.join(', ')}\n` +
-            `Only these agents may invoke this writer script.\n`
+              `Allowed agents: ${allowedAgents.join(', ')}\n` +
+              `Only these agents may invoke this writer script.\n`
           );
           process.exit(2);
         }
@@ -510,7 +552,7 @@ function handlePreToolUse(hookData) {
         if (ticketId) {
           const state = loadStateFile(ticketId, '.work-state.json');
           const currentStep = state?.stepStatus
-            ? WORK_STEPS.find(s => state.stepStatus[s] === 'in_progress') || null
+            ? WORK_STEPS.find((s) => state.stepStatus[s] === 'in_progress') || null
             : null;
           const requiredStep = gatedEntry.step;
           const wrongStepActive = currentStep && currentStep !== requiredStep;
@@ -518,25 +560,36 @@ function handlePreToolUse(hookData) {
             didBlock = true;
             process.stderr.write(
               `BLOCKED: Cannot issue write token — step '${currentStep}' is active, not '${requiredStep}'.\n` +
-              `Script ${scriptBase} can only be called during the ${requiredStep} step.\n`
+                `Script ${scriptBase} can only be called during the ${requiredStep} step.\n`
             );
             process.exit(2);
           }
         }
 
         // Agent + step verified — issue a write token for the script to consume.
-        const { tokenPath, ensureTokenDir } = require(path.join(__dirname, '..', 'scripts', 'write-report'));
+        const { tokenPath, ensureTokenDir } = require(
+          path.join(__dirname, '..', 'scripts', 'write-report')
+        );
         const detectedAgent = (() => {
           const envAgent = process.env.CLAUDE_CURRENT_AGENT;
-          if (envAgent && allowedAgents.some(a => normalizeAgentName(a) === normalizeAgentName(envAgent))) return envAgent;
+          if (
+            envAgent &&
+            allowedAgents.some((a) => normalizeAgentName(a) === normalizeAgentName(envAgent))
+          )
+            return envAgent;
           const hd = hookData?.tool_input?.subagent_type;
-          if (hd && allowedAgents.some(a => normalizeAgentName(a) === normalizeAgentName(hd))) return hd;
+          if (hd && allowedAgents.some((a) => normalizeAgentName(a) === normalizeAgentName(hd)))
+            return hd;
           return allowedAgents[0];
         })();
         try {
           ensureTokenDir();
           const tp = tokenPath(scriptBase);
-          try { fs.unlinkSync(tp); } catch { /* may not exist */ }
+          try {
+            fs.unlinkSync(tp);
+          } catch {
+            /* may not exist */
+          }
           const fd = fs.openSync(tp, 'wx', 0o600);
           try {
             const tokenData = {
@@ -591,15 +644,21 @@ function handlePreToolUse(hookData) {
       if (!result.blocked) continue;
 
       if (wf.name === 'work') {
-        appendAction(ticketId, { step: currentStep, what: 'BLOCKED: transition without evidence', meta: { rule: 2 } });
+        appendAction(ticketId, {
+          step: currentStep,
+          what: 'BLOCKED: transition without evidence',
+          meta: { rule: 2 },
+        });
       }
       didBlock = true;
-      process.stderr.write(formatTransitionBlockMessage({
-        workflowName: wf.name,
-        currentStep: result.currentStep,
-        attemptedCmd: result.attemptedCmd,
-        expectedLines: result.expectedLines,
-      }));
+      process.stderr.write(
+        formatTransitionBlockMessage({
+          workflowName: wf.name,
+          currentStep: result.currentStep,
+          attemptedCmd: result.attemptedCmd,
+          expectedLines: result.expectedLines,
+        })
+      );
       process.exit(2);
     }
 
@@ -617,7 +676,9 @@ function handlePreToolUse(hookData) {
           const legacyState = loadStateFile(ticketId, '.workflow-state.json');
           if (legacyState?.workflow === 'check') checkState = legacyState; // legacy compat
         }
-        checkStateActive = !!(checkState?.workflow === 'check' && checkState?.status === 'in_progress');
+        checkStateActive = !!(
+          checkState?.workflow === 'check' && checkState?.status === 'in_progress'
+        );
       }
     }
 
@@ -635,17 +696,23 @@ function handlePreToolUse(hookData) {
       const cmdDesc = stepResult.cmdDesc;
       if (wf.name === 'work') {
         const truncDesc = String(cmdDesc).substring(0, 80);
-        appendAction(ticketId, { step: matchedStep, what: `BLOCKED: ${truncDesc} (step ${matchedStep} not in_progress)`, meta: { rule: 1 } });
+        appendAction(ticketId, {
+          step: matchedStep,
+          what: `BLOCKED: ${truncDesc} (step ${matchedStep} not in_progress)`,
+          meta: { rule: 1 },
+        });
       }
       didBlock = true;
-      process.stderr.write(formatStepBlockMessage({
-        workflowName: wf.name,
-        matchedStep,
-        currentStep,
-        cmdDesc,
-        transitionHint: wf.transitionHint,
-        ticketId,
-      }));
+      process.stderr.write(
+        formatStepBlockMessage({
+          workflowName: wf.name,
+          matchedStep,
+          currentStep,
+          cmdDesc,
+          transitionHint: wf.transitionHint,
+          ticketId,
+        })
+      );
       process.exit(2);
     }
 
@@ -707,7 +774,9 @@ function handlePostToolUse(hookData) {
       let prShaOk = false;
       try {
         let head;
-        try { head = resolveGitHead(); } catch {
+        try {
+          head = resolveGitHead();
+        } catch {
           head = fs.readFileSync(path.join('.git', 'HEAD'), 'utf-8').trim();
         }
         const ref = head.startsWith('ref: ') ? head.slice(5) : head;
@@ -738,7 +807,8 @@ function handlePostToolUse(hookData) {
       if (toolName === 'Skill') {
         what = `Skill(${toolInput?.skill || 'unknown'})`;
       } else if (toolName === 'Task' || toolName === 'Agent') {
-        const label = toolInput?.subagent_type || String(toolInput?.description || 'unknown').substring(0, 60);
+        const label =
+          toolInput?.subagent_type || String(toolInput?.description || 'unknown').substring(0, 60);
         what = `${toolName}(${label})`;
       } else if (toolName === 'Bash') {
         what = String(toolInput?.command || '').substring(0, 80);

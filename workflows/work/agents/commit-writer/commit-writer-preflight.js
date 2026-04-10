@@ -16,8 +16,14 @@ const path = require('path');
 const { logHookError } = require(path.join(__dirname, '..', '..', '..', 'lib', 'hook-error-log'));
 
 let didBlock = false;
-process.on('uncaughtException', (err) => { logHookError(__filename, err); process.exit(didBlock ? 2 : 0); });
-process.on('unhandledRejection', (err) => { logHookError(__filename, err); process.exit(didBlock ? 2 : 0); });
+process.on('uncaughtException', (err) => {
+  logHookError(__filename, err);
+  process.exit(didBlock ? 2 : 0);
+});
+process.on('unhandledRejection', (err) => {
+  logHookError(__filename, err);
+  process.exit(didBlock ? 2 : 0);
+});
 
 let runQualityCheck, describeStrategy;
 try {
@@ -64,7 +70,9 @@ async function main() {
   try {
     execSync('git diff --staged --quiet', { stdio: 'pipe', cwd });
     // Exit code 0 means NO changes staged
-    process.stderr.write('COMMIT-WRITER PREFLIGHT: No staged changes found. Stage files with `git add` first.\n');
+    process.stderr.write(
+      'COMMIT-WRITER PREFLIGHT: No staged changes found. Stage files with `git add` first.\n'
+    );
     didBlock = true;
     process.exit(2);
   } catch {
@@ -82,7 +90,9 @@ async function main() {
 
   if (!result.success) {
     const summary = result.output.split('\n').slice(-20).join('\n');
-    process.stderr.write(`COMMIT-WRITER PREFLIGHT: Quality checks failed [${strategyLabel}]:\n${summary}\n`);
+    process.stderr.write(
+      `COMMIT-WRITER PREFLIGHT: Quality checks failed [${strategyLabel}]:\n${summary}\n`
+    );
     didBlock = true;
     process.exit(2);
   }
@@ -91,4 +101,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => { logHookError(__filename, err); process.exit(didBlock ? 2 : 0); });
+main().catch((err) => {
+  logHookError(__filename, err);
+  process.exit(didBlock ? 2 : 0);
+});

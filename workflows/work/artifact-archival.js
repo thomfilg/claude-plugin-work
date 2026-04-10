@@ -15,15 +15,24 @@ const createWorkflowDefinition = require(path.join(__dirname, 'workflow-definiti
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function fileExists(p) { try { return fs.existsSync(p); } catch { return false; } }
+function fileExists(p) {
+  try {
+    return fs.existsSync(p);
+  } catch {
+    return false;
+  }
+}
 
 function listFiles(dir, pattern) {
   if (!fileExists(dir)) return [];
   try {
-    return fs.readdirSync(dir)
-      .filter(f => pattern instanceof RegExp ? pattern.test(f) : f.includes(pattern))
-      .map(f => path.join(dir, f));
-  } catch { return []; }
+    return fs
+      .readdirSync(dir)
+      .filter((f) => (pattern instanceof RegExp ? pattern.test(f) : f.includes(pattern)))
+      .map((f) => path.join(dir, f));
+  } catch {
+    return [];
+  }
 }
 
 // ─── Artifact Patterns ──────────────────────────────────────────────────────
@@ -56,12 +65,15 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
   let runNum = 1;
   if (fileExists(runsDir)) {
     try {
-      const existing = fs.readdirSync(runsDir)
-        .filter(d => /^run\d+$/.test(d))
-        .map(d => parseInt(d.replace('run', ''), 10))
-        .filter(n => !isNaN(n));
+      const existing = fs
+        .readdirSync(runsDir)
+        .filter((d) => /^run\d+$/.test(d))
+        .map((d) => parseInt(d.replace('run', ''), 10))
+        .filter((n) => !isNaN(n));
       if (existing.length > 0) runNum = Math.max(...existing) + 1;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   let archived = false;
@@ -71,7 +83,7 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
     const patterns = STEP_ARTIFACTS[step];
     if (!patterns) continue;
 
-    const files = patterns.flatMap(p => listFiles(tasksDir, p));
+    const files = patterns.flatMap((p) => listFiles(tasksDir, p));
     if (files.length === 0) continue;
 
     if (!archived) {
@@ -81,8 +93,12 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
 
     for (const filePath of files) {
       const dest = path.join(runDir, path.basename(filePath));
-      try { fs.renameSync(filePath, dest); } catch (e) {
-        process.stderr.write(`work-orchestrator: failed to archive ${path.basename(filePath)}: ${e?.message || e}\n`);
+      try {
+        fs.renameSync(filePath, dest);
+      } catch (e) {
+        process.stderr.write(
+          `work-orchestrator: failed to archive ${path.basename(filePath)}: ${e?.message || e}\n`
+        );
       }
     }
   }

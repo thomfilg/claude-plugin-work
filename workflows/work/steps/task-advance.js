@@ -16,7 +16,7 @@ module.exports = function taskAdvanceStep(add, s, ctx) {
 
   // Signal to the agent that more tasks remain after check passes
   if (!allTasksDone && currentTaskIdx < taskData.length - 1) {
-    const checkEntry = plan.find(p => p.step === STEPS.check);
+    const checkEntry = plan.find((p) => p.step === STEPS.check);
     if (checkEntry) {
       checkEntry.nextAction = 'advance_task';
       checkEntry.taskInfo = {
@@ -29,7 +29,7 @@ module.exports = function taskAdvanceStep(add, s, ctx) {
 
   // Mark final task completion when this is the last task
   if (!allTasksDone && currentTaskIdx === taskData.length - 1) {
-    const checkEntry = plan.find(p => p.step === STEPS.check);
+    const checkEntry = plan.find((p) => p.step === STEPS.check);
     if (checkEntry) {
       checkEntry.finalTaskAction = 'complete_last_task';
       checkEntry.taskInfo = {
