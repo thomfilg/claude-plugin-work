@@ -14,8 +14,6 @@
  * No I/O, no state, no logging. Safe to test in isolation.
  */
 
-const path = require('path');
-
 // Shared regex source for detecting node script invocations in Bash commands (GH-89).
 // Handles: cd && node ..., env prefixes, Node flags (including multi-arg like --require <path>),
 // quoted paths. --eval/--print/-e/-p excluded (inline code, not file paths).

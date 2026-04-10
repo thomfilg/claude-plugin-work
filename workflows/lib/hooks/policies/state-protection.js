@@ -13,11 +13,12 @@
 
 const path = require('path');
 const { basenameProtector, createFileProtector } = require('../../protect-state-files');
-// Re-export hook from protect-artifact-files so state-protection owns the unified
-// view of "protected workflow files" (state + artifact) for the enforcer.
-const _protectArtifactFiles = require('../../protect-artifact-files');
-void _protectArtifactFiles;
+const { createArtifactProtector } = require('../../protect-artifact-files');
 const { isExemptScriptInvocation } = require('./agent-authorization');
+
+// Re-export createArtifactProtector so state-protection owns the unified
+// view of "protected workflow files" (state + artifact) for the enforcer.
+module.exports.createArtifactProtector = createArtifactProtector;
 
 /**
  * Build a map of protected basename -> the transition hint string for its owning workflow.

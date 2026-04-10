@@ -23,8 +23,10 @@ function safeExec(command, args = [], opts = {}) {
   const finalOpts = {
     encoding: 'utf-8',
     timeout: 15000,
-    stdio: ['pipe', 'pipe', 'pipe'],
     ...execOpts,
+    // stdio is enforced last so callers cannot override it and leak stdout/stderr
+    // to the parent process (e.g. by passing { stdio: 'inherit' } or 'pipe' strings).
+    stdio: ['pipe', 'pipe', 'pipe'],
   };
 
   try {
