@@ -8,6 +8,8 @@
  *   - parse(markdown): Question[]
  *   - findBlocking(questions): Question[]
  *   - classify(scope): 'local' | 'cross-ticket' | 'architectural' | 'unknown'
+ *   - applyResolutions(markdown, resolutions): string  — idempotent rewriter
+ *   - escapeResolution(answer): string                 — injection-safe escape
  *   - SCOPES: readonly frozen allowlist of valid scope strings
  *
  * A Question is:
@@ -278,10 +280,181 @@ function downgradeToLocal(_questionText, _justification) {
   throw new Error('downgradeToLocal is not implemented — P1 escape hatch (Task 11)');
 }
 
+// ─── applyResolutions() + escapeResolution() ────────────────────────────────
+
+/**
+ * Sanitize a user-supplied answer before persisting it into brief.md.
+ *
+ * Threat model: the answer is written verbatim into a markdown file that is
+ * later re-parsed by `parse()` and read by downstream agents (spec-writer,
+ * split-in-tasks). A malicious or careless answer could:
+ *   - start a new heading (`## Injected Heading`) and split the Open
+ *     Questions section;
+ *   - terminate or open a fenced code block (```); or
+ *   - contain embedded newlines that would break the block's single-line
+ *     bullet structure.
+ *
+ * Rules (all fail-closed — any questionable content is neutralized rather
+ * than preserved):
+ *   1. Non-string / empty / nullish input → return `''`.
+ *   2. Collapse all embedded newlines (`\r\n`, `\n`, `\r`) to single spaces.
+ *   3. Strip triple-backtick sequences anywhere in the string.
+ *   4. Strip all leading `#` characters and the whitespace that follows so
+ *      the answer cannot start a heading at the beginning of its line.
+ *   5. Trim surrounding whitespace.
+ *
+ * The result is safe to splice into a `- **Resolution:** <answer>` line
+ * without altering the surrounding parser-observable structure.
+ */
+function escapeResolution(answer) {
+  if (typeof answer !== 'string' || answer.length === 0) return '';
+  let out = answer;
+  // Collapse newlines (handle CRLF before LF so we don't double-space).
+  out = out.replace(/\r\n/g, ' ').replace(/[\r\n]+/g, ' ');
+  // Remove triple-backtick sequences entirely — they have no legitimate
+  // place in a single-line bullet, and they're the single biggest risk for
+  // markdown fence injection.
+  out = out.replace(/```/g, '');
+  // Strip any leading `#` block (repeatedly, in case the input begins with
+  // `## ## ...`), along with the whitespace immediately following it.
+  out = out.replace(/^\s*(?:#+\s*)+/, '');
+  // Final whitespace cleanup.
+  out = out.trim();
+  return out;
+}
+
+/**
+ * Normalize a `resolutions` argument into a plain `Map<string, string>` so
+ * callers can pass either a real Map or a plain object for ergonomics.
+ * Non-string keys/values are dropped.
+ */
+function normalizeResolutions(resolutions) {
+  const out = new Map();
+  if (!resolutions) return out;
+  if (resolutions instanceof Map) {
+    for (const [k, v] of resolutions.entries()) {
+      if (typeof k === 'string' && typeof v === 'string') out.set(k, v);
+    }
+    return out;
+  }
+  if (typeof resolutions === 'object') {
+    for (const [k, v] of Object.entries(resolutions)) {
+      if (typeof k === 'string' && typeof v === 'string') out.set(k, v);
+    }
+  }
+  return out;
+}
+
+/**
+ * Rewrite a `resolved: false` subfield line to `resolved: true`, preserving
+ * the original indentation and surrounding formatting. If the line already
+ * says `resolved: true`, return it unchanged.
+ */
+function flipResolvedLine(line) {
+  return line.replace(/(`resolved:\s*)(false)(\s*`)/i, (_m, pre, _val, post) => `${pre}true${post}`);
+}
+
+/**
+ * Build the `- **Resolution:** ...` line for a block, matching the
+ * indentation of the block's existing subfield lines so the parser can
+ * recognize it on re-read.
+ */
+function buildResolutionLine(blockLines, escaped) {
+  // Find the indentation of an existing subfield line (they all start with
+  // at least two spaces). Default to two spaces if we can't find one.
+  let indent = '  ';
+  for (const line of blockLines) {
+    const match = line.match(/^(\s{2,})-\s+/);
+    if (match) {
+      indent = match[1];
+      break;
+    }
+  }
+  return `${indent}- **Resolution:** ${escaped}`;
+}
+
+/**
+ * Rewrite `brief.md` markdown so that every question in `resolutions` is
+ * marked resolved and gets a `Resolution:` subfield appended to its block.
+ *
+ * Guarantees:
+ *   - **Idempotency.** A block whose parsed `resolved === true` is never
+ *     touched, even if the caller passes a new answer for it. Running
+ *     `applyResolutions` twice with the same resolutions produces byte-equal
+ *     output.
+ *   - **Injection safety.** User answers pass through `escapeResolution` so
+ *     they cannot introduce new headings, fences, or block-boundary-breaking
+ *     newlines. Re-parsing the rewritten markdown MUST yield the same
+ *     `Question[]` count as the input.
+ *   - **Minimal rewrite.** Lines outside the changed block are preserved
+ *     byte-for-byte.
+ *   - **No I/O.** Pure function. Invalid / empty / unknown-question
+ *     resolutions are silent no-ops.
+ *
+ * The rewriter operates by:
+ *   1. Parsing the input to locate each question block (with `startLine`
+ *      and `endLine` ranges).
+ *   2. Walking the question list from LAST to FIRST so that line indices
+ *      computed by `parse()` remain valid as we splice new lines in.
+ *   3. For each match: flipping an in-block `resolved: false` subfield to
+ *      `resolved: true` and inserting an escaped `- **Resolution:** …` line
+ *      immediately after the block's last content line.
+ *
+ * @param {string} markdown
+ * @param {Map<string,string>|Record<string,string>} resolutions
+ * @returns {string}
+ */
+function applyResolutions(markdown, resolutions) {
+  if (typeof markdown !== 'string' || markdown.length === 0) return markdown;
+
+  const resMap = normalizeResolutions(resolutions);
+  if (resMap.size === 0) return markdown;
+
+  const questions = parse(markdown);
+  if (questions.length === 0) return markdown;
+
+  const lines = markdown.split('\n');
+
+  // Walk LAST → FIRST so earlier indices stay stable as we splice.
+  for (let i = questions.length - 1; i >= 0; i--) {
+    const q = questions[i];
+    if (!resMap.has(q.questionText)) continue;
+    // Idempotency guard: never touch already-resolved blocks. The guard
+    // intentionally uses the parser's definition of `resolved` (the boolean
+    // on the Question object), which is derived from `resolved: true` in
+    // the subfield line and/or presence of a `Resolution:` sub-bullet.
+    if (q.resolved === true) continue;
+
+    const rawAnswer = resMap.get(q.questionText);
+    const escaped = escapeResolution(rawAnswer);
+
+    // Flip the block's `resolved: false` line (if any) to `resolved: true`,
+    // modifying the original `lines` array in place.
+    for (let j = q.startLine; j <= q.endLine; j++) {
+      const flipped = flipResolvedLine(lines[j]);
+      if (flipped !== lines[j]) {
+        lines[j] = flipped;
+        break;
+      }
+    }
+
+    // Append a `- **Resolution:** ...` line right after the block's last
+    // content line. We splice rather than concatenate so interior blocks
+    // don't disturb downstream content.
+    const blockLines = lines.slice(q.startLine, q.endLine + 1);
+    const resolutionLine = buildResolutionLine(blockLines, escaped);
+    lines.splice(q.endLine + 1, 0, resolutionLine);
+  }
+
+  return lines.join('\n');
+}
+
 module.exports = {
   parse,
   findBlocking,
   classify,
   downgradeToLocal,
+  applyResolutions,
+  escapeResolution,
   SCOPES,
 };

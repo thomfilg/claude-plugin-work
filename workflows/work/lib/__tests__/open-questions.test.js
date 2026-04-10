@@ -16,6 +16,8 @@ const {
   classify,
   SCOPES,
   downgradeToLocal,
+  applyResolutions,
+  escapeResolution,
 } = require('../open-questions');
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -345,5 +347,202 @@ describe('open-questions: downgradeToLocal (P1 extension point)', () => {
       () => downgradeToLocal('some question', 'some justification'),
       /not implemented|P1/i
     );
+  });
+});
+
+// ─── applyResolutions() ─────────────────────────────────────────────────────
+
+describe('open-questions: applyResolutions', () => {
+  it('is exported as a function', () => {
+    assert.equal(typeof applyResolutions, 'function');
+  });
+
+  it('rewrites a single unresolved architectural block with resolved: true and a Resolution line', () => {
+    const resolutions = new Map([
+      ['Should the gate be a hook or a step?', 'It should be a step.'],
+    ]);
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+
+    // The result is still a string containing the original heading and summary.
+    assert.equal(typeof result, 'string');
+    assert.ok(result.includes('# Product Brief'));
+    assert.ok(result.includes('## Summary'));
+
+    // Re-parse to verify the block is now resolved with the new resolution.
+    const parsed = parse(result);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].resolved, true);
+    assert.equal(parsed[0].resolution, 'It should be a step.');
+  });
+
+  it('rewrites only answered blocks in a multi-block brief', () => {
+    const resolutions = new Map([
+      ['How do siblings coordinate router ownership?', 'Via a shared registry.'],
+    ]);
+    const result = applyResolutions(FIXTURE_MULTIPLE_MIXED, resolutions);
+    const parsed = parse(result);
+
+    // Still 3 blocks, and only the cross-ticket one was updated.
+    assert.equal(parsed.length, 3);
+
+    // Block 0: local, unresolved, untouched
+    assert.equal(parsed[0].scope, 'local');
+    assert.equal(parsed[0].resolved, false);
+    assert.equal(parsed[0].resolution, undefined);
+
+    // Block 1: cross-ticket, now resolved
+    assert.equal(parsed[1].scope, 'cross-ticket');
+    assert.equal(parsed[1].resolved, true);
+    assert.equal(parsed[1].resolution, 'Via a shared registry.');
+
+    // Block 2: architectural, already resolved, untouched
+    assert.equal(parsed[2].scope, 'architectural');
+    assert.equal(parsed[2].resolved, true);
+    assert.equal(parsed[2].resolution, 'No, defer to Q3 planning.');
+  });
+
+  it('accepts a plain object (not just a Map) for resolutions', () => {
+    const resolutions = {
+      'Should the gate be a hook or a step?': 'It should be a step.',
+    };
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+    const parsed = parse(result);
+    assert.equal(parsed[0].resolved, true);
+    assert.equal(parsed[0].resolution, 'It should be a step.');
+  });
+
+  it('is a no-op when the question text is not found', () => {
+    const resolutions = new Map([['Nonexistent question?', 'unused']]);
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+    assert.equal(result, FIXTURE_SINGLE_STRUCTURED);
+  });
+
+  it('is a no-op when resolutions is empty', () => {
+    assert.equal(applyResolutions(FIXTURE_SINGLE_STRUCTURED, new Map()), FIXTURE_SINGLE_STRUCTURED);
+    assert.equal(applyResolutions(FIXTURE_SINGLE_STRUCTURED, {}), FIXTURE_SINGLE_STRUCTURED);
+  });
+
+  it('does not touch blocks that are already resolved (guard)', () => {
+    // Run once to resolve the single block.
+    const first = applyResolutions(
+      FIXTURE_SINGLE_STRUCTURED,
+      new Map([['Should the gate be a hook or a step?', 'First answer.']])
+    );
+    // Attempt to re-resolve with a different answer — should be a no-op
+    // because the block is already resolved.
+    const second = applyResolutions(
+      first,
+      new Map([['Should the gate be a hook or a step?', 'Second answer.']])
+    );
+    assert.equal(second, first);
+    const parsed = parse(second);
+    assert.equal(parsed[0].resolution, 'First answer.');
+  });
+
+  it('is idempotent: running twice with the same resolutions produces byte-equal output', () => {
+    const resolutions = new Map([
+      ['How do siblings coordinate router ownership?', 'Via a shared registry.'],
+      ['Where should the gate live?', 'In the work steps directory.'],
+    ]);
+    const once = applyResolutions(FIXTURE_MULTIPLE_MIXED, resolutions);
+    const twice = applyResolutions(once, resolutions);
+    assert.equal(twice, once);
+  });
+
+  it('preserves the Question[] count after a rewrite (no block corruption)', () => {
+    const before = parse(FIXTURE_MULTIPLE_MIXED).length;
+    const resolutions = new Map([
+      ['How do siblings coordinate router ownership?', 'answer'],
+    ]);
+    const after = parse(applyResolutions(FIXTURE_MULTIPLE_MIXED, resolutions)).length;
+    assert.equal(after, before);
+  });
+
+  it('preserves surrounding markdown byte-for-byte outside the changed block', () => {
+    const resolutions = new Map([
+      ['Should the gate be a hook or a step?', 'A step.'],
+    ]);
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+    // Heading, summary, and section header are unchanged verbatim.
+    assert.ok(result.startsWith('# Product Brief\n\n## Summary\nExample brief.\n\n## Open Questions\n'));
+  });
+
+  it('escapes injection: leading "##" heading in answer does not create a new section', () => {
+    const malicious = '## Injected Heading\nmore stuff';
+    const resolutions = new Map([
+      ['Should the gate be a hook or a step?', malicious],
+    ]);
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+
+    // Re-parse: still exactly one question, resolved.
+    const parsed = parse(result);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].resolved, true);
+
+    // The leading '#' characters must have been stripped so no new heading
+    // is introduced into the document.
+    assert.ok(!/^##\s+Injected Heading/m.test(result));
+  });
+
+  it('collapses multi-line answers to a single line', () => {
+    const multi = 'line one\nline two\nline three';
+    const resolutions = new Map([
+      ['Should the gate be a hook or a step?', multi],
+    ]);
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+    const parsed = parse(result);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].resolved, true);
+    // The stored resolution must not contain a literal newline.
+    assert.ok(parsed[0].resolution && !parsed[0].resolution.includes('\n'));
+    assert.ok(parsed[0].resolution.includes('line one'));
+    assert.ok(parsed[0].resolution.includes('line two'));
+  });
+
+  it('returns the input unchanged when markdown has no Open Questions section', () => {
+    const resolutions = new Map([['x', 'y']]);
+    assert.equal(applyResolutions(FIXTURE_NO_SECTION, resolutions), FIXTURE_NO_SECTION);
+  });
+});
+
+// ─── escapeResolution() ─────────────────────────────────────────────────────
+
+describe('open-questions: escapeResolution', () => {
+  it('is exported as a function', () => {
+    assert.equal(typeof escapeResolution, 'function');
+  });
+
+  it('returns an empty string for empty/nullish input', () => {
+    assert.equal(escapeResolution(''), '');
+    assert.equal(escapeResolution(null), '');
+    assert.equal(escapeResolution(undefined), '');
+  });
+
+  it('strips leading "#" characters so answers cannot start a new heading', () => {
+    assert.ok(!escapeResolution('## Heading').startsWith('#'));
+    assert.ok(!escapeResolution('# Top Heading').startsWith('#'));
+    assert.ok(!escapeResolution('#### Deep Heading').startsWith('#'));
+  });
+
+  it('collapses embedded newlines to spaces', () => {
+    const out = escapeResolution('line one\nline two\r\nline three');
+    assert.ok(!out.includes('\n'));
+    assert.ok(!out.includes('\r'));
+    assert.ok(out.includes('line one'));
+    assert.ok(out.includes('line two'));
+    assert.ok(out.includes('line three'));
+  });
+
+  it('leaves a clean single-line answer untouched', () => {
+    assert.equal(escapeResolution('A simple answer.'), 'A simple answer.');
+  });
+
+  it('neutralizes inline triple-backticks so they cannot terminate a fence', () => {
+    const out = escapeResolution('```js\nconst x = 1;\n```');
+    assert.ok(!out.includes('```'));
+  });
+
+  it('trims surrounding whitespace', () => {
+    assert.equal(escapeResolution('   hello   '), 'hello');
   });
 });
