@@ -40,9 +40,8 @@ const GET_CONFIG_PATH = path.join(__dirname, '..', '..', 'lib', 'get-config');
 const CONFIG_PATH = path.join(__dirname, '..', '..', 'lib', 'config');
 const getConfig = require(GET_CONFIG_PATH);
 const TASKS_BASE = getConfig.require('TASKS_BASE');
-
+// Env/cache restoration happens in the global after() hook further down.
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
 function runOrchestrator(args = [], opts = {}) {
   // If an inner describe block overrides WORKTREES_BASE without also
   // overriding TASKS_BASE, derive TASKS_BASE from the inner WORKTREES_BASE
