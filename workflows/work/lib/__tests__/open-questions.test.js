@@ -503,6 +503,36 @@ describe('open-questions: applyResolutions', () => {
     const resolutions = new Map([['x', 'y']]);
     assert.equal(applyResolutions(FIXTURE_NO_SECTION, resolutions), FIXTURE_NO_SECTION);
   });
+
+  it('is a no-op when the answer collapses to empty after escaping (e.g. pure-hash input)', () => {
+    // `escapeResolution('###')` strips all leading `#` characters and
+    // returns `''`. An empty-after-escape answer must not produce a
+    // dangling `- **Resolution:** ` line with empty content — the block
+    // should remain unresolved so the gate re-prompts on the next pass.
+    const resolutions = new Map([
+      ['Should the gate be a hook or a step?', '###'],
+    ]);
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+
+    // Byte-equal to the input: no rewrite occurred.
+    assert.equal(result, FIXTURE_SINGLE_STRUCTURED);
+
+    // And re-parsing confirms the block is still unresolved with no
+    // `resolution` field (i.e., `undefined`, not an empty string).
+    const parsed = parse(result);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].resolved, false);
+    assert.equal(parsed[0].resolution, undefined);
+  });
+
+  it('is a no-op when the answer is pure whitespace that collapses to empty', () => {
+    // `escapeResolution('## ')` also returns `''`; same contract applies.
+    const resolutions = new Map([
+      ['Should the gate be a hook or a step?', '## '],
+    ]);
+    const result = applyResolutions(FIXTURE_SINGLE_STRUCTURED, resolutions);
+    assert.equal(result, FIXTURE_SINGLE_STRUCTURED);
+  });
 });
 
 // ─── escapeResolution() ─────────────────────────────────────────────────────
@@ -544,5 +574,15 @@ describe('open-questions: escapeResolution', () => {
 
   it('trims surrounding whitespace', () => {
     assert.equal(escapeResolution('   hello   '), 'hello');
+  });
+
+  it('returns an empty string for pure-hash / markdown-control-only input', () => {
+    // An answer consisting only of heading markers has no content left
+    // after leading-# stripping and whitespace trim. This is the input
+    // shape that motivates the `applyResolutions` no-op guard.
+    assert.equal(escapeResolution('###'), '');
+    assert.equal(escapeResolution('## '), '');
+    assert.equal(escapeResolution('#'), '');
+    assert.equal(escapeResolution('   ##   '), '');
   });
 });

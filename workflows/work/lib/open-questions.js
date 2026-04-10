@@ -421,12 +421,22 @@ function applyResolutions(markdown, resolutions) {
     if (!resMap.has(q.questionText)) continue;
     // Idempotency guard: never touch already-resolved blocks. The guard
     // intentionally uses the parser's definition of `resolved` (the boolean
-    // on the Question object), which is derived from `resolved: true` in
-    // the subfield line and/or presence of a `Resolution:` sub-bullet.
+    // on the Question object), which is derived solely from `resolved: true`
+    // in the `resolved:` subfield line (see `buildQuestion`). A block that
+    // carries a `**Resolution:**` sub-bullet but still has `resolved: false`
+    // (an inconsistent manual-edit state) is treated as unresolved here.
     if (q.resolved === true) continue;
 
     const rawAnswer = resMap.get(q.questionText);
     const escaped = escapeResolution(rawAnswer);
+    // Guard: if the sanitized answer collapses to empty (e.g. the user
+    // supplied a pure-hash `"###"` or a whitespace-only string), skip the
+    // rewrite entirely. Writing a dangling `- **Resolution:** ` line would
+    // leave `resolution === ''` in the parsed block — a shape that differs
+    // from both "unresolved" (`resolution === undefined`) and
+    // "resolved with answer" and could confuse downstream consumers.
+    // Leaving the block untouched means the gate re-prompts next pass.
+    if (escaped === '') continue;
 
     // Flip the block's `resolved: false` line (if any) to `resolved: true`,
     // modifying the original `lines` array in place.
