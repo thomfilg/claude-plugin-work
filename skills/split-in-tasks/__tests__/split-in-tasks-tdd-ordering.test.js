@@ -23,7 +23,7 @@ describe('split-in-tasks SKILL.md — TDD ordering enforcement', () => {
     assert.match(section, /\*\*GREEN:\*\*/,
       'Deliverables template must include **GREEN:** prefix');
     assert.match(section, /\*\*REFACTOR:\*\*/,
-      'Deliverables template must include **REFACTOR:** prefix');
+      'Deliverables template must include **REFACTOR:** prefix (ordering verified below)');
     // Verify ordering: RED before GREEN before REFACTOR
     const redIdx = section.indexOf('**RED:**');
     const greenIdx = section.indexOf('**GREEN:**');
