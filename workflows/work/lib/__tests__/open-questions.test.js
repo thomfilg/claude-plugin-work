@@ -10,7 +10,13 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parse, findBlocking, classify, SCOPES } = require('../open-questions');
+const {
+  parse,
+  findBlocking,
+  classify,
+  SCOPES,
+  downgradeToLocal,
+} = require('../open-questions');
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -83,6 +89,44 @@ Nothing to question here.
 
 ## Out of Scope
 - Done.
+`;
+
+const FIXTURE_H1_AFTER_SECTION = `# Brief
+
+## Open Questions
+
+- **Question:** A real question
+  - \`scope: architectural\`
+  - \`rationale: r\`
+  - \`resolved: false\`
+
+# Second H1 Heading
+
+- Not a question, should not be parsed
+- Another stray bullet
+`;
+
+const FIXTURE_H3_AFTER_SECTION = `# Brief
+
+## Open Questions
+
+- **Question:** A real question
+  - \`scope: architectural\`
+  - \`rationale: r\`
+  - \`resolved: false\`
+
+### Sub Heading Inside Doc
+
+- Not a question
+`;
+
+const FIXTURE_MISSING_RESOLVED = `# Brief
+
+## Open Questions
+
+- **Question:** Structured block without resolved field
+  - \`scope: architectural\`
+  - \`rationale: author forgot resolved\`
 `;
 
 // ─── parse() ────────────────────────────────────────────────────────────────
@@ -161,6 +205,47 @@ describe('open-questions: parse', () => {
   it('does not crash on null/undefined input', () => {
     assert.deepEqual(parse(null), []);
     assert.deepEqual(parse(undefined), []);
+  });
+
+  it('does not bleed past an h1 heading that follows the section', () => {
+    const result = parse(FIXTURE_H1_AFTER_SECTION);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].questionText, 'A real question');
+  });
+
+  it('does not bleed past an h3 heading that follows the section', () => {
+    const result = parse(FIXTURE_H3_AFTER_SECTION);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].questionText, 'A real question');
+  });
+
+  it('endLine points to the last non-blank content line of each block', () => {
+    const result = parse(FIXTURE_MULTIPLE_MIXED);
+    const lines = FIXTURE_MULTIPLE_MIXED.split('\n');
+    for (const q of result) {
+      assert.notEqual(
+        lines[q.endLine].trim(),
+        '',
+        `endLine ${q.endLine} is blank: "${lines[q.endLine]}"`
+      );
+    }
+  });
+
+  it('endLine for a block with trailing blank before next block lands on last subfield', () => {
+    // FIXTURE_MULTIPLE_MIXED has three structured blocks. The first block's
+    // last non-blank content line is `  - \`resolved: false\``. We assert
+    // that the first question's endLine matches that line, not a blank.
+    const result = parse(FIXTURE_MULTIPLE_MIXED);
+    const lines = FIXTURE_MULTIPLE_MIXED.split('\n');
+    assert.ok(lines[result[0].endLine].includes('resolved: false'));
+  });
+
+  it('treats a missing resolved: field as resolved: false on a valid structured block', () => {
+    const result = parse(FIXTURE_MISSING_RESOLVED);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].scope, 'architectural');
+    assert.equal(result[0].resolved, false);
+    assert.equal(result[0].rationale, 'author forgot resolved');
   });
 });
 
@@ -245,5 +330,20 @@ describe('open-questions: classify', () => {
     assert.ok(Array.isArray(SCOPES));
     assert.ok(Object.isFrozen(SCOPES));
     assert.deepEqual([...SCOPES].sort(), ['architectural', 'cross-ticket', 'local']);
+  });
+});
+
+// ─── downgradeToLocal() P1 extension point ──────────────────────────────────
+
+describe('open-questions: downgradeToLocal (P1 extension point)', () => {
+  it('is exported as a function', () => {
+    assert.equal(typeof downgradeToLocal, 'function');
+  });
+
+  it('throws a "not implemented" error indicating P1 status', () => {
+    assert.throws(
+      () => downgradeToLocal('some question', 'some justification'),
+      /not implemented|P1/i
+    );
   });
 });

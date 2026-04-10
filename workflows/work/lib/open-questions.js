@@ -17,8 +17,13 @@
  *     rationale: string,
  *     resolved: boolean,
  *     resolution?: string,
- *     startLine: number,   // 0-indexed, inclusive
- *     endLine: number      // 0-indexed, inclusive
+ *     startLine: number,   // 0-indexed, inclusive — the `- **Question:**` line
+ *     endLine: number      // 0-indexed, inclusive — the LAST non-blank
+ *                          //   content line of the block (never a trailing
+ *                          //   blank separator). Consumers can safely use
+ *                          //   `lines.slice(startLine, endLine + 1)` to
+ *                          //   extract the block without picking up a
+ *                          //   trailing blank or `split('\n')` artifact.
  *   }
  *
  * Fallback behavior (fail-open):
@@ -41,7 +46,11 @@
 const SCOPES = Object.freeze(['local', 'cross-ticket', 'architectural']);
 
 const OPEN_QUESTIONS_HEADING = /^##\s+Open Questions\s*$/;
-const ANY_HEADING = /^##\s+/;
+// Match any ATX heading (h1..h6). A heading at any level after the
+// `## Open Questions` line terminates the section — without this, an h1
+// (e.g. a second top-level title later in a multi-document markdown) or
+// an h3+ subheading would let the parser bleed into unrelated content.
+const ANY_HEADING = /^#{1,6}\s+/;
 const TOP_LEVEL_BULLET = /^-\s+/;
 const QUESTION_BULLET = /^-\s+\*\*Question:\*\*\s*(.*)$/;
 const LEGACY_BULLET = /^-\s+(.*)$/;
@@ -84,6 +93,23 @@ function findBlockEnd(lines, startIdx, sectionEnd) {
     if (TOP_LEVEL_BULLET.test(lines[i])) return i; // next top-level bullet
   }
   return sectionEnd;
+}
+
+/**
+ * Given the exclusive end of a block, walk backward to find the index of the
+ * last non-blank line that actually belongs to this block. Returns a value
+ * `>= blockStart` so the block is always at least one line wide (the header).
+ * This tightens the `endLine` contract: consumers (e.g. Task 2's rewriter)
+ * can slice `lines.slice(startLine, endLine + 1)` without picking up the
+ * blank separator between blocks or the trailing empty element produced by
+ * `split('\n')` on a trailing-newline string.
+ */
+function findLastContentLine(lines, blockStart, blockEnd) {
+  let last = blockEnd - 1;
+  while (last > blockStart && (lines[last] === undefined || lines[last].trim() === '')) {
+    last -= 1;
+  }
+  return last;
 }
 
 /**
@@ -132,6 +158,7 @@ function buildQuestion(lines, blockStart, blockEnd) {
   const { fields, resolution } = readSubfields(interiorLines);
   const rawScope = fields.get('scope');
   const scopeClass = classify(rawScope);
+  const endLine = findLastContentLine(lines, blockStart, blockEnd);
 
   // Fallback: missing or invalid scope → legacy/malformed coercion.
   if (!fields.has('scope') || scopeClass === 'unknown') {
@@ -141,7 +168,7 @@ function buildQuestion(lines, blockStart, blockEnd) {
       rationale: fields.get('rationale') || '',
       resolved: true,
       startLine: blockStart,
-      endLine: blockEnd - 1,
+      endLine,
     };
   }
 
@@ -154,7 +181,7 @@ function buildQuestion(lines, blockStart, blockEnd) {
     rationale: fields.get('rationale') || '',
     resolved,
     startLine: blockStart,
-    endLine: blockEnd - 1,
+    endLine,
   };
 
   if (resolution !== undefined) {
@@ -215,9 +242,46 @@ function classify(scope) {
   return SCOPES.includes(normalized) ? normalized : 'unknown';
 }
 
+/**
+ * (P1 extension point — Task 11)
+ *
+ * Downgrade a specific open question's scope to `'local'`, with a required
+ * human-authored justification. This is the escape hatch referenced in
+ * spec.md §Open Questions & Decisions and tasks.md R21: a way for authors
+ * to acknowledge a cross-ticket or architectural question that would
+ * otherwise block the workflow, and explicitly accept the risk of treating
+ * it as local scope.
+ *
+ * P0 scope (this file): this stub exists as the designated anchor point so
+ * Task 11's P1 implementation has an explicit contract to extend. It is
+ * exported (throwing) so that any accidental caller fails loudly rather
+ * than silently coercing behavior.
+ *
+ * P1 plan (Task 11):
+ *   1. Accept `(questionText, justification)` where both are non-empty
+ *      strings; reject empty justifications with a validation error.
+ *   2. Return a mutation descriptor `{ questionText, newScope: 'local',
+ *      justification, timestamp }` that Task 2's `applyResolutions`
+ *      rewriter can consume to rewrite the block in-place, appending a
+ *      `- \`downgrade-justification: <text>\`` subfield and setting the
+ *      scope to `local`.
+ *   3. The gate (Task 3) will then treat the downgraded question as
+ *      non-blocking, preserving the author's decision in the brief file
+ *      for audit.
+ *
+ * @param {string} _questionText  The exact text of the question to downgrade.
+ * @param {string} _justification A non-empty human-authored justification.
+ * @returns {never} Always throws until Task 11 implements it.
+ * @throws {Error} with message containing "not implemented" and "P1".
+ */
+function downgradeToLocal(_questionText, _justification) {
+  throw new Error('downgradeToLocal is not implemented — P1 escape hatch (Task 11)');
+}
+
 module.exports = {
   parse,
   findBlocking,
   classify,
+  downgradeToLocal,
   SCOPES,
 };
