@@ -33,7 +33,9 @@ describe('split-in-tasks SKILL.md — TDD ordering enforcement', () => {
   });
 
   it('contains TDD protocol metadata line in file header template', () => {
-    assert.match(content, /TDD Protocol/,
+    const headerSection = content.match(/### Full file structure[\s\S]*?(?=### |$)/);
+    assert.ok(headerSection, 'Full file structure section must exist');
+    assert.match(headerSection[0], /TDD Protocol/,
       'File header template must include TDD Protocol metadata');
   });
 

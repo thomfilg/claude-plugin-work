@@ -245,7 +245,7 @@ Verify all prior tasks are correctly implemented and integrated.
 
 _Generated from: brief.md, spec.md_
 _Ticket: <TICKET_ID>_
-_TDD Protocol: Every implementation task follows RED -> GREEN -> REFACTOR ordering in deliverables._
+_TDD Protocol: Every non-exempt implementation task follows RED -> GREEN -> REFACTOR ordering in deliverables._
 
 ## Extracted Requirements
 
