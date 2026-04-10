@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { STEPS } = require(path.join(__dirname, 'step-registry'));
+const createWorkflowDefinition = require(path.join(__dirname, 'workflow-definition'));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -28,13 +28,23 @@ function listFiles(dir, pattern) {
 
 // ─── Artifact Patterns ──────────────────────────────────────────────────────
 
-// Artifact patterns per step — used by archiveStepArtifacts() on backward transitions.
-// Note: complete has no entry here because complete->complete is a self-transition (same index),
-// which does not trigger archival. Recovery archival is handled by unstick-complete.js directly.
-const STEP_ARTIFACTS = {
-  [STEPS.check]: [/^.*\.check\.md$/],
-  [STEPS.pr]:    [/^\.pr-update-sha$/, /^\.post-pr-update-sha$/],
-};
+// Artifact patterns per step — authoritative config lives in workflow-definition.js
+// under `workflow.archivalPatterns` (GH-206 Task 12). This module re-exports the
+// resolved config for consumers that historically imported STEP_ARTIFACTS directly.
+//
+// Note: `complete` has no entry because complete->complete is a self-transition,
+// which does not trigger archival. Recovery archival for `complete` is handled
+// by unstick-complete.js directly.
+const STEP_ARTIFACTS = (() => {
+  // Instantiate workflow definition with no-op deps — we only read static config.
+  // If this throws, it's a configuration bug that should surface loudly.
+  const { workflow } = createWorkflowDefinition({
+    TASKS_BASE: '',
+    safeTicketPath: (id) => id,
+    resolveGitHead: () => '',
+  });
+  return workflow.archivalPatterns || {};
+})();
 
 // ─── Archival Logic ─────────────────────────────────────────────────────────
 

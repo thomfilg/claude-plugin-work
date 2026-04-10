@@ -207,13 +207,19 @@ const TRUSTED_SCRIPT_DIRS = [
 //   1. The caller is an authorized agent (from `agents`)
 //   2. The correct workflow step is active (from `step`) — enforced per script (GH-184)
 // The script itself also validates, providing defense-in-depth.
-const AGENT_GATED_SCRIPTS = {
-  'write-qa-report.js':         { agents: ['qa-feature-tester', 'qa-api-tester'], step: STEPS.check },
-  'write-tests-report.js':      { agents: ['quality-checker'], step: STEPS.check },
-  'write-code-review.js':       { agents: ['code-checker'], step: STEPS.check },
-  'write-completion-report.js':  { agents: ['completion-checker'], step: STEPS.check },
-  'tdd-phase-state.js':         { agents: ['developer-nodejs-tdd', 'developer-react-senior', 'developer-react-ui-architect', 'developer-devops'], step: STEPS.implement },
-};
+//
+// GH-206 Task 12: Sourced from workflow-definition.js (declarative policy config).
+// Merged across all discovered workflows so future workflows can register their
+// own gated scripts without editing this file.
+const AGENT_GATED_SCRIPTS = (() => {
+  const merged = {};
+  for (const wf of WORKFLOWS) {
+    if (wf && wf.agentGatedScripts && typeof wf.agentGatedScripts === 'object') {
+      Object.assign(merged, wf.agentGatedScripts);
+    }
+  }
+  return merged;
+})();
 
 const stateFileProtector = createStateFileProtector({
   protectedBasenames: PROTECTED_STATE_BASENAMES,

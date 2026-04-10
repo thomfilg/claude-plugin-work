@@ -35,12 +35,58 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
     } catch { return false; }
   }
 
+  // ─── Declarative policy config (GH-206 Task 12) ───────────────────────────
+  //
+  // Artifact patterns per step — consumed by artifact-archival.js on backward
+  // transitions. `complete` has no entry because complete->complete is a
+  // self-transition (same index) which does not trigger archival; recovery
+  // archival for `complete` is handled by unstick-complete.js directly.
+  const archivalPatterns = {
+    [STEPS.check]: [/^.*\.check\.md$/],
+    [STEPS.pr]:    [/^\.pr-update-sha$/, /^\.post-pr-update-sha$/],
+  };
+
+  // Evidence requirements per step — consumed by step verify functions and
+  // reporters. requiredFiles are plain basenames that must exist; qaReportPattern
+  // matches at least one QA report filename; requiredApprovals requires files
+  // to exist AND match an approval pattern.
+  const evidenceRequirements = {
+    [STEPS.check]: {
+      requiredFiles: ['code-review.check.md', 'tests.check.md', 'completion.check.md', 'README.md'],
+      qaReportPattern: /^qa-.*\.check\.md$/,
+    },
+    [STEPS.reports]: {
+      requiredApprovals: [
+        { file: 'tests.check.md',      pattern: /Status:\s*APPROVED/i },
+        { file: 'code-review.check.md', pattern: /Status:\s*APPROVED/i },
+        { file: 'completion.check.md',  pattern: /Status:\s*(COMPLETE|APPROVED)/i },
+      ],
+      qaReportPattern: /^qa-.*\.check\.md$/,
+      qaApprovalPattern: /Status:\s*APPROVED/i,
+    },
+  };
+
+  // Agent-gated writer scripts — consumed by enforce-step-workflow.js Rule 5.
+  // Maps script basename to { agents, step }. When a Bash command invokes one
+  // of these scripts, the hook verifies the caller is an authorized agent and
+  // that the correct workflow step is active.
+  const agentGatedScripts = {
+    'write-qa-report.js':         { agents: ['qa-feature-tester', 'qa-api-tester'], step: STEPS.check },
+    'write-tests-report.js':      { agents: ['quality-checker'], step: STEPS.check },
+    'write-code-review.js':       { agents: ['code-checker'], step: STEPS.check },
+    'write-completion-report.js': { agents: ['completion-checker'], step: STEPS.check },
+    'tdd-phase-state.js':         { agents: ['developer-nodejs-tdd', 'developer-react-senior', 'developer-react-ui-architect', 'developer-devops'], step: STEPS.implement },
+  };
+
   const workflow = {
     name: 'work',
     stateFile: '.work-state.json',
     evidenceFile: '.step-evidence.json',
     isActive: (state) => state?.status === 'in_progress',
     steps: WORK_STEPS,
+    archivalPatterns,
+    evidenceRequirements,
+    agentGatedScripts,
     // Soft steps allow transition without evidence -- these are optional or metadata-only steps.
     softSteps: new Set([
       STEPS.ticket,                           // optional/metadata step
@@ -142,14 +188,17 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
         } catch { return false; }
       }},
       { step: STEPS.check, verify: (ticketId) => {
-        // Check is proven if all required report files exist
+        // Check is proven if all required report files exist.
+        // Requirements are sourced from evidenceRequirements[check] (declarative).
         try {
           const dir = path.join(TASKS_BASE, safeTicketPath(ticketId));
-          const required = ['code-review.check.md', 'tests.check.md', 'completion.check.md', 'README.md'];
+          const reqs = evidenceRequirements[STEPS.check];
+          const required = reqs?.requiredFiles || [];
           if (!required.every(f => fs.existsSync(path.join(dir, f)))) return false;
-          // At least one QA report must exist (qa-*.check.md)
+          // At least one QA report must exist (matches qaReportPattern)
           const files = fs.readdirSync(dir);
-          return files.some(f => /^qa-.*\.check\.md$/.test(f));
+          const qaPattern = reqs?.qaReportPattern;
+          return qaPattern ? files.some(f => qaPattern.test(f)) : true;
         } catch { return false; }
       }},
       { step: STEPS.check,            tool: 'Skill',           field: 'skill',         pattern: /^(work-workflow:)?check$/ },
@@ -244,23 +293,24 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
       }},
       { step: STEPS.reports,          tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.reports}\\b`, 'i') },
       { step: STEPS.reports, verify: (ticketId) => {
-        // Reports is proven if all required check files exist and show APPROVED/COMPLETE
+        // Reports is proven if all required check files exist and show APPROVED/COMPLETE.
+        // Requirements are sourced from evidenceRequirements[reports] (declarative).
         try {
           const dir = path.join(TASKS_BASE, safeTicketPath(ticketId));
-          const required = [
-            { file: 'tests.check.md',       pattern: /Status:\s*APPROVED/i },
-            { file: 'code-review.check.md',  pattern: /Status:\s*APPROVED/i },
-            { file: 'completion.check.md',   pattern: /Status:\s*(COMPLETE|APPROVED)/i },
-          ];
+          const reqs = evidenceRequirements[STEPS.reports];
+          const required = reqs?.requiredApprovals || [];
           for (const r of required) {
             const fp = path.join(dir, r.file);
             if (!fs.existsSync(fp)) return false;
             if (!r.pattern.test(fs.readFileSync(fp, 'utf-8'))) return false;
           }
           // At least one QA report must exist and pass
-          const files = fs.readdirSync(dir).filter(f => /^qa-.*\.check\.md$/.test(f));
+          const qaPattern = reqs?.qaReportPattern;
+          const approvalPattern = reqs?.qaApprovalPattern;
+          if (!qaPattern || !approvalPattern) return true;
+          const files = fs.readdirSync(dir).filter(f => qaPattern.test(f));
           if (files.length === 0) return false;
-          return files.every(f => /Status:\s*APPROVED/i.test(fs.readFileSync(path.join(dir, f), 'utf-8')));
+          return files.every(f => approvalPattern.test(fs.readFileSync(path.join(dir, f), 'utf-8')));
         } catch { return false; }
       }},
       { step: STEPS.complete,         tool: ['Task', 'Agent'], field: 'description',   pattern: new RegExp(`^${STEPS.complete}\\b`, 'i') },
