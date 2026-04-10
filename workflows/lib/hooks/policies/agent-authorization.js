@@ -44,14 +44,21 @@ function expandPluginRoot(scriptPath) {
 /**
  * Extract the sub-command argument from a Bash command segment containing a node invocation.
  *
- * For workflow-state.js the sub-command is the 2nd non-flag arg (1st is workflow name).
- * For all other gated state scripts (e.g. work-state.js) it is the 1st non-flag arg.
+ * Strict positional matching: the sub-command MUST appear at the expected positional
+ * index after the script path — for workflow-state.js at index 1 (1st is workflow name),
+ * for all other gated state scripts at index 0. Flags are NOT skipped implicitly: if a
+ * flag appears at the expected position, the extraction fails (returns empty string),
+ * which forces the exemption check to reject the invocation. This prevents bypass via
+ * `node state-script.js --some-flag allowlisted-cmd`.
  */
 function extractSubCommand(cmd, nodeMatch, scriptBasename) {
   const afterScript = cmd.slice(nodeMatch.index + nodeMatch[0].length).trim();
-  const args = afterScript.split(/\s+/).filter((a) => a && !a.startsWith('-'));
+  // Include all tokens (including flags) so positional index cannot be shifted by flags
+  const allArgs = afterScript.split(/\s+/).filter((a) => a.length > 0);
   const subCmdIndex = scriptBasename === 'workflow-state.js' ? 1 : 0;
-  const rawSubCmd = args[subCmdIndex] || '';
+  const rawSubCmd = allArgs[subCmdIndex] || '';
+  // Reject if the token at the expected position is a flag — no implicit flag-skipping
+  if (rawSubCmd.startsWith('-')) return '';
   return rawSubCmd.replace(/^['"]|['"]$/g, '');
 }
 
