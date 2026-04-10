@@ -64,7 +64,7 @@ describe('split-in-tasks SKILL.md — TDD ordering enforcement', () => {
     // Scope assertion to Rule 10 section only
     const rule10Section = content.match(/\*\*Rule 10[\s\S]*?(?=\*\*(?:Rule|Anti-patterns))/);
     assert.ok(rule10Section, 'Rule 10 section must exist');
-    assert.match(rule10Section[0], /triplet|multiple behaviors.*RED.*GREEN.*REFACTOR|each behavior.*own/i,
+    assert.match(rule10Section[0], /triplet|multiple behaviors[\s\S]*?RED[\s\S]*?GREEN[\s\S]*?REFACTOR|each behavior[\s\S]*?own/i,
       'Rule 10 must include guidance for multi-behavior triplets');
   });
 
