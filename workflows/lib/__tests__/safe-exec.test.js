@@ -2,28 +2,40 @@
  * Tests for lib/safe-exec.js — safeExec shell-injection-safe command execution
  *
  * Run: node --test lib/__tests__/safe-exec.test.js
+ *
+ * These tests are hermetic and cross-platform: they invoke Node itself
+ * (via process.execPath) with inline scripts instead of POSIX utilities
+ * (echo, printf, true, sh, pwd, sleep), which are not available on Windows.
  */
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { safeExec } = require('../safe-exec');
 
+const nodePath = process.execPath;
+
 // ─── Basic execution ────────────────────────────────────────────────────────
 
 describe('safeExec — basic execution', () => {
   it('runs a command and returns trimmed stdout', () => {
-    const result = safeExec('echo', ['hello world']);
+    const result = safeExec(nodePath, ['-e', 'console.log("hello world")']);
     assert.equal(result, 'hello world');
   });
 
   it('passes arguments correctly as separate array elements', () => {
-    // printf with format + arg proves args are passed individually
-    const result = safeExec('printf', ['%s-%s', 'foo', 'bar']);
+    // Proves args are passed individually by concatenating two argv entries
+    const result = safeExec(nodePath, [
+      '-e',
+      'process.stdout.write(process.argv[1]+"-"+process.argv[2])',
+      '--',
+      'foo',
+      'bar',
+    ]);
     assert.equal(result, 'foo-bar');
   });
 
   it('handles commands with no arguments', () => {
-    const result = safeExec('true');
+    const result = safeExec(nodePath, ['-e', '']);
     assert.equal(result, '');
   });
 });
@@ -32,7 +44,7 @@ describe('safeExec — basic execution', () => {
 
 describe('safeExec — defaults', () => {
   it('defaults encoding to utf-8 (returns string, not Buffer)', () => {
-    const result = safeExec('echo', ['utf8-test']);
+    const result = safeExec(nodePath, ['-e', 'console.log("utf8-test")']);
     assert.equal(typeof result, 'string');
     assert.equal(result, 'utf8-test');
   });
@@ -40,7 +52,7 @@ describe('safeExec — defaults', () => {
   it('applies default timeout of 15000ms', () => {
     // We cannot easily assert the internal timeout value directly,
     // but we can verify a fast command succeeds (does not hang)
-    const result = safeExec('echo', ['fast']);
+    const result = safeExec(nodePath, ['-e', 'console.log("fast")']);
     assert.equal(result, 'fast');
   });
 });
@@ -49,12 +61,12 @@ describe('safeExec — defaults', () => {
 
 describe('safeExec — error handling', () => {
   it('returns empty string on error by default', () => {
-    const result = safeExec('false');
+    const result = safeExec(nodePath, ['-e', 'process.exit(1)']);
     assert.equal(result, '');
   });
 
   it('returns custom fallback value on error', () => {
-    const result = safeExec('false', [], { fallback: 'N/A' });
+    const result = safeExec(nodePath, ['-e', 'process.exit(1)'], { fallback: 'N/A' });
     assert.equal(result, 'N/A');
   });
 
@@ -68,9 +80,11 @@ describe('safeExec — error handling', () => {
 
 describe('safeExec — stderr suppression', () => {
   it('does not leak stderr to parent process', () => {
-    // sh -c is used here solely to produce stderr; safeExec still uses execFileSync
-    // We call a command that writes to stderr but succeeds
-    const result = safeExec('sh', ['-c', 'echo ok >&1; echo err >&2']);
+    // Node script writes to both stdout and stderr; safeExec must return only stdout
+    const result = safeExec(nodePath, [
+      '-e',
+      'console.log("ok"); console.error("err")',
+    ]);
     assert.equal(result, 'ok');
   });
 });
@@ -79,7 +93,12 @@ describe('safeExec — stderr suppression', () => {
 
 describe('safeExec — shell injection safety', () => {
   it('treats shell metacharacters in args as literal strings', () => {
-    const result = safeExec('printf', ['%s', '; echo injected']);
+    const result = safeExec(nodePath, [
+      '-e',
+      'process.stdout.write(process.argv[1])',
+      '--',
+      '; echo injected',
+    ]);
     assert.equal(result, '; echo injected');
   });
 });
@@ -89,17 +108,25 @@ describe('safeExec — shell injection safety', () => {
 describe('safeExec — custom options', () => {
   it('accepts custom timeout via opts', () => {
     // A short timeout that still allows a fast command to succeed
-    const result = safeExec('echo', ['quick'], { timeout: 5000 });
+    const result = safeExec(nodePath, ['-e', 'console.log("quick")'], { timeout: 5000 });
     assert.equal(result, 'quick');
   });
 
   it('accepts cwd via opts', () => {
-    const result = safeExec('pwd', [], { cwd: '/tmp' });
+    const result = safeExec(
+      nodePath,
+      ['-e', 'process.stdout.write(process.cwd())'],
+      { cwd: '/tmp' },
+    );
     assert.equal(result, '/tmp');
   });
 
   it('returns fallback when command times out', () => {
-    const result = safeExec('sleep', ['10'], { timeout: 1, fallback: 'timed-out' });
+    const result = safeExec(
+      nodePath,
+      ['-e', 'setTimeout(() => {}, 10000)'],
+      { timeout: 1, fallback: 'timed-out' },
+    );
     assert.equal(result, 'timed-out');
   });
 });
