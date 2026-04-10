@@ -1,0 +1,143 @@
+/**
+ * Step: brief-gate (GH-215)
+ *
+ * Gates the `brief → spec` transition on unresolved cross-ticket or
+ * architectural open questions in `brief.md`. Mirrors the sibling step
+ * contract `(add, s, ctx) => void` from `./brief.js` and `./spec.js`, and
+ * reuses the pure parser/rewriter in `../lib/open-questions.js`.
+ *
+ * Decision matrix:
+ *   1. `WORK_BRIEF_ENABLED=0`                  → SKIP "Brief disabled"
+ *   2. `!s.hasBrief`                           → SKIP "No brief.md present"
+ *   3. `brief.md` unreadable (fail-open)       → SKIP "brief.md unreadable"
+ *   4. Parser returns zero blocking questions  → SKIP "All blocking questions resolved"
+ *   5. Otherwise                               → RUN with an AskUserQuestion
+ *                                                payload + `onResolve: 'rewrite brief.md'`
+ *
+ * The RUN payload instructs the orchestrator to invoke AskUserQuestion
+ * inline (hooks are non-interactive — the gate step is a planning-time
+ * declaration, not a runtime prompt). Once the orchestrator has collected
+ * answers, it calls the exported `applyBriefResolutions(briefPath, resolutions)`
+ * post-resolve handler, which delegates to `openQuestions.applyResolutions`
+ * and writes the result back to `brief.md`. Cancellations (undefined/empty
+ * resolutions) are no-ops so the next planner pass re-prompts.
+ */
+
+'use strict';
+
+const fs = require('fs');
+const openQuestions = require('../lib/open-questions');
+
+/**
+ * Build the `AskUserQuestion` payload for the RUN action. Kept local so the
+ * public surface of this module is just the step function and the
+ * post-resolve handler.
+ *
+ * @param {Array<{questionText: string, rationale: string, scope: string}>} blocking
+ * @returns {{questions: Array<object>}}
+ */
+function buildAskUserQuestionPayload(blocking) {
+  return {
+    questions: blocking.map((q) => ({
+      questionText: q.questionText,
+      scope: q.scope,
+      rationale: q.rationale,
+      // Orchestrator-facing hint: the answer must be persisted back into
+      // the brief.md block identified by `questionText`.
+      persistTo: 'brief.md',
+    })),
+  };
+}
+
+/**
+ * @param {Function} add
+ * @param {object} s
+ * @param {object} ctx
+ */
+function briefGateStep(add, s, ctx) {
+  const { STEPS, tasksDir, path } = ctx;
+  const briefEnabled = process.env.WORK_BRIEF_ENABLED !== '0';
+
+  if (!briefEnabled) {
+    add(STEPS.brief_gate, 'SKIP', null, 'Brief disabled (WORK_BRIEF_ENABLED=0)');
+    return;
+  }
+
+  if (!s || !s.hasBrief) {
+    add(STEPS.brief_gate, 'SKIP', null, 'No brief.md present');
+    return;
+  }
+
+  const briefPath = path.join(tasksDir, 'brief.md');
+  let markdown;
+  try {
+    markdown = fs.readFileSync(briefPath, 'utf8');
+  } catch (_e) {
+    // Fail-open: do not crash the planner on unreadable brief — upstream
+    // verify already covers missing/corrupt brief cases.
+    add(STEPS.brief_gate, 'SKIP', null, 'brief.md unreadable');
+    return;
+  }
+
+  const questions = openQuestions.parse(markdown);
+  const blocking = openQuestions.findBlocking(questions);
+
+  if (blocking.length === 0) {
+    add(STEPS.brief_gate, 'SKIP', null, 'All blocking questions resolved');
+    return;
+  }
+
+  add(
+    STEPS.brief_gate,
+    'RUN',
+    'AskUserQuestion',
+    `Resolve ${blocking.length} unresolved cross-ticket/architectural question(s)`,
+    {
+      askUserQuestionPayload: buildAskUserQuestionPayload(blocking),
+      onResolve: 'rewrite brief.md',
+    }
+  );
+}
+
+/**
+ * Post-resolve handler — invoked by the orchestrator after AskUserQuestion
+ * returns. Rewrites `brief.md` in place with the user-supplied resolutions,
+ * delegating all parsing/idempotency/injection-escape invariants to
+ * `openQuestions.applyResolutions`.
+ *
+ * Cancellation path: if the caller passes `undefined`, `null`, or an empty
+ * map/object, the handler is a no-op — brief.md is unchanged and the next
+ * planner pass will re-prompt for the same questions.
+ *
+ * @param {string} briefPath
+ * @param {Map<string,string>|Record<string,string>|null|undefined} resolutions
+ * @returns {boolean} true if brief.md was rewritten, false if skipped.
+ */
+function applyBriefResolutions(briefPath, resolutions) {
+  if (resolutions === undefined || resolutions === null) return false;
+  if (resolutions instanceof Map && resolutions.size === 0) return false;
+  if (
+    !(resolutions instanceof Map) &&
+    typeof resolutions === 'object' &&
+    Object.keys(resolutions).length === 0
+  ) {
+    return false;
+  }
+
+  let markdown;
+  try {
+    markdown = fs.readFileSync(briefPath, 'utf8');
+  } catch (_e) {
+    return false;
+  }
+
+  const rewritten = openQuestions.applyResolutions(markdown, resolutions);
+  if (rewritten === markdown) return false;
+
+  fs.writeFileSync(briefPath, rewritten, 'utf8');
+  return true;
+}
+
+module.exports = briefGateStep;
+module.exports.briefGateStep = briefGateStep;
+module.exports.applyBriefResolutions = applyBriefResolutions;
