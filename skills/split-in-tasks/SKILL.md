@@ -280,7 +280,7 @@ _TDD Protocol: Every non-exempt implementation task follows RED -> GREEN -> REFA
 ### Format rules
 
 - Top-level tasks are numbered sequentially: Task 1, Task 2, ...
-- Subtasks use dot notation: 1.1, 1.2, 2.1, ... Each subtask nests its own TDD cycle as sub-items: N.1.1 **RED:**, N.1.2 **GREEN:**, N.1.3 **REFACTOR:**
+- Subtasks use dot notation: N.1, N.2, ... Each subtask nests its own TDD cycle as sub-items: N.1.1 **RED:**, N.1.2 **GREEN:**, N.1.3 **REFACTOR:**
 - Every TDD sub-item has a `Test:` line (acceptance criterion). Each subtask ends with a `_Requirements:_` line with context annotations (e.g., `_Requirements: R1 (validation logic), R3 (error handling)_`)
 - Each deliverable must correspond to a concrete artifact: a file, function/class, API endpoint, CLI command, infrastructure resource, or configuration entry. Do not list abstract outcomes like "improved performance" as deliverables.
 - Dependencies reference task numbers, not subtask numbers
