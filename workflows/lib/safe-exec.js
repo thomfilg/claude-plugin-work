@@ -18,14 +18,19 @@ const { execFileSync } = require('node:child_process');
  * @returns {string} trimmed stdout on success, or `opts.fallback` on error
  */
 function safeExec(command, args = [], opts = {}) {
-  const { fallback = '', ...execOpts } = opts;
+  // Strip fallback and shell/stdio from caller opts to prevent dangerous overrides:
+  //   - shell: would enable shell interpolation (injection risk)
+  //   - stdio: would allow leaking stdout/stderr to parent
+  //   - fallback: not a valid execFileSync option
+  const { fallback = '', shell: _shell, stdio: _stdio, ...execOpts } = opts;
 
   const finalOpts = {
     encoding: 'utf-8',
     timeout: 15000,
     ...execOpts,
-    // stdio is enforced last so callers cannot override it and leak stdout/stderr
-    // to the parent process (e.g. by passing { stdio: 'inherit' } or 'pipe' strings).
+    // Enforced after spread — callers cannot override. Shell invocation
+    // is impossible because execFileSync does not spawn a shell.
+    shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
   };
 

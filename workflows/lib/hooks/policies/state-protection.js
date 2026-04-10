@@ -16,10 +16,6 @@ const { basenameProtector, createFileProtector } = require('../../protect-state-
 const { createArtifactProtector } = require('../../protect-artifact-files');
 const { isExemptScriptInvocation } = require('./agent-authorization');
 
-// Re-export createArtifactProtector so state-protection owns the unified
-// view of "protected workflow files" (state + artifact) for the enforcer.
-module.exports.createArtifactProtector = createArtifactProtector;
-
 /**
  * Build a map of protected basename -> the transition hint string for its owning workflow.
  * Used to render targeted error messages when a write to a state file is blocked.
@@ -100,8 +96,11 @@ function createFollowUpStateProtector(opts) {
   });
 }
 
+// Re-export createArtifactProtector so state-protection owns the unified
+// view of "protected workflow files" (state + artifact) for the enforcer.
 module.exports = {
   buildBasenameToHintMap,
   createStateFileProtector,
   createFollowUpStateProtector,
+  createArtifactProtector,
 };
