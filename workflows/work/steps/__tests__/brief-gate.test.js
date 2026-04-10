@@ -225,5 +225,62 @@ describe('brief-gate step', () => {
       const after = fs.readFileSync(briefPath, 'utf8');
       assert.equal(after, before, 'brief.md must be byte-identical on empty map');
     });
+
+    it('returns false without touching brief.md for non-object resolutions (number/string/boolean)', () => {
+      const dir = makeTmpTasksDir(BRIEF_ONE_BLOCKING_ARCH);
+      createdDirs.push(dir);
+      const briefPath = path.join(dir, 'brief.md');
+      const before = fs.readFileSync(briefPath, 'utf8');
+
+      // Monkey-patch fs.readFileSync to detect if brief-gate reads the file
+      // while handling a stray non-object. A type guard at the top of
+      // applyBriefResolutions must bail out BEFORE any I/O.
+      const originalReadFileSync = fs.readFileSync;
+      let readCallsForBrief = 0;
+      fs.readFileSync = function patchedReadFileSync(p, ...rest) {
+        if (typeof p === 'string' && p === briefPath) {
+          readCallsForBrief += 1;
+        }
+        return originalReadFileSync.call(fs, p, ...rest);
+      };
+
+      try {
+        // number
+        assert.equal(
+          applyBriefResolutions(briefPath, 42),
+          false,
+          'number resolutions must return false'
+        );
+        // string
+        assert.equal(
+          applyBriefResolutions(briefPath, 'not a map'),
+          false,
+          'string resolutions must return false'
+        );
+        // boolean
+        assert.equal(
+          applyBriefResolutions(briefPath, true),
+          false,
+          'boolean resolutions must return false'
+        );
+        // symbol (another non-object primitive)
+        assert.equal(
+          applyBriefResolutions(briefPath, Symbol('x')),
+          false,
+          'symbol resolutions must return false'
+        );
+
+        assert.equal(
+          readCallsForBrief,
+          0,
+          'brief.md must not be read when resolutions is a non-object primitive'
+        );
+      } finally {
+        fs.readFileSync = originalReadFileSync;
+      }
+
+      const after = originalReadFileSync.call(fs, briefPath, 'utf8');
+      assert.equal(after, before, 'brief.md must be byte-identical after non-object inputs');
+    });
   });
 });

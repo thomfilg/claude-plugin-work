@@ -115,6 +115,11 @@ function briefGateStep(add, s, ctx) {
  */
 function applyBriefResolutions(briefPath, resolutions) {
   if (resolutions === undefined || resolutions === null) return false;
+  // Defensive type guard: reject stray primitives (number, string, boolean,
+  // symbol, bigint) before doing any I/O. Only Map or plain-object payloads
+  // can carry resolution data; anything else is a caller bug and must be a
+  // silent no-op — the next planner pass will re-prompt.
+  if (typeof resolutions !== 'object') return false;
   if (resolutions instanceof Map && resolutions.size === 0) return false;
   if (
     !(resolutions instanceof Map) &&
