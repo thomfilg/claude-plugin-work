@@ -139,7 +139,13 @@ function applyBriefResolutions(briefPath, resolutions) {
   const rewritten = openQuestions.applyResolutions(markdown, resolutions);
   if (rewritten === markdown) return false;
 
-  fs.writeFileSync(briefPath, rewritten, 'utf8');
+  try {
+    fs.writeFileSync(briefPath, rewritten, 'utf8');
+  } catch (_e) {
+    // Fail-closed: mirror the read-failure contract so EACCES/ENOSPC/etc
+    // never propagate as an uncaught exception to the orchestrator.
+    return false;
+  }
   return true;
 }
 

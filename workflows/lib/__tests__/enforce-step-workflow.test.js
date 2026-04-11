@@ -3588,6 +3588,31 @@ describe('enforce-step-workflow', () => {
       );
     });
 
+    it('blocks brief_gate -> spec when brief has unresolved cross-ticket question', async () => {
+      // Scenario 2 (cross-ticket counterpart): the gate must also block on
+      // scope: cross-ticket unresolved questions. This locks in that BOTH
+      // blocking scopes (architectural + cross-ticket) are handled at the
+      // integration level, not just architectural.
+      writeWorkState(makeStepStatus('brief_gate', WORK_STEPS));
+      writeBrief(buildBrief({ scope: 'cross-ticket', resolved: false }));
+
+      const { code, stderr } = await runHook({
+        tool_name: 'Bash',
+        tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} spec` },
+      });
+      assert.equal(
+        code,
+        2,
+        'Should block brief_gate -> spec when cross-ticket question is unresolved'
+      );
+      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED marker');
+      assert.match(
+        stderr,
+        /brief[_-]gate|open questions|unresolved/i,
+        `stderr should mention brief_gate / open questions / unresolved. stderr: ${stderr}`
+      );
+    });
+
     it('allows brief_gate -> spec when architectural question is resolved', async () => {
       // Scenario 4 (first half): architectural question with resolved: true
       // and a Resolution: subfield must pass cleanly.

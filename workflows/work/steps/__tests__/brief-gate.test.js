@@ -226,6 +226,44 @@ describe('brief-gate step', () => {
       assert.equal(after, before, 'brief.md must be byte-identical on empty map');
     });
 
+    it('returns false when fs.writeFileSync throws (EACCES/ENOSPC/etc)', () => {
+      // The read path already returns false on failure (fail-closed). The
+      // write path must mirror that no-throw contract: an EACCES/ENOSPC
+      // during writeFileSync must not propagate as an uncaught exception to
+      // the orchestrator — applyBriefResolutions must simply return false.
+      const dir = makeTmpTasksDir(BRIEF_ONE_BLOCKING_ARCH);
+      createdDirs.push(dir);
+      const briefPath = path.join(dir, 'brief.md');
+      const before = fs.readFileSync(briefPath, 'utf8');
+
+      const originalWriteFileSync = fs.writeFileSync;
+      fs.writeFileSync = function patchedWriteFileSync(p, ...rest) {
+        if (typeof p === 'string' && p === briefPath) {
+          const err = new Error('EACCES: permission denied');
+          err.code = 'EACCES';
+          throw err;
+        }
+        return originalWriteFileSync.call(fs, p, ...rest);
+      };
+
+      try {
+        const resolutions = new Map([
+          [
+            'Which queue backend should we adopt for cross-service jobs?',
+            'Use SQS for all cross-service jobs.',
+          ],
+        ]);
+        const result = applyBriefResolutions(briefPath, resolutions);
+        assert.equal(result, false, 'applyBriefResolutions must return false on write failure');
+      } finally {
+        fs.writeFileSync = originalWriteFileSync;
+      }
+
+      // brief.md must be byte-equal — no partial write, no crash.
+      const after = fs.readFileSync(briefPath, 'utf8');
+      assert.equal(after, before, 'brief.md must remain byte-identical after write failure');
+    });
+
     it('returns false without touching brief.md for non-object resolutions (number/string/boolean)', () => {
       const dir = makeTmpTasksDir(BRIEF_ONE_BLOCKING_ARCH);
       createdDirs.push(dir);
