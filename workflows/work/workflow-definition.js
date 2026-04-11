@@ -119,6 +119,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
     softSteps: new Set([
       STEPS.ticket, // optional/metadata step
       STEPS.ready,
+      STEPS.task_review, // GH-211: advisory per-task review gate (soft — does not block)
       STEPS.reports, // operational steps -- no code changes to enforce
       STEPS.complete, // GH-106: terminal step -- all gates already passed at ci/check/reports
     ]),
@@ -290,6 +291,23 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
             }
 
             return false;
+          } catch {
+            return false;
+          }
+        },
+      },
+      {
+        // GH-211: Per-task review gate. Soft check — advisory, not blocking.
+        // Verified iff at least one review artifact (task-review-tests.md or
+        // task-review-code.md) exists in the ticket's tasks dir.
+        step: STEPS.task_review,
+        verify: (ticketId) => {
+          try {
+            const dir = path.join(TASKS_BASE, safeTicketPath(ticketId));
+            return (
+              fs.existsSync(path.join(dir, 'task-review-tests.md')) ||
+              fs.existsSync(path.join(dir, 'task-review-code.md'))
+            );
           } catch {
             return false;
           }
