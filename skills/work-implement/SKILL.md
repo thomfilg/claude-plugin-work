@@ -169,7 +169,7 @@ node ${CLAUDE_PLUGIN_ROOT}/workflows/work-implement/tdd-phase-state.js transitio
 - no dead code
 - naming consistent
 
-_Why this split?_ Reviews run as a different agent against a committed artifact, which keeps the TDD state machine simple (exactly 3 phases: RED/GREEN/REFACTOR) and ensures reviewers never see half-refactored work. See `workflows/work/steps/task-review.js` (GH-211) for the post-commit review gate.
+_Why this split?_ Reviews run as a different agent against a committed artifact, which keeps the core workflow aligned to the three-phase TDD loop (RED/GREEN/REFACTOR) and ensures reviewers never see half-refactored work. See `workflows/work/steps/task-review.js` (GH-211) for the post-commit review gate.
 
 **Important:**
 - Evidence is recorded by the SCRIPT, not by agents — the script runs `git diff` and test commands itself

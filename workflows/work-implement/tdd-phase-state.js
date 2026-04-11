@@ -12,8 +12,9 @@
  *   REFACTOR and is NOT invoked by this CLI. The post-commit review gate
  *   lives in workflows/work/steps/task-review.js (GH-211) and runs after
  *   the commit step, against the committed diff. Keeping reviews out of
- *   the TDD phase state machine preserves a clean 3-phase invariant
- *   (RED / GREEN / REFACTOR) and ensures reviewers never see
+ *   the TDD phase state machine means the normal TDD loop preserves the
+ *   clean RED / GREEN / REFACTOR flow, while exception handling remains
+ *   an out-of-band state, and ensures reviewers never see
  *   half-refactored work.
  *
  * Usage:
