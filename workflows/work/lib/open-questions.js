@@ -453,6 +453,7 @@ function applyResolutions(markdown, resolutions) {
     // If the block had no `resolved:` subfield at all (the parser defaults
     // to resolved: false), we must insert one so re-parsing yields
     // `resolved: true`. Use the same indentation as sibling subfields.
+    let insertionPoint = q.endLine + 1;
     if (!resolvedLineFlipped) {
       const blockLines = lines.slice(q.startLine, q.endLine + 1);
       let indent = '  ';
@@ -460,15 +461,17 @@ function applyResolutions(markdown, resolutions) {
         const m = bl.match(/^(\s{2,})-\s+/);
         if (m) { indent = m[1]; break; }
       }
-      lines.splice(q.endLine + 1, 0, `${indent}- \`resolved: true\``);
+      lines.splice(insertionPoint, 0, `${indent}- \`resolved: true\``);
+      insertionPoint++; // Resolution line goes AFTER resolved: true
     }
 
     // Append a `- **Resolution:** ...` line right after the block's last
-    // content line. We splice rather than concatenate so interior blocks
-    // don't disturb downstream content.
+    // content line (or after the newly-inserted resolved: true line).
+    // We splice rather than concatenate so interior blocks don't disturb
+    // downstream content.
     const blockLines = lines.slice(q.startLine, q.endLine + 1);
     const resolutionLine = buildResolutionLine(blockLines, escaped);
-    lines.splice(q.endLine + 1, 0, resolutionLine); // append after resolved:true insertion (if any)
+    lines.splice(insertionPoint, 0, resolutionLine);
   }
 
   return lines.join('\n');

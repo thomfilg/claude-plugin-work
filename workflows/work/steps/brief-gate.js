@@ -77,7 +77,10 @@ function briefGateStep(add, s, ctx) {
     // returns false on read errors (fail-closed), so emitting SKIP here
     // would create a confusing mismatch ("gate skipped" yet transition
     // blocked). RUN with a helpful message signals the issue clearly.
-    add(STEPS.brief_gate, 'RUN', null, 'brief.md unreadable — regenerate brief before proceeding');
+    add(STEPS.brief_gate, 'RUN', '/brief', 'brief.md unreadable — regenerate brief before proceeding', {
+      agentType: 'skill',
+      agentPrompt: '/brief',
+    });
     return; // fail-closed: verify() also returns false on read errors — aligned
   }
 
@@ -95,6 +98,8 @@ function briefGateStep(add, s, ctx) {
     'AskUserQuestion',
     `Resolve ${blocking.length} unresolved cross-ticket/architectural question(s)`,
     {
+      agentType: 'general-purpose',
+      agentPrompt: `Use AskUserQuestion to resolve ${blocking.length} unresolved open question(s) in brief.md, then call applyBriefResolutions() to persist the answers.`,
       askUserQuestionPayload: buildAskUserQuestionPayload(blocking),
       onResolve: 'rewrite brief.md',
     }

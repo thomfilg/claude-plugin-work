@@ -170,6 +170,10 @@ describe('brief-gate step', () => {
       'payload must carry questions[] or a question field'
     );
     assert.equal(entry.onResolve, 'rewrite brief.md');
+    assert.equal(entry.agentType, 'general-purpose', 'AskUserQuestion RUN must specify agentType');
+    assert.equal(typeof entry.agentPrompt, 'string', 'AskUserQuestion RUN must carry agentPrompt string');
+    assert.match(entry.agentPrompt, /AskUserQuestion/, 'agentPrompt must mention AskUserQuestion');
+    assert.match(entry.agentPrompt, /applyBriefResolutions/, 'agentPrompt must mention applyBriefResolutions');
   });
 
   it('emits RUN (not SKIP) when brief.md is unreadable so planner shows gate needs attention', () => {
@@ -181,6 +185,9 @@ describe('brief-gate step', () => {
     assert.equal(entries.length, 1);
     assert.equal(entries[0].action, 'RUN', 'unreadable brief must emit RUN, not SKIP');
     assert.match(entries[0].reason, /unreadable|regenerate/i);
+    assert.equal(entries[0].command, '/brief', 'unreadable RUN must carry /brief command');
+    assert.equal(entries[0].agentType, 'skill', 'unreadable RUN must specify agentType: skill');
+    assert.equal(entries[0].agentPrompt, '/brief', 'unreadable RUN must specify agentPrompt: /brief');
   });
 
   describe('applyBriefResolutions (post-resolve handler)', () => {

@@ -543,6 +543,18 @@ describe('open-questions: applyResolutions', () => {
       'Resolved by inserting the subfield.',
       'resolution text must be set'
     );
+
+    // GH-215: Verify raw line ordering — `resolved: true` must appear
+    // BEFORE the `**Resolution:**` line, not after it.
+    const lines = result.split('\n');
+    const resolvedIdx = lines.findIndex((l) => l.includes('`resolved: true`'));
+    const resolutionIdx = lines.findIndex((l) => l.includes('**Resolution:**'));
+    assert.ok(resolvedIdx !== -1, 'resolved: true line must exist');
+    assert.ok(resolutionIdx !== -1, 'Resolution line must exist');
+    assert.ok(
+      resolvedIdx < resolutionIdx,
+      `resolved: true (line ${resolvedIdx}) must come before **Resolution:** (line ${resolutionIdx})`
+    );
   });
 
   it('is a no-op when the answer is pure whitespace that collapses to empty', () => {
