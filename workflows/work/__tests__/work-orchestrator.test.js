@@ -1613,3 +1613,190 @@ describe('parseTicketInput', () => {
     assert.deepStrictEqual(result, { ticketBase: 123, suffix: null });
   });
 });
+
+// ─── GH-211: Integration tests for task_review in plan generation ───────────
+
+describe('GH-211: task_review in plan generation', () => {
+  const TEST_TICKET = 'TEST-211';
+  // Isolated temp environment to avoid GitHub provider mangling ticket IDs.
+  // When TICKET_PROVIDER is github (as in this repo), TEST-211 becomes #TEST-211,
+  // so we force a clean provider context via fake HOME + empty TICKET_PROVIDER.
+  const TEMP_BASE = path.join(os.tmpdir(), 'work-orch-gh211-' + process.pid);
+  const TEMP_HOME = path.join(TEMP_BASE, 'home');
+  const TEMP_WB = path.join(TEMP_BASE, 'worktrees');
+  const TEMP_TASKS = path.join(TEMP_WB, 'tasks');
+
+  /** Env overrides that isolate the subprocess from the real provider config. */
+  function isolatedEnv(extra = {}) {
+    return {
+      env: {
+        TICKET_PROVIDER: '',
+        HOME: TEMP_HOME,
+        USERPROFILE: TEMP_HOME,
+        WORKTREES_BASE: TEMP_WB,
+        TASKS_BASE: TEMP_TASKS,
+        JIRA_PROJECT_KEY: '',
+        JIRA_BASE_URL: '',
+        TICKET_PROJECT_KEY: '',
+        LINEAR_TEAM_ID: '',
+        ...extra,
+      },
+      cwd: TEMP_HOME,
+    };
+  }
+
+  /**
+   * Helper: write a tasks.md with the given number of tasks.
+   */
+  function writeTasksMd(tasksBase, ticket, taskCount) {
+    const dir = path.join(tasksBase, ticket);
+    fs.mkdirSync(dir, { recursive: true });
+    let content = '# Task Plan\n\n';
+    for (let i = 1; i <= taskCount; i++) {
+      content += `## Task ${i}\n`;
+      content += `— Task ${i} title\n\n`;
+      content += `### Type\nimplementation\n\n`;
+      content += `### Deliverables\n- ${i}.1 Deliverable\n\n`;
+    }
+    fs.writeFileSync(path.join(dir, 'tasks.md'), content);
+  }
+
+  /**
+   * Helper: write a .work-state.json with tasksMeta for multi-task plans.
+   * @param {object} opts - { currentTaskIndex, fixRounds, totalTasks }
+   */
+  function writeWorkStateWithTasks(tasksBase, ticket, opts = {}) {
+    const dir = path.join(tasksBase, ticket);
+    fs.mkdirSync(dir, { recursive: true });
+    const totalTasks = opts.totalTasks || 3;
+    const currentTaskIndex = opts.currentTaskIndex ?? 0;
+    const tasks = [];
+    for (let i = 0; i < totalTasks; i++) {
+      const task = { id: `task_${i + 1}`, status: i < currentTaskIndex ? 'completed' : 'pending' };
+      if (i === currentTaskIndex && opts.fixRounds != null) {
+        task.taskReviewFixRounds = opts.fixRounds;
+      }
+      tasks.push(task);
+    }
+
+    const stepStatus = {};
+    const allSteps = [
+      'ticket', 'bootstrap', 'brief', 'brief_gate', 'spec', 'tasks',
+      'implement', 'commit', 'task_review', 'check', 'pr', 'ready',
+      'follow_up', 'ci', 'cleanup', 'reports', 'complete',
+    ];
+    for (const step of allSteps) {
+      stepStatus[step] = 'pending';
+    }
+
+    const state = {
+      ticketId: ticket,
+      description: '',
+      currentStep: 1,
+      status: 'in_progress',
+      stepStatus,
+      checkProgress: {},
+      errors: [],
+      tasksMeta: {
+        totalTasks,
+        currentTaskIndex,
+        tasks,
+      },
+      startTime: new Date().toISOString(),
+      lastUpdate: new Date().toISOString(),
+    };
+    fs.writeFileSync(path.join(dir, '.work-state.json'), JSON.stringify(state, null, 2));
+  }
+
+  after(() => {
+    try {
+      fs.rmSync(TEMP_BASE, { recursive: true, force: true });
+    } catch {}
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(path.join(TEMP_TASKS, TEST_TICKET), { recursive: true, force: true });
+    } catch {}
+  });
+
+  // 9.1: Multi-task plan includes task_review RUN entry after commit (for non-final tasks)
+  it('multi-task plan includes task_review RUN entry after commit', async () => {
+    fs.mkdirSync(TEMP_HOME, { recursive: true });
+    writeTasksMd(TEMP_TASKS, TEST_TICKET, 3);
+    writeWorkStateWithTasks(TEMP_TASKS, TEST_TICKET, { totalTasks: 3, currentTaskIndex: 0 });
+    writeTddException(TEMP_TASKS, TEST_TICKET);
+
+    const { result, code } = await runOrchestrator([TEST_TICKET], isolatedEnv());
+    assert.equal(code, 0);
+
+    const stepNames = result.plan.map((s) => s.step);
+    assert.ok(stepNames.includes('task_review'), 'plan must include task_review step');
+
+    const taskReviewEntry = result.plan.find((s) => s.step === 'task_review');
+    assert.equal(taskReviewEntry.action, 'RUN', 'task_review must be RUN for non-final task in multi-task plan');
+
+    // task_review should come after commit in pipeline order
+    const commitIdx = stepNames.indexOf('commit');
+    const taskReviewIdx = stepNames.indexOf('task_review');
+    assert.ok(taskReviewIdx > commitIdx, 'task_review must come after commit in plan');
+  });
+
+  // 9.1: Single-task plan skips task_review (final task -- /check handles review)
+  it('single-task plan skips task_review', async () => {
+    fs.mkdirSync(TEMP_HOME, { recursive: true });
+    writeTasksMd(TEMP_TASKS, TEST_TICKET, 1);
+    writeWorkStateWithTasks(TEMP_TASKS, TEST_TICKET, { totalTasks: 1, currentTaskIndex: 0 });
+    writeTddException(TEMP_TASKS, TEST_TICKET);
+
+    const { result, code } = await runOrchestrator([TEST_TICKET], isolatedEnv());
+    assert.equal(code, 0);
+
+    const taskReviewEntry = result.plan.find((s) => s.step === 'task_review');
+    assert.ok(taskReviewEntry, 'plan must include task_review step even when skipped');
+    assert.equal(taskReviewEntry.action, 'SKIP', 'task_review must be SKIP for single-task (final task)');
+  });
+
+  // 9.1: TASK_REVIEW_ENABLED=0 skips task_review
+  it('TASK_REVIEW_ENABLED=0 skips task_review', async () => {
+    fs.mkdirSync(TEMP_HOME, { recursive: true });
+    writeTasksMd(TEMP_TASKS, TEST_TICKET, 3);
+    writeWorkStateWithTasks(TEMP_TASKS, TEST_TICKET, { totalTasks: 3, currentTaskIndex: 0 });
+    writeTddException(TEMP_TASKS, TEST_TICKET);
+
+    const { result, code } = await runOrchestrator([TEST_TICKET], isolatedEnv({ TASK_REVIEW_ENABLED: '0' }));
+    assert.equal(code, 0);
+
+    const taskReviewEntry = result.plan.find((s) => s.step === 'task_review');
+    assert.ok(taskReviewEntry, 'plan must include task_review step entry');
+    assert.equal(taskReviewEntry.action, 'SKIP', 'task_review must be SKIP when TASK_REVIEW_ENABLED=0');
+    assert.ok(
+      taskReviewEntry.reason.includes('disabled') || taskReviewEntry.reason.includes('TASK_REVIEW_ENABLED'),
+      'reason should mention disabled/env flag'
+    );
+  });
+
+  // 9.2: Fix-round escalation -- after max fix rounds exhausted, plan shows escalation
+  it('fix-round exhaustion triggers escalation (not another implement loop)', async () => {
+    fs.mkdirSync(TEMP_HOME, { recursive: true });
+    writeTasksMd(TEMP_TASKS, TEST_TICKET, 3);
+    writeWorkStateWithTasks(TEMP_TASKS, TEST_TICKET, {
+      totalTasks: 3,
+      currentTaskIndex: 0,
+      fixRounds: 2, // default max is 2, so >= max triggers escalation
+    });
+    writeTddException(TEMP_TASKS, TEST_TICKET);
+
+    const { result, code } = await runOrchestrator([TEST_TICKET], isolatedEnv({ TASK_REVIEW_MAX_FIXES: '2' }));
+    assert.equal(code, 0);
+
+    const taskReviewEntry = result.plan.find((s) => s.step === 'task_review');
+    assert.ok(taskReviewEntry, 'plan must include task_review step entry');
+    assert.equal(taskReviewEntry.action, 'RUN', 'escalation entry should be RUN');
+    assert.ok(
+      taskReviewEntry.reason.includes('exhausted') || taskReviewEntry.reason.includes('escalat'),
+      'reason should mention exhaustion or escalation'
+    );
+    assert.equal(taskReviewEntry.command, 'AskUserQuestion', 'escalation should use AskUserQuestion command');
+  });
+});
