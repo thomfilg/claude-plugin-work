@@ -1,0 +1,87 @@
+/**
+ * Step: task-review (GH-211)
+ *
+ * Per-task review gate that blocks the check step until an intermediate
+ * task's code has been reviewed. Runs between `commit` and `check` in the
+ * pipeline and uses task metadata set by the upstream `implement` step
+ * (via `ctx._taskData`, `ctx._currentTaskIdx`).
+ *
+ * Decision matrix:
+ *   1. `TASK_REVIEW_ENABLED=0`               -> SKIP "Task review disabled"
+ *   2. No tasks (no taskData or no tasksMeta) -> SKIP "No tasks"
+ *   3. Final task (current == last)           -> SKIP "Final task -- /check handles review"
+ *   4. Fix rounds exhausted (>= max)          -> RUN  AskUserQuestion escalation
+ *   5. Intermediate task needing review       -> RUN  parallel /tests-review + /code-review
+ */
+
+'use strict';
+
+/**
+ * @param {Function} add
+ * @param {object} s
+ * @param {object} ctx
+ */
+function taskReviewStep(add, s, ctx) {
+  const { STEPS } = ctx;
+
+  // Decision 1: disabled via env
+  if (process.env.TASK_REVIEW_ENABLED === '0') {
+    add(STEPS.task_review, 'SKIP', null, 'Task review disabled (TASK_REVIEW_ENABLED=0)');
+    return;
+  }
+
+  // Gather task metadata from implement step and state
+  const taskData = ctx._taskData;
+  const tasksMeta = s?.workState?.tasksMeta;
+
+  // Decision 2: no tasks
+  if (!s?.hasTasks || !taskData || !tasksMeta) {
+    add(STEPS.task_review, 'SKIP', null, 'No tasks');
+    return;
+  }
+
+  const currentIdx = ctx._currentTaskIdx ?? 0;
+  const totalTasks = taskData.length;
+
+  // Decision 3: final task -- /check handles the full review
+  if (currentIdx >= totalTasks - 1) {
+    add(STEPS.task_review, 'SKIP', null, 'Final task -- /check handles review');
+    return;
+  }
+
+  // Read fix-round state from tasksMeta
+  const currentTaskMeta = tasksMeta.tasks?.[currentIdx];
+  const fixRounds = currentTaskMeta?.taskReviewFixRounds || 0;
+  const maxFixRounds = parseInt(process.env.TASK_REVIEW_MAX_FIXES, 10) || 2;
+
+  // Decision 4: fix rounds exhausted -- escalate to user
+  if (fixRounds >= maxFixRounds) {
+    add(
+      STEPS.task_review,
+      'RUN',
+      'AskUserQuestion',
+      `Task ${currentIdx + 1}/${totalTasks} fix rounds exhausted (${fixRounds}/${maxFixRounds}) -- escalating to user`,
+      {
+        agentType: 'general-purpose',
+        agentPrompt: `Task ${currentIdx + 1} has exhausted ${fixRounds}/${maxFixRounds} fix rounds. Use AskUserQuestion to ask the user whether to continue fixing, skip the review, or abort.`,
+      }
+    );
+    return;
+  }
+
+  // Decision 5: intermediate task -- run parallel tests-review + code-review
+  const currentTask = taskData[currentIdx];
+  add(
+    STEPS.task_review,
+    'RUN',
+    '/task-review',
+    `Task ${currentIdx + 1}/${totalTasks}: review "${currentTask?.title || 'unknown'}" before advancing`,
+    {
+      agentType: 'parallel',
+      agentPrompt: `Run /tests-review and /code-review in parallel for task ${currentIdx + 1}/${totalTasks} ("${currentTask?.title || 'unknown'}"). Aggregate results and fail the gate if either review fails.`,
+    }
+  );
+}
+
+module.exports = taskReviewStep;
+module.exports.taskReviewStep = taskReviewStep;
