@@ -18,8 +18,6 @@
 
 const path = require('path');
 const { appendAction } = require(path.join(__dirname, '..', 'work-actions'));
-const { computeTaskDiff } = require('../task-review-gate');
-
 /**
  * @param {Function} add
  * @param {object} s
@@ -56,7 +54,8 @@ module.exports = function taskReviewStep(add, s, ctx) {
   // Read fix-round state from tasksMeta
   const currentTaskMeta = tasksMeta.tasks?.[currentIdx];
   const fixRounds = currentTaskMeta?.taskReviewFixRounds || 0;
-  const maxFixRounds = parseInt(process.env.TASK_REVIEW_MAX_FIXES, 10) || 2;
+  const parsed = parseInt(process.env.TASK_REVIEW_MAX_FIXES, 10);
+  const maxFixRounds = Number.isFinite(parsed) && parsed >= 0 ? parsed : 2;
 
   // Decision 4: fix rounds exhausted -- escalate to user
   if (fixRounds >= maxFixRounds) {
@@ -82,7 +81,7 @@ module.exports = function taskReviewStep(add, s, ctx) {
   add(
     STEPS.task_review,
     'RUN',
-    '/task-review',
+    'Skill(tests-review) + Skill(code-review)',
     `Task ${currentIdx + 1}/${totalTasks}: review "${currentTask?.title || 'unknown'}" before advancing`,
     {
       agentType: 'parallel',

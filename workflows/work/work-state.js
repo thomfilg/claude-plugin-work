@@ -639,7 +639,8 @@ function getTaskReviewFixRounds(ticketId) {
   if (idx >= meta.tasks.length) return { error: 'All tasks completed, no current task' };
 
   const fixRounds = meta.tasks[idx].taskReviewFixRounds || 0;
-  const maxFixRounds = parseInt(process.env.TASK_REVIEW_MAX_FIXES, 10) || 2;
+  const parsed = parseInt(process.env.TASK_REVIEW_MAX_FIXES, 10);
+  const maxFixRounds = Number.isFinite(parsed) && parsed >= 0 ? parsed : 2;
 
   return {
     fixRounds,
