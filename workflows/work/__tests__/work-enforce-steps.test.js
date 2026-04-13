@@ -39,8 +39,10 @@ const ORIG_ENV = {
 process.env.TASKS_BASE = TEMP_TASKS_BASE;
 process.env.TICKET_PROJECT_KEY = TICKET_PROJECT_KEY;
 const CONFIG_PATH = '../../lib/config';
+// Intentional: config.js caches env at require-time, so the require MUST
+// follow the env mutations above.  Cleanup (env restore + cache bust) is in
+// the describe's after() hook below.
 const config = require(CONFIG_PATH);
-// Env/cache restoration happens in the describe's after() hook (see below).
 function runHook(toolInput, hookType = 'PostToolUse') {
   return new Promise((resolve, reject) => {
     const proc = spawn('node', [HOOK_PATH], {
