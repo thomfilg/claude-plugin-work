@@ -36,7 +36,8 @@ function getTasksDir(ticketId) {
 }
 
 function getWorktreeDir(ticketId) {
-  return config.worktreeDir(safeTicketId(ticketId)) || path.join(WORKTREES_BASE, `${config.REPO_NAME}-${safeTicketId(ticketId)}`);
+  const safe = safeTicketId(ticketId);
+  return config.worktreeDir(safe) || path.join(WORKTREES_BASE, `${config.REPO_NAME}-${safe}`);
 }
 
 function safeExec(cmd, options = {}) {
