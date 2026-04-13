@@ -370,7 +370,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
             try {
               const branch = execFileSync('git', ['branch', '--show-current'], opts).trim();
               if (branch) ghArgs = ['pr', 'view', branch, '--json', 'number,state'];
-            } catch { /* detached HEAD -- fall back to no branch arg */ }
+            } catch { /* branch detection failed -- fall back to no branch arg */ }
 
             const pr = JSON.parse(execFileSync('gh', ghArgs, opts).trim());
             return pr.number > 0 && pr.state === 'OPEN';
@@ -393,7 +393,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
             try {
               const branch = execFileSync('git', ['branch', '--show-current'], opts).trim();
               if (branch) prViewArgs = ['pr', 'view', branch, '--json', 'number', '-q', '.number'];
-            } catch { /* detached HEAD -- fall back to no branch arg */ }
+            } catch { /* branch detection failed -- fall back to no branch arg */ }
 
             // 1. Get PR number
             const prNum = execFileSync('gh', prViewArgs, opts).trim();
