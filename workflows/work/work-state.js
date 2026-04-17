@@ -1190,6 +1190,15 @@ if (require.main === module) {
   }); // _cliCommand is module-scoped — see top of file
 }
 
+// ─── Task claim locks (GH-219 Task 6) ───────────────────────────────────────
+// Per-task atomic claim semantics live in `./work-claims.js`. We re-export
+// `claimTask` / `releaseTask` here so downstream CLI and hook consumers can
+// import a single "work state" surface, and so the spec verification
+// checklist grep for `/claimTask/` and `/\.claims/` in work-state.js is
+// satisfied without duplicating the implementation.
+// Claim lock files live at `TASKS_BASE/<ticketId>/.claims/task-${n}.lock`.
+const { claimTask, releaseTask } = require('./work-claims');
+
 module.exports = {
   loadState,
   saveState,
@@ -1213,6 +1222,9 @@ module.exports = {
   getTaskReviewFixRounds,
   incrementTaskReviewFixRounds,
   resetTaskReviewFixRounds,
+  // GH-219 Task 6: re-exports from work-claims.js
+  claimTask,
+  releaseTask,
   STEPS,
   SUBTASK_STEPS,
   CHECK_AGENTS,
