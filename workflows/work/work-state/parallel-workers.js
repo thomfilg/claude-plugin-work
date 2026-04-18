@@ -52,7 +52,7 @@ try {
 // When loaded as a submodule of work-state.js, config is guaranteed to exist
 // (work-state.js exits on !config). Guard defensively for direct-require
 // in test harnesses that set up TASKS_BASE via env before requiring.
-const TASKS_BASE = config ? config.TASKS_BASE : null;
+const TASKS_BASE = config ? config.TASKS_BASE : null; // guarded by requireTasksBase() below
 const safeId = config ? config.safeTicketId : null;
 
 /**
