@@ -153,8 +153,8 @@ function sanitizeTicketId(ticketId) {
       }
       return config.safeTicketId(ticketId);
     }
-  } catch {
-    /* config unavailable — return raw */
+  } catch (err) {
+    if (!err || err.code !== 'MODULE_NOT_FOUND') throw err;
   }
   return ticketId;
 }
@@ -173,8 +173,8 @@ function resolveTasksBase() {
   try {
     const config = require('./config');
     if (config && config.TASKS_BASE) return path.resolve(config.TASKS_BASE);
-  } catch {
-    /* config unavailable */
+  } catch (err) {
+    if (!err || err.code !== 'MODULE_NOT_FOUND') throw err;
   }
   throw new Error(
     'TASKS_BASE is not configured. Set TASKS_BASE (or WORKTREES_BASE in .envrc).'
@@ -206,7 +206,10 @@ function resolveTasksBaseOrNull() {
  * @throws {Error} if path escapes base
  */
 function assertPathContainment(resolvedPath, resolvedBase, label = 'path') {
-  if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
+  // Use path.sep-terminated prefix to prevent sibling attacks (/base vs /base-extra).
+  // Handle root directory edge case where base already ends with separator.
+  const prefix = resolvedBase.endsWith(path.sep) ? resolvedBase : resolvedBase + path.sep;
+  if (!resolvedPath.startsWith(prefix)) {
     throw new Error(`${label}: resolved path escapes base directory: ${resolvedPath}`);
   }
 }

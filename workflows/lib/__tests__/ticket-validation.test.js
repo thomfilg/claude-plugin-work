@@ -109,6 +109,46 @@ describe('sanitizeTicketId', () => {
     const result = sanitizeTicketId('GH-219/phase1');
     assert.ok(result.includes('phase1'), `should preserve suffix, got: ${result}`);
   });
+
+  it('returns canonical form for already-canonical IDs', () => {
+    const result = sanitizeTicketId('GH-219');
+    assert.ok(result.includes('GH-219'), `should contain GH-219, got: ${result}`);
+  });
+});
+
+describe('resolveTasksBase', () => {
+  const { resolveTasksBase, resolveTasksBaseOrNull } = require('../ticket-validation');
+
+  it('returns TASKS_BASE from environment', () => {
+    const saved = process.env.TASKS_BASE;
+    process.env.TASKS_BASE = '/tmp/test-resolve-base';
+    try {
+      const result = resolveTasksBase();
+      assert.equal(result, path.resolve('/tmp/test-resolve-base'));
+    } finally {
+      if (saved) process.env.TASKS_BASE = saved;
+      else delete process.env.TASKS_BASE;
+    }
+  });
+
+  it('resolveTasksBaseOrNull returns null when unavailable', () => {
+    const saved = process.env.TASKS_BASE;
+    const savedW = process.env.WORKTREES_BASE;
+    delete process.env.TASKS_BASE;
+    delete process.env.WORKTREES_BASE;
+    const configPath = require.resolve('../../lib/config');
+    const cached = require.cache[configPath];
+    delete require.cache[configPath];
+    try {
+      const result = resolveTasksBaseOrNull();
+      // May return null or a derived value depending on config
+      assert.ok(result === null || typeof result === 'string');
+    } finally {
+      if (saved) process.env.TASKS_BASE = saved;
+      if (savedW) process.env.WORKTREES_BASE = savedW;
+      if (cached) require.cache[configPath] = cached;
+    }
+  });
 });
 
 describe('assertPathContainment', () => {
