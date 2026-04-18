@@ -72,7 +72,7 @@ function resolveTasksBase() {
   return (
     process.env.TASKS_BASE ||
     (config && config.TASKS_BASE) ||
-    path.join(process.env.HOME, 'worktrees', 'tasks')
+    path.join(require('os').homedir(), 'worktrees', 'tasks')
   );
 }
 

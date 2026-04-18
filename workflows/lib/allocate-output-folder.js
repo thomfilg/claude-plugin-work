@@ -133,6 +133,12 @@ function allocateOutputFolder(ticketId, context = {}) {
   const tasksBase = resolveTasksBase();
   const safeId = sanitizeId(ticketId);
   const ticketRoot = path.join(tasksBase, safeId);
+  // Defense-in-depth: ensure ticket root stays under TASKS_BASE
+  const resolvedRoot = path.resolve(ticketRoot);
+  const resolvedBase = path.resolve(tasksBase);
+  if (resolvedRoot !== resolvedBase && !resolvedRoot.startsWith(resolvedBase + path.sep)) {
+    throw new Error(`allocateOutputFolder: resolved path escapes TASKS_BASE: ${ticketRoot}`);
+  }
 
   // ── In-flow task allocation ──────────────────────────────────────────────
   if (context.flow === 'in-flow') {
@@ -162,7 +168,11 @@ function allocateOutputFolder(ticketId, context = {}) {
           'Task 10 will wire the real .request-index.json counter.'
         );
       }
-      const seg = `${AI_REQUEST_PREFIX}${context.counters.aiRequestNext}`;
+      const n = context.counters.aiRequestNext;
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`Invalid aiRequestNext counter: expected positive integer, got ${JSON.stringify(n)}`);
+      }
+      const seg = `${AI_REQUEST_PREFIX}${n}`;
       return {
         kind: 'out-of-flow-ai',
         segment: seg,
@@ -178,7 +188,11 @@ function allocateOutputFolder(ticketId, context = {}) {
         'Task 10 will wire the real .request-index.json counter.'
       );
     }
-    const seg = `${USER_REQUEST_PREFIX}${context.counters.userRequestNext}`;
+    const n = context.counters.userRequestNext;
+    if (!Number.isInteger(n) || n < 1) {
+      throw new Error(`Invalid userRequestNext counter: expected positive integer, got ${JSON.stringify(n)}`);
+    }
+    const seg = `${USER_REQUEST_PREFIX}${n}`;
     return {
       kind: 'out-of-flow-user',
       segment: seg,

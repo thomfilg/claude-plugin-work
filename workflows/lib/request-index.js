@@ -79,7 +79,15 @@ function sanitizeId(ticketId) {
  * @returns {string}
  */
 function ticketDir(ticketId) {
-  return path.join(resolveTasksBase(), sanitizeId(ticketId));
+  const base = resolveTasksBase();
+  const dir = path.join(base, sanitizeId(ticketId));
+  // Defense-in-depth: ensure path stays under TASKS_BASE
+  const resolved = path.resolve(dir);
+  const resolvedBase = path.resolve(base);
+  if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + path.sep)) {
+    throw new Error(`ticketDir: resolved path escapes TASKS_BASE: ${dir}`);
+  }
+  return dir;
 }
 
 /**
@@ -113,8 +121,12 @@ function readIndex(ticketId) {
       aiSeq: typeof raw.aiSeq === 'number' ? raw.aiSeq : 0,
       version: INDEX_VERSION,
     };
-  } catch {
-    return { userSeq: 0, aiSeq: 0, version: INDEX_VERSION };
+  } catch (err) {
+    // Only default to zeros on missing file; fail closed on other errors
+    if (err && err.code === 'ENOENT') {
+      return { userSeq: 0, aiSeq: 0, version: INDEX_VERSION };
+    }
+    throw err;
   }
 }
 
@@ -132,11 +144,8 @@ function writeIndexAtomic(ticketId, data) {
   const tmp = `${target}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o644 });
   try {
-    try {
-      fs.unlinkSync(target);
-    } catch {
-      /* ENOENT — target doesn't exist yet */
-    }
+    // rename(2) is atomic on POSIX — no need to unlink first.
+    // This avoids a window where the target doesn't exist.
     fs.renameSync(tmp, target);
   } catch (renameErr) {
     try {
@@ -146,6 +155,51 @@ function writeIndexAtomic(ticketId, data) {
     }
     throw renameErr;
   }
+}
+
+/**
+ * Acquire a simple lock file for the read-modify-write cycle.
+ * Uses O_EXCL (wx) for atomic create — fails if lock already exists.
+ * Retries a few times with brief delay to handle contention.
+ * @param {string} lockPath
+ * @returns {boolean} true if lock acquired
+ */
+function acquireLock(lockPath) {
+  const MAX_RETRIES = 5;
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    try {
+      const fd = fs.openSync(lockPath, 'wx');
+      fs.writeSync(fd, String(process.pid));
+      fs.closeSync(fd);
+      return true;
+    } catch (err) {
+      if (err && err.code === 'EEXIST') {
+        // Check if lock is stale (older than 30s)
+        try {
+          const stat = fs.statSync(lockPath);
+          if (Date.now() - stat.mtimeMs > 30000) {
+            fs.unlinkSync(lockPath);
+            continue; // retry after removing stale lock
+          }
+        } catch { /* lock disappeared — retry */ }
+        // Brief busy-wait for contention (not using sleep)
+        const start = Date.now();
+        while (Date.now() - start < 50) { /* spin */ }
+        continue;
+      }
+      throw err;
+    }
+  }
+  return false;
+}
+
+/**
+ * Release the lock file.
+ * @param {string} lockPath
+ */
+function releaseLock(lockPath) {
+  try { fs.unlinkSync(lockPath); } catch { /* best-effort */ }
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -165,16 +219,24 @@ function writeIndexAtomic(ticketId, data) {
  */
 function nextUserRequest(ticketId) {
   validateTicketId(ticketId);
-  const current = readIndex(ticketId);
-  const nextSeq = current.userSeq + 1;
-  const updated = { ...current, userSeq: nextSeq };
-  writeIndexAtomic(ticketId, updated);
+  const lockPath = indexPath(ticketId) + '.lock';
+  if (!acquireLock(lockPath)) {
+    throw new Error(`Failed to acquire index lock for ${ticketId} — concurrent contention`);
+  }
+  try {
+    const current = readIndex(ticketId);
+    const nextSeq = current.userSeq + 1;
+    const updated = { ...current, userSeq: nextSeq };
+    writeIndexAtomic(ticketId, updated);
 
-  const segment = `${USER_REQUEST_PREFIX}${nextSeq}`;
-  const root = path.join(ticketDir(ticketId), segment);
-  fs.mkdirSync(root, { recursive: true });
+    const segment = `${USER_REQUEST_PREFIX}${nextSeq}`;
+    const root = path.join(ticketDir(ticketId), segment);
+    fs.mkdirSync(root, { recursive: true });
 
-  return { seq: nextSeq, segment, root };
+    return { seq: nextSeq, segment, root };
+  } finally {
+    releaseLock(lockPath);
+  }
 }
 
 /**
@@ -185,16 +247,24 @@ function nextUserRequest(ticketId) {
  */
 function nextAiRequest(ticketId) {
   validateTicketId(ticketId);
-  const current = readIndex(ticketId);
-  const nextSeq = current.aiSeq + 1;
-  const updated = { ...current, aiSeq: nextSeq };
-  writeIndexAtomic(ticketId, updated);
+  const lockPath = indexPath(ticketId) + '.lock';
+  if (!acquireLock(lockPath)) {
+    throw new Error(`Failed to acquire index lock for ${ticketId} — concurrent contention`);
+  }
+  try {
+    const current = readIndex(ticketId);
+    const nextSeq = current.aiSeq + 1;
+    const updated = { ...current, aiSeq: nextSeq };
+    writeIndexAtomic(ticketId, updated);
 
-  const segment = `${AI_REQUEST_PREFIX}${nextSeq}`;
-  const root = path.join(ticketDir(ticketId), segment);
-  fs.mkdirSync(root, { recursive: true });
+    const segment = `${AI_REQUEST_PREFIX}${nextSeq}`;
+    const root = path.join(ticketDir(ticketId), segment);
+    fs.mkdirSync(root, { recursive: true });
 
-  return { seq: nextSeq, segment, root };
+    return { seq: nextSeq, segment, root };
+  } finally {
+    releaseLock(lockPath);
+  }
 }
 
 module.exports = {

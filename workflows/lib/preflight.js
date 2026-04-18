@@ -194,8 +194,8 @@ function runPreflight(context, options) {
     try {
       audit({
         decision,
-        reasons,
-        remediation,
+        reasons: reasons.slice(),
+        remediation: remediation.slice(),
         origin: ctx.origin != null ? ctx.origin : null,
         ticketId: ctx.ticketId != null ? ctx.ticketId : null,
       });
