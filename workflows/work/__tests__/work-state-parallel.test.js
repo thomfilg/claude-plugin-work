@@ -30,6 +30,7 @@ const path = require('path');
 // isolated temp directory at module-load time (config.TASKS_BASE is
 // resolved once at require() time — see workflows/lib/config.js 125–127).
 const TEMP_TASKS_BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'work-state-parallel-test-'));
+const ORIGINAL_TASKS_BASE = process.env.TASKS_BASE;
 process.env.TASKS_BASE = TEMP_TASKS_BASE;
 
 const { describe, it, after, beforeEach } = require('node:test');
@@ -58,6 +59,13 @@ function prDirFor(ticketId, slot) {
 }
 
 after(() => {
+  // Restore original TASKS_BASE so subsequent test files in the same process
+  // do not inherit the (now-deleted) temp directory.
+  if (ORIGINAL_TASKS_BASE === undefined) {
+    delete process.env.TASKS_BASE;
+  } else {
+    process.env.TASKS_BASE = ORIGINAL_TASKS_BASE;
+  }
   try {
     fs.rmSync(TEMP_TASKS_BASE, { recursive: true, force: true });
   } catch {
