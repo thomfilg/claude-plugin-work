@@ -66,8 +66,7 @@ function resolveTasksBase() {
   } catch { /* config unavailable */ }
   throw new Error(
     'TASKS_BASE is not configured. Set TASKS_BASE (or WORKTREES_BASE in .envrc).'
-  ); // env → config.TASKS_BASE → throw
-}
+  ); } // end resolveTasksBase — checks env then config.TASKS_BASE
 
 /**
  * Sanitize ticket ID for filesystem paths using config.safeTicketId when available.
@@ -90,9 +89,8 @@ function sanitizeId(ticketId) {
       }
       return config.safeTicketId(ticketId);
     }
-  } catch { /* fallback to raw ID */ }
-  return ticketId;
-}
+  } catch { /* config unavailable — use raw ID */ }
+  return ticketId; } // end sanitizeId
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
