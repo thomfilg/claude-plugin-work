@@ -114,8 +114,7 @@ function validateTicketIdStructured(ticketId) {
         message: `ticketId ${JSON.stringify(ticketId)} has invalid suffix after "/".`,
         remediation: ['Either remove the trailing "/" or add a valid suffix like "PROJ-123/phase1".'],
       };
-    }
-  }
+    } } // end suffix validation — rejects empty, dot, and unsafe-char suffixes
 
   return null;
 }
