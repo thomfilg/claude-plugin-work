@@ -37,7 +37,7 @@ delete require.cache[require.resolve('../../lib/config')];
 delete require.cache[require.resolve('../work-state')];
 delete require.cache[require.resolve('../work-claims')];
 
-const { describe, it, after, beforeEach } = require('node:test');
+const { describe, it, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const workClaims = require(path.join(__dirname, '..', 'work-claims'));
@@ -106,7 +106,7 @@ describe('claimTask — happy path + lock payload (R5)', () => {
   beforeEach(() => {
     TICKET = freshTicket('TEST-CLAIM-OK');
   });
-  after(() => cleanupTicket(TICKET));
+  afterEach(() => cleanupTicket(TICKET));
 
   it('creates `.claims/task-${n}.lock` with canonical payload on fresh dir', () => {
     const result = workClaims.claimTask(TICKET, 1, 'PR1');
@@ -172,7 +172,7 @@ describe('claimTask — already-claimed semantics', () => {
   beforeEach(() => {
     TICKET = freshTicket('TEST-CLAIM-DUP');
   });
-  after(() => cleanupTicket(TICKET));
+  afterEach(() => cleanupTicket(TICKET));
 
   it('rejects second claim from a different owner without overwriting', () => {
     const first = workClaims.claimTask(TICKET, 1, 'PR1');
@@ -221,7 +221,7 @@ describe('claimTask — concurrency atomicity (R5)', () => {
   beforeEach(() => {
     TICKET = freshTicket('TEST-CLAIM-CONCURRENT');
   });
-  after(() => cleanupTicket(TICKET));
+  afterEach(() => cleanupTicket(TICKET));
 
   it('exactly one owner wins when multiple owners claim the same task', () => {
     // claimTask is synchronous and uses link(2) for atomic lock creation.
@@ -270,7 +270,7 @@ describe('releaseTask', () => {
   beforeEach(() => {
     TICKET = freshTicket('TEST-RELEASE');
   });
-  after(() => cleanupTicket(TICKET));
+  afterEach(() => cleanupTicket(TICKET));
 
   it('removes the lock file when owner matches', () => {
     const claim = workClaims.claimTask(TICKET, 1, 'PR1');

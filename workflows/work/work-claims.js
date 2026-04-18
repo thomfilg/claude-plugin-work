@@ -44,7 +44,7 @@
  *
  * Error codes:
  *   INVALID_TICKET_ID  — ticketId missing / empty / traversal / non-string
- *   INVALID_OWNER_ID   — owner id does not match /^PR\d+$/
+ *   INVALID_OWNER_ID   — owner id does not match /^PR[1-9]\d*$/
  *   INVALID_TASK_NUM   — task number is not a positive integer
  *   ALREADY_CLAIMED    — task-${n}.lock already exists with a different owner
  *   WRONG_OWNER        — releaseTask called by a non-owner
