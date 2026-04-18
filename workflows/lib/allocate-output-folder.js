@@ -57,10 +57,14 @@ function validateTicketId(ticketId) {
   // GitHub URLs are expected to be pre-normalized upstream (see loadEnforcementContext).
   const slashCount = (ticketId.match(/\//g) || []).length;
   if (slashCount > 1) {
-    throw new Error(
-      `Invalid ticket ID: at most one "/" allowed (got ${slashCount}). ` +
-      'URLs must be normalized to ticket IDs before calling the allocator.'
-    );
+    throw new Error(`Invalid ticket ID: at most one "/" allowed (got ${slashCount}).`);
+  }
+  // Reject trailing slash or dot-suffix (e.g. "GH-219/", "GH-219/.")
+  if (slashCount === 1) {
+    const suffix = ticketId.slice(ticketId.indexOf('/') + 1);
+    if (!suffix || suffix === '.' || suffix === '..') {
+      throw new Error(`Invalid ticket ID: slash must be followed by a valid suffix: "${ticketId}"`);
+    }
   } }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -89,15 +93,11 @@ function sanitizeId(ticketId) {
   try {
     const config = require('./config');
     if (config && typeof config.safeTicketId === 'function') {
-      // Only split on "/" when there's exactly one slash (suffix syntax).
-      // Multiple slashes indicate a URL or invalid input — pass through
-      // to safeTicketId which handles URL parsing internally.
-      const slashes = (ticketId.match(/\//g) || []).length;
-      if (slashes === 1) {
-        const slashIdx = ticketId.indexOf('/');
-        const base = ticketId.slice(0, slashIdx);
-        const suffix = ticketId.slice(slashIdx);
-        return config.safeTicketId(base) + suffix;
+      // validateTicketId guarantees at most one slash. Split to sanitize
+      // the base independently so "#123/phase1" → "GH-123/phase1".
+      const slashIdx = ticketId.indexOf('/');
+      if (slashIdx !== -1) {
+        return config.safeTicketId(ticketId.slice(0, slashIdx)) + ticketId.slice(slashIdx);
       }
       return config.safeTicketId(ticketId); }
   } catch { /* config unavailable */ }
