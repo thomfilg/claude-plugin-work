@@ -197,6 +197,15 @@ describe('allocate-output-folder', () => {
       assert.ok(result.root.includes(path.join('GH-219', 'phase1', 'task1')),
         `root should contain GH-219/phase1/task1, got: ${result.root}`);
     });
+
+    it('rejects ticket IDs with multiple slashes', () => {
+      assert.throws(() => allocator.allocateOutputFolder('a/b/c', { flow: 'in-flow', taskNum: 1 }), /at most one/i);
+      assert.throws(() => allocator.allocateOutputFolder('https://github.com/org/repo/issues/42', { flow: 'in-flow', taskNum: 1 }), /Invalid ticket ID/i);
+    });
+
+    it('rejects leading slash ticket IDs', () => {
+      assert.throws(() => allocator.allocateOutputFolder('/etc/passwd', { flow: 'in-flow', taskNum: 1 }), /Invalid ticket ID/i);
+    });
   }); // end ticket ID validation
 
   describe('TASKS_BASE resolution', () => {

@@ -49,13 +49,18 @@ function validateTicketId(ticketId) {
   if (ticketId === '.' || ticketId === './') {
     throw new Error('Invalid ticket ID: "." is not a valid ticket ID.');
   }
-  // Reject multiple slashes — only one "/" is allowed (suffix syntax like "GH-219/phase1")
-  if ((ticketId.match(/\//g) || []).length > 1) {
-    throw new Error(`Invalid ticket ID: multiple slashes not allowed: "${ticketId}"`);
-  }
-  // Reject leading slash (absolute path)
+  // Reject leading slash (absolute path escape)
   if (ticketId.startsWith('/')) {
     throw new Error(`Invalid ticket ID: must not start with "/": "${ticketId}"`);
+  }
+  // At most one slash allowed (suffix syntax like "GH-219/phase1").
+  // GitHub URLs are expected to be pre-normalized upstream (see loadEnforcementContext).
+  const slashCount = (ticketId.match(/\//g) || []).length;
+  if (slashCount > 1) {
+    throw new Error(
+      `Invalid ticket ID: at most one "/" allowed (got ${slashCount}). ` +
+      'URLs must be normalized to ticket IDs before calling the allocator.'
+    );
   } }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -149,6 +154,8 @@ function allocateOutputFolder(ticketId, context = {}) {
 
   const tasksBase = resolveTasksBase(); // already path.resolve'd
   const safeId = sanitizeId(ticketId);
+  // Re-validate after sanitization in case safeTicketId introduced unsafe chars
+  validateTicketId(safeId);
   const ticketRoot = path.resolve(tasksBase, safeId);
   // Defense-in-depth: ensure ticket root stays under TASKS_BASE
   if (ticketRoot !== tasksBase && !ticketRoot.startsWith(tasksBase + path.sep)) {
