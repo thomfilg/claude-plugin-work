@@ -305,8 +305,10 @@ function claimTask(ticketId, taskNum, ownerId) {
       fs.linkSync(tmpPath, lockPath);
       // We linked; the tmp file is now redundant. Remove it so the
       // acceptance-criterion test ("no .tmp-* artifacts") stays green.
-      try { fs.unlinkSync(tmpPath); } catch { /* best-effort cleanup */ }
-      tmpWritten = false;
+      try {
+        fs.unlinkSync(tmpPath);
+        tmpWritten = false;
+      } catch { /* best-effort cleanup; finally will retry while tmpWritten remains true */ }
       return { success: true, ownerId, lockPath };
     } catch (linkErr) {
       if (linkErr && linkErr.code === 'EEXIST') {

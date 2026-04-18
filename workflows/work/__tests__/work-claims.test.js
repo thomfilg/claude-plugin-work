@@ -223,10 +223,13 @@ describe('claimTask — concurrency atomicity (R5)', () => {
   });
   after(() => cleanupTicket(TICKET));
 
-  it('exactly one Promise.all racer wins on the same (task, owners) set', async () => {
-    // Five simultaneous attempts from five distinct PR slots for the same
-    // task. Exactly one must resolve to success:true; the rest must report
-    // the winning PR as existingOwner.
+  it('exactly one racer wins when multiple owners claim the same task', async () => {
+    // claimTask is synchronous and uses link(2) for atomic lock creation.
+    // Promise.all runs each call in its own microtask (sequential on a
+    // single thread), which is sufficient to validate that link(2)'s
+    // EEXIST semantics guarantee exactly-one-winner. True cross-process
+    // parallelism is not needed here because atomicity is provided by the
+    // kernel's link(2) syscall, not by application-level locking.
     const owners = ['PR1', 'PR2', 'PR3', 'PR4', 'PR5'];
     const results = await Promise.all(
       owners.map((id) => Promise.resolve().then(() => workClaims.claimTask(TICKET, 7, id)))
@@ -497,18 +500,47 @@ describe('R5 — does not perturb session-guard / work-state surfaces', () => {
     workState.initState(TICKET);
     workState.initTasksMeta(TICKET, 1);
 
-    // Claim so the .claims directory exists
+    // Simulate the actual TOCTOU race inside releaseTask(): the first
+    // existsSync(lockPath) sees the file, then the file disappears before
+    // readLockOwner reads it, and the later guard treats that as idempotent
+    // success.
     const claim = workClaims.claimTask(TICKET, 1, 'PR1');
     assert.equal(claim.success, true, 'claim must succeed');
 
-    // Delete the lock file to simulate TOCTOU race
     const lockPath = claim.lockPath;
-    fs.unlinkSync(lockPath);
+    const realExistsSync = fs.existsSync;
+    const realReadFileSync = fs.readFileSync;
+    let injectedFirstExists = false;
 
-    // releaseTask: existsSync will be false, readLockOwner will return null
-    // With the TOCTOU fix, this should be idempotent success (lock gone)
-    const release = workClaims.releaseTask(TICKET, 1, 'PR1');
-    assert.equal(release.success, true, 'must be success when lock already gone');
-    assert.equal(release.idempotent, true, 'must be flagged as idempotent');
+    try {
+      // Stub existsSync: first call for lockPath returns true (file "exists"),
+      // subsequent calls fall through to real implementation.
+      fs.existsSync = (targetPath, ...args) => {
+        if (targetPath === lockPath && !injectedFirstExists) {
+          injectedFirstExists = true;
+          return true;
+        }
+        return realExistsSync.call(fs, targetPath, ...args);
+      };
+
+      // Stub readFileSync: when reading the lock file, delete it first
+      // then throw ENOENT to simulate the file vanishing mid-read.
+      fs.readFileSync = (targetPath, ...args) => {
+        if (targetPath === lockPath && realExistsSync.call(fs, lockPath)) {
+          fs.unlinkSync(lockPath);
+          const err = new Error(`ENOENT: no such file or directory, open '${lockPath}'`);
+          err.code = 'ENOENT';
+          throw err;
+        }
+        return realReadFileSync.call(fs, targetPath, ...args);
+      };
+
+      const release = workClaims.releaseTask(TICKET, 1, 'PR1');
+      assert.equal(release.success, true, 'must be success when lock disappears mid-release');
+      assert.equal(release.idempotent, true, 'must be flagged as idempotent');
+    } finally {
+      fs.existsSync = realExistsSync;
+      fs.readFileSync = realReadFileSync;
+    }
   });
 });
