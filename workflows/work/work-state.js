@@ -598,6 +598,17 @@ function validateTaskGraph(tasks) {
   const taskNums = new Set();
   for (const task of tasks) {
     if (task && Number.isInteger(task.num) && task.num > 0) {
+      if (taskNums.has(task.num)) {
+        errors.push({
+          code: 'DUPLICATE_TASK_NUM',
+          taskId: `task_${task.num}`,
+          message: `Duplicate task number ${task.num} — each task must have a unique \`num\`.`,
+          remediation: [
+            `Remove or renumber one of the duplicate \`## Task ${task.num}\` headings in tasks.md.`,
+            'Task numbers must be unique positive integers.',
+          ],
+        });
+      }
       taskNums.add(task.num);
     } else {
       errors.push({
@@ -652,7 +663,7 @@ function validateTaskGraph(tasks) {
 
   // Cycle detection via DFS coloring (WHITE/GRAY/BLACK). A GRAY back-edge
   // indicates a cycle; we reconstruct the cycle from the DFS path and dedupe
-  // on canonical rotation so A→B→A and B→A→B report once.
+  // on sorted node set so A→B→A and B→A→B report once.
   const WHITE = 0;
   const GRAY = 1;
   const BLACK = 2;
@@ -759,6 +770,21 @@ function initTasksMeta(ticketId, taskCountOrTasks) {
     return { error: 'Invalid tasksInput: each element must have a numeric `num` field.' };
   }
 
+  // ─── Non-contiguous / duplicate task number validation ─────────────────
+  // Task numbers must be unique and form a contiguous 1..N range so that
+  // the index-based `task_${i+1}` id mapping in the loop below is correct.
+  if (isTaskArray) {
+    const nums = tasksInput.map(t => t.num);
+    const uniqueNums = new Set(nums);
+    if (uniqueNums.size !== nums.length) {
+      return { error: 'Duplicate task numbers detected in tasksInput.' };
+    }
+    const maxNum = Math.max(...nums);
+    if (maxNum !== taskCount || !nums.every(n => n >= 1 && n <= taskCount)) {
+      return { error: `Task numbers must be contiguous 1..${taskCount}. Found: ${nums.sort((a, b) => a - b).join(', ')}` };
+    }
+  }
+
   // ─── R4: Graph validation BEFORE any persistence write ─────────────────
   // Only validate when the caller opts into the IDEA2 form (array). Integer
   // form preserves pre-IDEA2 semantics: no dependencies, no graph to check.
@@ -852,8 +878,17 @@ function findTaskByNum(state, taskNum) {
   return state.tasksMeta.tasks.find((t) => t && t.id === targetId) || null;
 }
 
-function canStart(ticketId, taskNum) {
-  const state = loadState(ticketId);
+/**
+ * Pure dependency readiness check that operates on already-loaded state.
+ *
+ * Useful when callers (e.g. preflight, orchestrator) already hold a state
+ * object and want to avoid a redundant `loadState` disk read.
+ *
+ * @param {object} state - Full ticket state as returned by `loadState`.
+ * @param {number} taskNum - 1-indexed task number.
+ * @returns {boolean}
+ */
+function canStartFromState(state, taskNum) {
   const task = findTaskByNum(state, taskNum);
   if (!task) return false; // uninitialized, bad input, or unknown task
 
@@ -878,6 +913,11 @@ function canStart(ticketId, taskNum) {
   }
 
   return true;
+}
+
+function canStart(ticketId, taskNum) {
+  const state = loadState(ticketId);
+  return canStartFromState(state, taskNum);
 }
 
 /**
@@ -1414,9 +1454,24 @@ function allocateWorkerSlot(ticketId, context = {}) {
   // can retry or release explicitly without corrupting the counter.
   saveState(ticketId, state);
 
-  fs.mkdirSync(dir, { recursive: true });
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (mkdirErr) {
+    return {
+      success: false,
+      error: {
+        code: 'DIR_CREATE_FAILED',
+        message: `Failed to create worker directory ${dir}: ${mkdirErr.message}`,
+        remediation: [
+          'Check filesystem permissions on the TASKS_BASE directory.',
+          'Verify sufficient disk space is available.',
+          'The slot was persisted in .work-state.json — retry or release explicitly.',
+        ],
+      },
+    };
+  }
 
-  return { slot, ownerId, dir };
+  return { success: true, slot, ownerId, dir };
 }
 
 /**
@@ -1503,6 +1558,7 @@ module.exports = {
   initTasksMeta,
   validateTaskGraph,
   canStart,
+  canStartFromState,
   getTaskCurrent,
   advanceTask,
   getTaskByIndex,

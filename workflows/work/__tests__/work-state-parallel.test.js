@@ -116,6 +116,7 @@ describe('allocateWorkerSlot — sequential slot assignment (R14)', () => {
     const result = workState.allocateWorkerSlot(TICKET);
 
     assert.ok(result, 'allocateWorkerSlot must return a result object');
+    assert.equal(result.success, true, 'successful allocation must return success: true');
     assert.equal(result.slot, 1, 'first allocation must yield slot 1');
     assert.equal(result.ownerId, 'PR1', 'first owner id must be PR1');
     assert.equal(

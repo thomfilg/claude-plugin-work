@@ -203,6 +203,32 @@ describe('validateTaskGraph (R4 — pure graph validator)', () => {
     assert.ok(result.errors.length >= 1);
     assert.equal(typeof result.errors[0].code, 'string');
   });
+
+  it('detects duplicate task numbers with DUPLICATE_TASK_NUM error', () => {
+    const result = workState.validateTaskGraph([
+      { num: 1, dependencies: [] },
+      { num: 1, dependencies: [] },
+      { num: 2, dependencies: [] },
+    ]);
+    assert.equal(result.valid, false);
+    const err = result.errors.find((e) => e.code === 'DUPLICATE_TASK_NUM');
+    assert.ok(err, 'errors must include a DUPLICATE_TASK_NUM entry');
+    assert.equal(err.taskId, 'task_1');
+    assert.ok(err.message.includes('1'));
+    assert.ok(Array.isArray(err.remediation) && err.remediation.length > 0);
+  });
+
+  it('detects multiple duplicate task numbers', () => {
+    const result = workState.validateTaskGraph([
+      { num: 1, dependencies: [] },
+      { num: 1, dependencies: [] },
+      { num: 2, dependencies: [] },
+      { num: 2, dependencies: [] },
+    ]);
+    assert.equal(result.valid, false);
+    const dupErrors = result.errors.filter((e) => e.code === 'DUPLICATE_TASK_NUM');
+    assert.equal(dupErrors.length, 2, 'should report one DUPLICATE_TASK_NUM per duplicate occurrence');
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -309,6 +335,44 @@ describe('initTasksMeta — parseTasks output + graph validation (R3, R4, R16)',
       undefined,
       'integer form must not inject a dependencies field (pre-IDEA2 wire format)'
     );
+  });
+
+  it('rejects duplicate task numbers BEFORE writing to disk', () => {
+    workState.initState(TICKET);
+    const result = workState.initTasksMeta(TICKET, [
+      { num: 1, dependencies: [] },
+      { num: 1, dependencies: [] },
+    ]);
+    assert.ok(result.error, 'must return error for duplicate task numbers');
+    assert.ok(result.error.includes('Duplicate'), `error message must mention duplicates: ${result.error}`);
+
+    const state = workState.loadState(TICKET);
+    assert.equal(state.tasksMeta, undefined, 'duplicate nums must not reach disk');
+  });
+
+  it('rejects non-contiguous task numbers (gap) BEFORE writing to disk', () => {
+    workState.initState(TICKET);
+    const result = workState.initTasksMeta(TICKET, [
+      { num: 1, dependencies: [] },
+      { num: 3, dependencies: [] },
+    ]);
+    assert.ok(result.error, 'must return error for non-contiguous task numbers');
+    assert.ok(
+      result.error.includes('contiguous'),
+      `error message must mention contiguous: ${result.error}`
+    );
+
+    const state = workState.loadState(TICKET);
+    assert.equal(state.tasksMeta, undefined, 'non-contiguous nums must not reach disk');
+  });
+
+  it('rejects task numbers starting at 0 (must be 1-indexed)', () => {
+    workState.initState(TICKET);
+    const result = workState.initTasksMeta(TICKET, [
+      { num: 0, dependencies: [] },
+      { num: 1, dependencies: [] },
+    ]);
+    assert.ok(result.error, 'must return error for task number 0');
   });
 
   it('R16: loads pre-IDEA2 state file lacking `dependencies` without error', () => {
@@ -502,5 +566,95 @@ describe('canStart(ticketId, taskNum) — pure dependency readiness (R3, R16)', 
       false,
       'a completed task cannot be "started" again — fail-closed'
     );
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// canStartFromState — pure helper that avoids disk I/O (Fix 5)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('canStartFromState(state, taskNum) — pure readiness from loaded state', () => {
+  it('is exported from work-state', () => {
+    assert.equal(
+      typeof workState.canStartFromState,
+      'function',
+      'canStartFromState must be exported for callers that already hold state'
+    );
+  });
+
+  it('returns true when task has no dependencies', () => {
+    const state = {
+      tasksMeta: {
+        tasks: [
+          { id: 'task_1', status: 'pending', dependencies: [] },
+        ],
+      },
+    };
+    assert.equal(workState.canStartFromState(state, 1), true);
+  });
+
+  it('returns false when a dependency is pending', () => {
+    const state = {
+      tasksMeta: {
+        tasks: [
+          { id: 'task_1', status: 'pending', dependencies: [] },
+          { id: 'task_2', status: 'pending', dependencies: [1] },
+        ],
+      },
+    };
+    assert.equal(workState.canStartFromState(state, 2), false);
+  });
+
+  it('returns true when all dependencies are completed', () => {
+    const state = {
+      tasksMeta: {
+        tasks: [
+          { id: 'task_1', status: 'completed', dependencies: [] },
+          { id: 'task_2', status: 'pending', dependencies: [1] },
+        ],
+      },
+    };
+    assert.equal(workState.canStartFromState(state, 2), true);
+  });
+
+  it('returns false for null state', () => {
+    assert.equal(workState.canStartFromState(null, 1), false);
+  });
+
+  it('returns false for completed task', () => {
+    const state = {
+      tasksMeta: {
+        tasks: [
+          { id: 'task_1', status: 'completed', dependencies: [] },
+        ],
+      },
+    };
+    assert.equal(workState.canStartFromState(state, 1), false);
+  });
+
+  it('returns true for pre-IDEA2 tasks without dependencies field (R16)', () => {
+    const state = {
+      tasksMeta: {
+        tasks: [
+          { id: 'task_1', status: 'pending' },
+        ],
+      },
+    };
+    assert.equal(workState.canStartFromState(state, 1), true);
+  });
+
+  it('produces same results as canStart for the same state', () => {
+    const TICKET = freshTicket('TEST-CANSTART-FROM-STATE');
+    cleanupTicket(TICKET);
+    workState.initState(TICKET);
+    workState.initTasksMeta(TICKET, [
+      { num: 1, dependencies: [] },
+      { num: 2, dependencies: [1] },
+    ]);
+    const state = workState.loadState(TICKET);
+
+    assert.equal(workState.canStart(TICKET, 1), workState.canStartFromState(state, 1));
+    assert.equal(workState.canStart(TICKET, 2), workState.canStartFromState(state, 2));
+    cleanupTicket(TICKET);
   });
 });
