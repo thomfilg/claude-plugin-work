@@ -94,10 +94,9 @@ function sanitizeId(ticketId) {
         const suffix = ticketId.slice(slashIdx);
         return config.safeTicketId(base) + suffix;
       }
-      return config.safeTicketId(ticketId);
-    }
-  } catch { /* config unavailable — use raw ID */ }
-  return ticketId; } // end sanitizeId
+      return config.safeTicketId(ticketId); }
+  } catch { /* config unavailable */ }
+  return ticketId; } // end sanitizeId — multi-slash rejected by validateTicketId
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
