@@ -65,7 +65,8 @@ function validateTicketId(ticketId) {
     if (!suffix || suffix === '.' || suffix === '..') {
       throw new Error(`Invalid ticket ID: slash must be followed by a valid suffix: "${ticketId}"`);
     }
-  } }
+  }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,13 +80,17 @@ function resolveTasksBase() {
   try {
     const config = require('./config');
     if (config && config.TASKS_BASE) return path.resolve(config.TASKS_BASE);
-  } catch { /* config unavailable */ }
+  } catch {
+    /* config unavailable */
+  }
   throw new Error(
     'TASKS_BASE is not configured. Set TASKS_BASE (or WORKTREES_BASE in .envrc).'
-  ); } // end resolveTasksBase — checks env then config.TASKS_BASE
+  );
+}
 
 /**
  * Sanitize ticket ID for filesystem paths using config.safeTicketId when available.
+ * validateTicketId guarantees at most one slash before this runs.
  * @param {string} ticketId
  * @returns {string}
  */
@@ -93,15 +98,18 @@ function sanitizeId(ticketId) {
   try {
     const config = require('./config');
     if (config && typeof config.safeTicketId === 'function') {
-      // validateTicketId guarantees at most one slash. Split to sanitize
-      // the base independently so "#123/phase1" → "GH-123/phase1".
+      // Split to sanitize the base independently so "#123/phase1" → "GH-123/phase1".
       const slashIdx = ticketId.indexOf('/');
       if (slashIdx !== -1) {
         return config.safeTicketId(ticketId.slice(0, slashIdx)) + ticketId.slice(slashIdx);
       }
-      return config.safeTicketId(ticketId); }
-  } catch { /* config unavailable */ }
-  return ticketId; } // end sanitizeId — multi-slash rejected by validateTicketId
+      return config.safeTicketId(ticketId);
+    }
+  } catch {
+    /* config unavailable */
+  }
+  return ticketId;
+}
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -157,10 +165,10 @@ function allocateOutputFolder(ticketId, context = {}) {
   // Re-validate after sanitization in case safeTicketId introduced unsafe chars
   validateTicketId(safeId);
   const ticketRoot = path.resolve(tasksBase, safeId);
-  // Defense-in-depth: ensure ticket root stays under TASKS_BASE
-  if (ticketRoot !== tasksBase && !ticketRoot.startsWith(tasksBase + path.sep)) {
+  // Defense-in-depth: ticket root must be a strict child of TASKS_BASE
+  if (!ticketRoot.startsWith(tasksBase + path.sep)) {
     throw new Error(`allocateOutputFolder: resolved path escapes TASKS_BASE: ${ticketRoot}`);
-  } // path-containment verified
+  }
   // ── In-flow task allocation ──────────────────────────────────────────────
   if (context.flow === 'in-flow') {
     if (context.taskNum == null) {
