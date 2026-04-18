@@ -108,8 +108,7 @@ describe('sanitizeTicketId', () => {
   it('handles suffix syntax', () => {
     const result = sanitizeTicketId('GH-219/phase1');
     assert.ok(result.includes('phase1'), `should preserve suffix, got: ${result}`);
-  });
-
+  }); // suffix preserved through sanitization
   it('returns canonical form for already-canonical IDs', () => {
     const result = sanitizeTicketId('GH-219');
     assert.ok(result.includes('GH-219'), `should contain GH-219, got: ${result}`);
@@ -173,5 +172,4 @@ describe('assertPathContainment', () => {
 
   it('prevents prefix-sibling attacks', () => {
     assert.throws(() => assertPathContainment(sibling, base), /escapes base/);
-  });
-});
+  }); }); // end assertPathContainment

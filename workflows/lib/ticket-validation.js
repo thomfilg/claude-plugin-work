@@ -154,10 +154,9 @@ function sanitizeTicketId(ticketId) {
       return config.safeTicketId(ticketId);
     }
   } catch (err) {
-    if (!err || err.code !== 'MODULE_NOT_FOUND') throw err;
+    if (!err || err.code !== 'MODULE_NOT_FOUND') throw err; // only swallow missing config
   }
-  return ticketId;
-}
+  return ticketId; }
 
 // ─── TASKS_BASE resolution ───────────────────────────────────────────────────
 
@@ -174,7 +173,7 @@ function resolveTasksBase() {
     const config = require('./config');
     if (config && config.TASKS_BASE) return path.resolve(config.TASKS_BASE);
   } catch (err) {
-    if (!err || err.code !== 'MODULE_NOT_FOUND') throw err;
+    if (!err || err.code !== 'MODULE_NOT_FOUND') throw err; // only swallow missing config
   }
   throw new Error(
     'TASKS_BASE is not configured. Set TASKS_BASE (or WORKTREES_BASE in .envrc).'
