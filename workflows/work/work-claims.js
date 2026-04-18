@@ -305,7 +305,7 @@ function claimTask(ticketId, taskNum, ownerId) {
   const payload = {
     ownerId,
     taskNum: taskNumInt,
-    ticketId,
+    ticketId: safeTicketFragment(ticketId), // canonical form matches lock path
     timestamp: new Date().toISOString(),
   };
 
@@ -377,7 +377,7 @@ function claimTask(ticketId, taskNum, ownerId) {
  * @param {string} ticketId
  * @param {number|string} taskNum
  * @param {string} ownerId
- * @returns {{success:boolean, existingOwner?:string, lockPath?:string, error?:object}}
+ * @returns {{success:boolean, existingOwner?:string, lockPath?:string, idempotent?:boolean, error?:object}}
  */
 function releaseTask(ticketId, taskNum, ownerId) {
   // Same validation gate as claimTask — no FS work before all inputs pass.
