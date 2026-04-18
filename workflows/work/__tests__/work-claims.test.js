@@ -352,7 +352,7 @@ describe('claimTask — R15 input validation (fail closed, no I/O)', () => {
         `suffixed ticketId ${JSON.stringify(ticketId)} must be accepted`
       );
     }
-    // Cleanup
+    // Cleanup suffixed ticket directories
     for (const ticketId of good) {
       cleanupTicket(ticketId.split('/')[0]);
     }

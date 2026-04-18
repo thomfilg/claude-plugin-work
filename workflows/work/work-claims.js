@@ -124,7 +124,7 @@ function validateTicketId(ticketId) {
   // always a bare provider key like "GH-219" or "PROJ-123", optionally
   // with a slash suffix like "GH-219/phase1" (see parseTicketInput in
   // workflows/lib/ticket-provider.js).
-  // Reject backslash, colon, null byte, and traversal sequences.
+  // Reject backslash, colon, null byte, and traversal sequences (uses trimmed value).
   if (/[\\:\0]/.test(ticketId) || ticketId.includes('..')) {
     return {
       code: 'INVALID_TICKET_ID',
@@ -241,7 +241,7 @@ function safeTicketFragment(ticketId) {
     }
   }
   return ticketId;
-}
+} // end safeTicketFragment — handles base/suffix split for #N → GH-N
 
 function claimsDirFor(ticketId) {
   const tasksBase = getTasksBase();
