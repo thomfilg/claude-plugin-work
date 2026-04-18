@@ -67,9 +67,9 @@ function validateTicketId(ticketId) {
         'Use a simple alphanumeric-with-hyphens format (e.g., "GH-219").',
       ],
     };
-  }
+  } // fail-closed: reject before any I/O
 
-  return null;
+  return null; // valid ticket ID
 }
 
 // ─── EnforcementContext builder ──────────────────────────────────────────────

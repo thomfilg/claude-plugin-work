@@ -180,7 +180,8 @@ function analyzeActions(actions) {
   for (const action of actions) {
     // IDEA2 / GH-219: skip enforcement audit rows — they do not carry `step` /
     // `what` fields and would corrupt step-duration accounting. Their record
-    // count still feeds `actionCount` below.
+    // count still feeds `actionCount` below. Boundary timestamps for
+    // totalDuration are also filtered to legacy rows only (see below).
     if (action && action.kind === ENFORCEMENT_KIND) continue;
 
     if (!stepMap.has(action.step)) {
