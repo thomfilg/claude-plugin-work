@@ -112,33 +112,26 @@ describe('sanitizeTicketId', () => {
 });
 
 describe('assertPathContainment', () => {
+  const base = path.resolve('/tmp/test-base');
+  const child = path.resolve('/tmp/test-base/child');
+  const deep = path.resolve('/tmp/test-base/child/deep');
+  const outside = path.resolve('/tmp/other/child');
+  const sibling = path.resolve('/tmp/test-base-extra/child');
+
   it('does not throw for child paths', () => {
-    assert.doesNotThrow(() =>
-      assertPathContainment('/base/child', '/base')
-    );
-    assert.doesNotThrow(() =>
-      assertPathContainment('/base/child/deep', '/base')
-    );
+    assert.doesNotThrow(() => assertPathContainment(child, base));
+    assert.doesNotThrow(() => assertPathContainment(deep, base));
   });
 
   it('throws for paths outside base', () => {
-    assert.throws(() =>
-      assertPathContainment('/other/child', '/base'),
-      /escapes base/
-    );
+    assert.throws(() => assertPathContainment(outside, base), /escapes base/);
   });
 
   it('throws for path equal to base (strict child required)', () => {
-    assert.throws(() =>
-      assertPathContainment('/base', '/base'),
-      /escapes base/
-    );
+    assert.throws(() => assertPathContainment(base, base), /escapes base/);
   });
 
   it('prevents prefix-sibling attacks', () => {
-    assert.throws(() =>
-      assertPathContainment('/base-extra/child', '/base'),
-      /escapes base/
-    );
+    assert.throws(() => assertPathContainment(sibling, base), /escapes base/);
   });
 });

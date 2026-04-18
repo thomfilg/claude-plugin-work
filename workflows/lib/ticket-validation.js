@@ -69,7 +69,7 @@ function validateTicketIdStructured(ticketId) {
   if (ticketId === '.' || ticketId === './') {
     return {
       code: 'INVALID_TICKET_ID',
-      message: 'Invalid ticket ID: "." is not a valid ticket ID.',
+      message: '"." is not a valid ticket ID.',
       remediation: ['Use a proper ticket id like "GH-219" or "PROJ-123".'],
     };
   }
@@ -108,7 +108,7 @@ function validateTicketIdStructured(ticketId) {
   // Reject trailing slash or dot-suffix
   if (slashCount === 1) {
     const suffix = ticketId.slice(ticketId.indexOf('/') + 1);
-    if (!suffix || suffix === '.' || suffix === '..') {
+    if (!suffix || suffix === '.' || suffix === '..' || UNSAFE_TICKET_RE.test(suffix)) {
       return {
         code: 'INVALID_TICKET_ID',
         message: `ticketId ${JSON.stringify(ticketId)} has invalid suffix after "/".`,
