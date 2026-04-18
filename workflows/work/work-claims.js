@@ -108,7 +108,10 @@ function validateTicketId(ticketId) {
       ],
     };
   }
-  // Expects pre-normalized ticket ID (e.g. "GH-219", not a URL). Callers must normalize via safeTicketId first.
+  // Expects pre-normalized ticket ID (e.g. "GH-219", not a URL).
+  // See loadEnforcementContext which normalizes URLs before calling
+  // downstream modules — by the time we reach this point the ticketId is
+  // always a bare provider key like "GH-219" or "PROJ-123".
   // Reject path separators and traversal fragments before we compute any
   // filesystem path (no I/O / no mkdir until this passes). The `..`
   // substring check subsumes the stricter "`..` between separators" regex

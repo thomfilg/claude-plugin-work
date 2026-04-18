@@ -26,7 +26,9 @@ const path = require('path');
 // Set TASKS_BASE BEFORE requiring work-claims so config.js picks up the
 // isolated temp directory at module-load time (see workflows/lib/config.js
 // lines 125–127 — TASKS_BASE is resolved once at require() time).
+// Env cleanup: the top-level `after()` hook restores the original value.
 const TEMP_TASKS_BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'work-claims-test-'));
+const ORIGINAL_TASKS_BASE = process.env.TASKS_BASE;
 process.env.TASKS_BASE = TEMP_TASKS_BASE;
 
 const { describe, it, after, beforeEach } = require('node:test');
@@ -60,6 +62,13 @@ function lockPathFor(ticketId, taskNum) {
 }
 
 after(() => {
+  // Restore original TASKS_BASE so subsequent test files in the same process
+  // are not affected by the module-load-time override above.
+  if (ORIGINAL_TASKS_BASE === undefined) {
+    delete process.env.TASKS_BASE;
+  } else {
+    process.env.TASKS_BASE = ORIGINAL_TASKS_BASE;
+  }
   try {
     fs.rmSync(TEMP_TASKS_BASE, { recursive: true, force: true });
   } catch {

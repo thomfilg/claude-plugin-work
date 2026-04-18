@@ -755,7 +755,7 @@ function initTasksMeta(ticketId, taskCountOrTasks) {
     return { error: `Invalid taskCount: ${taskCount}. Must be a positive integer.` };
   }
 
-  if (isTaskArray && tasksInput.some(t => !t || typeof t.num !== 'number')) {
+  if (isTaskArray && tasksInput.some((t) => !t || typeof t.num !== 'number')) {
     return { error: 'Invalid tasksInput: each element must have a numeric `num` field.' };
   }
 
@@ -1269,7 +1269,10 @@ function _validateParallelTicketId(ticketId) {
   }
   // Reject path separators and traversal fragments before any FS I/O so
   // the caller gets a structured rejection rather than a path-escape bug.
-  // Expects pre-normalized ticket ID (e.g. "GH-219", not a URL). Callers must normalize via safeTicketId first.
+  // Expects pre-normalized ticket ID (e.g. "GH-219", not a URL).
+  // See loadEnforcementContext which normalizes URLs before calling
+  // downstream modules — by the time we reach this point the ticketId is
+  // always a bare provider key like "GH-219" or "PROJ-123".
   if (/[\\/:\0]/.test(ticketId) || ticketId.includes('..')) {
     return {
       code: 'INVALID_TICKET_ID',
