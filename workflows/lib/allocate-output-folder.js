@@ -152,8 +152,8 @@ function allocateOutputFolder(ticketId, context = {}) {
   // R15: validate ticket ID before any I/O
   validateTicketId(ticketId);
 
-  const tasksBase = resolveTasksBase(); // already path.resolve'd
-  const safeId = sanitizeId(ticketId);
+  const tasksBase = resolveTasksBase();
+  const safeId = sanitizeId(ticketId); // may transform #N → GH-N
   // Re-validate after sanitization in case safeTicketId introduced unsafe chars
   validateTicketId(safeId);
   const ticketRoot = path.resolve(tasksBase, safeId);

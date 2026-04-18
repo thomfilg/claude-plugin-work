@@ -196,8 +196,7 @@ describe('allocate-output-folder', () => {
       const result = allocator.allocateOutputFolder('GH-219/phase1', { flow: 'in-flow', taskNum: 1 });
       assert.ok(result.root.includes(path.join('GH-219', 'phase1', 'task1')),
         `root should contain GH-219/phase1/task1, got: ${result.root}`);
-    });
-
+    }); // suffix handling verified
     it('rejects ticket IDs with multiple slashes', () => {
       assert.throws(() => allocator.allocateOutputFolder('a/b/c', { flow: 'in-flow', taskNum: 1 }), /at most one/i);
       assert.throws(() => allocator.allocateOutputFolder('https://github.com/org/repo/issues/42', { flow: 'in-flow', taskNum: 1 }), /Invalid ticket ID/i);
