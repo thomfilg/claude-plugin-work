@@ -84,7 +84,7 @@ function getTasksBase() {
 // error so we never touch the filesystem with bad input (no directory
 // creation, no rename target resolution).
 
-const OWNER_ID_RE = /^PR\d+$/;
+const OWNER_ID_RE = /^PR[1-9]\d*$/;
 
 function validateTicketId(ticketId) {
   if (typeof ticketId !== 'string') {
@@ -155,6 +155,14 @@ function validateTicketId(ticketId) {
       code: 'INVALID_TICKET_ID',
       message: 'Only one "/" suffix separator is allowed.',
       remediation: ['Use format like "PROJ-123/phase1" — at most one "/".'],
+    };
+  }
+  // Reject trailing slash with no suffix (e.g. "GH-219/")
+  if (ticketId.endsWith('/')) {
+    return {
+      code: 'INVALID_TICKET_ID',
+      message: `ticketId ${JSON.stringify(ticketId)} has a trailing "/" with no suffix.`,
+      remediation: ['Either remove the trailing "/" or add a suffix like "PROJ-123/phase1".'],
     };
   }
   return null;
@@ -247,7 +255,7 @@ function claimsDirFor(ticketId) {
   const tasksBase = getTasksBase();
   if (!tasksBase) {
     throw new Error(
-      'TASKS_BASE is not configured — set WORKTREES_BASE or TASKS_BASE in your environment.'
+      'TASKS_BASE is not configured — set TASKS_BASE in your environment (or WORKTREES_BASE in .envrc so config.js derives it).'
     );
   }
   return path.join(tasksBase, safeTicketFragment(ticketId), '.claims');

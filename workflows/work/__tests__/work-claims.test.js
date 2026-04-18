@@ -315,7 +315,7 @@ describe('releaseTask', () => {
 
 describe('claimTask — R15 input validation (fail closed, no I/O)', () => {
   it('rejects bad ticket ids with INVALID_TICKET_ID; creates no directory', () => {
-    const bad = ['', '   ', null, undefined, '../x', '/etc/passwd', 'a\\b', 'a\0b', 'a//b', 'a:b'];
+    const bad = ['', '   ', null, undefined, '../x', '/etc/passwd', 'a\\b', 'a\0b', 'a//b', 'a:b', 'GH-219/'];
     for (const ticketId of bad) {
       const result = workClaims.claimTask(ticketId, 1, 'PR1');
       assert.equal(
@@ -358,52 +358,22 @@ describe('claimTask — R15 input validation (fail closed, no I/O)', () => {
     }
   });
 
-  it('normalizes GitHub #N/suffix ticket ids to GH-N/suffix in lock path', () => {
-    // Force provider to github so safeTicketFragment triggers #N → GH-N.
-    // Reset the cached provider config so the env var takes effect.
-    const originalProvider = process.env.TICKET_PROVIDER;
-    process.env.TICKET_PROVIDER = 'github';
-    // Reset config's cached provider so it re-reads the env var.
-    const config = require('../../lib/config');
-    const configModule = require.cache[require.resolve('../../lib/config')];
-    // The cache variables are module-scoped; we can't access them directly.
-    // Instead, call safeTicketId with a fresh require to test the split logic.
-    // Since safeTicketFragment splits on "/" before calling safeTicketId,
-    // "#42/phase1" should produce "GH-42/phase1" in the lock path.
-    try {
-      // Use a fresh ticket to avoid collisions
-      const TICKET_ID = '#99/phase1';
-      // Validation will pass (# is allowed in github context via the
-      // sanitization path). If validation rejects it, the test still
-      // verifies the behavior.
-      const result = workClaims.claimTask(TICKET_ID, 1, 'PR1');
-      if (result.success) {
-        // Lock path should contain GH-99/phase1, not #99/phase1
-        assert.ok(
-          result.lockPath.includes('GH-99'),
-          `lockPath should contain "GH-99" after normalization, got: "${result.lockPath}"`
-        );
-        assert.ok(
-          result.lockPath.includes(path.join('GH-99', 'phase1')),
-          `lockPath should contain "GH-99/phase1" path segment, got: "${result.lockPath}"`
-        );
-        // Cleanup
-        cleanupTicket('GH-99');
-      }
-      // If validation rejects #99/phase1 (e.g. # not allowed), that's also
-      // acceptable — the important thing is no directory named "#99" was created.
-      assert.equal(
-        fs.existsSync(path.join(TEMP_TASKS_BASE, '#99')),
-        false,
-        'raw "#99" directory must not exist — should be normalized to GH-99'
-      );
-    } finally {
-      if (originalProvider !== undefined) {
-        process.env.TICKET_PROVIDER = originalProvider;
-      } else {
-        delete process.env.TICKET_PROVIDER;
-      }
-    }
+  it('normalizes suffixed ticket ids by splitting base from suffix before sanitizing', () => {
+    // safeTicketFragment (internal to work-claims) splits ticketId on "/"
+    // before calling config.safeTicketId, so "BASE/suffix" sanitizes only
+    // the base. We verify this indirectly: config.safeTicketId should not
+    // alter an already-canonical base like "GH-99", so "GH-99/phase1"
+    // must produce a lock path containing "GH-99/phase1" (not "GH-99phase1").
+    const TICKET_ID = 'GH-99/phase1';
+    const result = workClaims.claimTask(TICKET_ID, 1, 'PR1');
+    assert.equal(result.success, true, `suffixed ${TICKET_ID} must succeed`);
+    // Verify the lock path preserves the base/suffix structure
+    assert.ok(
+      result.lockPath.includes(path.join('GH-99', 'phase1')),
+      `lockPath should contain "GH-99/phase1" path segment, got: "${result.lockPath}"`
+    );
+    // Cleanup
+    cleanupTicket('GH-99');
   });
 
   it('rejects ticket ids with leading/trailing whitespace', () => {
@@ -417,7 +387,7 @@ describe('claimTask — R15 input validation (fail closed, no I/O)', () => {
 
   it('rejects bad owner ids with INVALID_OWNER_ID; no lock written', () => {
     const TICKET = freshTicket('TEST-OWNER-BAD');
-    const bad = ['', 'user', 'PR', 'PR-1', 'PRabc', 'pr1', 'PR 1', 'PR01a', null, 1];
+    const bad = ['', 'user', 'PR', 'PR-1', 'PRabc', 'pr1', 'PR 1', 'PR01a', 'PR0', null, 1];
     for (const ownerId of bad) {
       const result = workClaims.claimTask(TICKET, 1, ownerId);
       assert.equal(
