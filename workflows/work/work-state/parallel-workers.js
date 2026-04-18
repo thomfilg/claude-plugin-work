@@ -209,6 +209,11 @@ function allocateWorkerSlot(ticketId, context = {}) {
     entry.taskNum = context.taskNum;
   }
   state.parallelWorkers.allocations.push(entry);
+  // NOTE: read-modify-write on nextSlot is NOT atomic. Two concurrent
+  // processes could read the same nextSlot value and persist conflicting
+  // PR{N} allocations. In practice this is safe because session-guard.js
+  // acquires a ticket-level lock that serializes all callers for the same
+  // ticketId before they reach this code path.
   state.parallelWorkers.nextSlot = slot + 1;
 
   saveState(ticketId, state);

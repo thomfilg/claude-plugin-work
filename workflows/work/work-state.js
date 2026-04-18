@@ -530,6 +530,9 @@ function completeSubtask(ticketId, subtaskIndex) {
 
 const { validateTaskGraph } = require('./work-state/graph-validation');
 const _taskReadiness = require('./work-state/task-readiness');
+// findTaskByNum is not re-exported from work-state.js — it is internal to
+// task-readiness.js (used by canStartFromState). Destructured here for
+// potential direct use within work-state.js (e.g. getTaskCurrent lookups).
 const { initTasksMeta, findTaskByNum, canStartFromState, canStart } = _taskReadiness;
 
 /**
@@ -853,9 +856,11 @@ let claimTask, releaseTask;
 try {
   ({ claimTask, releaseTask } = require('./work-claims'));
 } catch (err) {
-  if (err && err.code === 'MODULE_NOT_FOUND') {
+  if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\/work-claims['"]/.test(err.message)) {
     // work-claims.js ships in a separate PR (PR 2b). When absent, claim
     // re-exports are undefined — callers that need claims must depend on PR 2b.
+    // Only swallow MODULE_NOT_FOUND for './work-claims' itself — rethrow if a
+    // transitive dependency inside work-claims is missing (runtime bug).
     claimTask = undefined;
     releaseTask = undefined;
   } else {
@@ -867,6 +872,10 @@ try {
 // Extracted to work-state/parallel-workers.js. Re-imported here so all
 // existing consumers of work-state.js are unaffected.
 const _parallelWorkers = require('./work-state/parallel-workers');
+// PARALLEL_OWNER_ID_RE is not re-exported from work-state.js — it is
+// consumed internally by allocateWorkerSlot's defensive ownerId check.
+// Downstream consumers that need the regex should import from
+// ./work-state/parallel-workers directly.
 const {
   PARALLEL_OWNER_ID_RE,
   allocateWorkerSlot,
