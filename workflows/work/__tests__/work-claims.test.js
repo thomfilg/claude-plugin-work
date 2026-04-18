@@ -223,19 +223,14 @@ describe('claimTask — concurrency atomicity (R5)', () => {
   });
   after(() => cleanupTicket(TICKET));
 
-  it('exactly one racer wins when multiple owners claim the same task', async () => {
+  it('exactly one owner wins when multiple owners claim the same task', () => {
     // claimTask is synchronous and uses link(2) for atomic lock creation.
-    // Promise.all runs each call in its own microtask (sequential on a
-    // single thread), which is sufficient to validate that link(2)'s
-    // EEXIST semantics guarantee exactly-one-winner. True cross-process
-    // parallelism is not needed here because atomicity is provided by the
-    // kernel's link(2) syscall, not by application-level locking.
+    // Atomicity is provided by the kernel's link(2) syscall: it rejects
+    // with EEXIST when the target already exists, so even sequential
+    // calls produce exactly-one-winner. True cross-process parallelism
+    // is not needed because this tests link(2) semantics, not app locking.
     const owners = ['PR1', 'PR2', 'PR3', 'PR4', 'PR5'];
-    // Sequential microtask execution validates link(2) atomic semantics
-    const claimAll = owners.map((id) =>
-      Promise.resolve().then(() => workClaims.claimTask(TICKET, 7, id))
-    );
-    const results = await Promise.all(claimAll);
+    const results = owners.map((id) => workClaims.claimTask(TICKET, 7, id));
 
     const successes = results.filter((r) => r.success === true);
     const failures = results.filter((r) => r.success === false);
@@ -355,10 +350,9 @@ describe('claimTask — R15 input validation (fail closed, no I/O)', () => {
       );
     }
     for (const ticketId of good) {
-      const base = ticketId.split('/')[0];
-      cleanupTicket(base);
+      cleanupTicket(ticketId.split('/')[0]);
     }
-  });
+  }); // end suffixed ticket id test
 
   it('normalizes suffixed ticket ids by splitting base from suffix before sanitizing', () => {
     // safeTicketFragment (internal to work-claims) splits ticketId on "/"

@@ -261,7 +261,12 @@ function claimsDirFor(ticketId) {
       'TASKS_BASE is not configured — set TASKS_BASE in your environment (or WORKTREES_BASE in .envrc so config.js derives it).'
     );
   }
-  return path.join(tasksBase, safeTicketFragment(ticketId), '.claims');
+  const dir = path.join(tasksBase, safeTicketFragment(ticketId), '.claims');
+  // Defense-in-depth: ensure computed path stays under TASKS_BASE
+  if (!path.resolve(dir).startsWith(path.resolve(tasksBase) + path.sep)) {
+    throw new Error(`claimsDirFor: computed path escapes TASKS_BASE: ${dir}`);
+  }
+  return dir;
 }
 
 function lockPathFor(ticketId, taskNumInt) {
