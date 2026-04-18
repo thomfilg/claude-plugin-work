@@ -49,7 +49,14 @@ function validateTicketId(ticketId) {
   if (ticketId === '.' || ticketId === './') {
     throw new Error('Invalid ticket ID: "." is not a valid ticket ID.');
   }
-}
+  // Reject multiple slashes — only one "/" is allowed (suffix syntax like "GH-219/phase1")
+  if ((ticketId.match(/\//g) || []).length > 1) {
+    throw new Error(`Invalid ticket ID: multiple slashes not allowed: "${ticketId}"`);
+  }
+  // Reject leading slash (absolute path)
+  if (ticketId.startsWith('/')) {
+    throw new Error(`Invalid ticket ID: must not start with "/": "${ticketId}"`);
+  } }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
