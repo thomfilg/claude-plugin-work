@@ -330,6 +330,21 @@ describe('loadEnforcementContext — R15 ticket id validation', () => {
     assert.match(ctx.error.code, /ticket/i);
   });
 
+  it('rejects normalized IDs that still contain a forward slash (normalization failure)', () => {
+    // safeTicketId mock fails to fully normalize — result still has a slash
+    installMocks({
+      state: null,
+      safeId: (id) => (id === 'bad/input' ? 'still/bad' : id),
+    });
+
+    const { loadEnforcementContext } = require(MODULE_PATH);
+    const ctx = loadEnforcementContext('bad/input');
+
+    assert.ok(ctx.error, 'normalized ID containing "/" must be rejected');
+    assert.match(ctx.error.code, /ticket/i);
+    assert.equal(ctx.origin, null, 'invalid ticket id yields no origin');
+  });
+
   it('rejects non-string ticket ids (number, null, undefined, object)', () => {
     installMocks({ state: null });
 

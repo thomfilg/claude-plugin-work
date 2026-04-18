@@ -35,12 +35,12 @@ const { parseTasks } = require('./task-parser');
 // ─── Ticket ID validation (R15) ─────────────────────────────────────────────
 
 /**
- * @type {RegExp} Reject path-traversal sequences, backslashes, and null bytes
- * in the NORMALIZED ticket ID. Slashes are not checked here because
- * normalization (safeTicketId) handles URL-style inputs like
- * "https://github.com/.../issues/123" → "GH-123" before this runs.
+ * @type {RegExp} Reject path-traversal sequences, slashes, backslashes, and
+ * null bytes in the NORMALIZED ticket ID. Slashes are checked because
+ * normalization (safeTicketId) should have already stripped them — a `/` in
+ * the normalized result means normalization failed to clean the input.
  */
-const UNSAFE_NORMALIZED_RE = /\.\.|[\\]|\x00/;
+const UNSAFE_NORMALIZED_RE = /\.\.|[\\\/]|\x00/;
 
 /**
  * Validate a raw ticket ID for basic type/emptiness.
