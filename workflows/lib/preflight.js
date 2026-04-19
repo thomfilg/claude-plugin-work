@@ -353,8 +353,7 @@ function createClaimCheck(params) {
     if (!ctx.state || !ctx.state.tasksMeta) return null;
 
     // No taskNum requested → no claim enforcement needed
-    if (taskNum == null) return null;
-
+    if (taskNum == null) return null; // no task context → skip claim check
     // R6: taskNum set but no ownerId → unclaimed task write
     if (!ownerId) {
       return {
