@@ -40,11 +40,15 @@ function _resolveWorkerSlot(workState, claimOwner) {
  * @returns {{ hasDeps: boolean, allMet: boolean, deps: Array<{ num: number, met: boolean }> } | null}
  */
 function _buildDependencyStatus(currentTask, taskState) {
-  if (!currentTask || !Array.isArray(currentTask.dependencies) || currentTask.dependencies.length === 0) {
+  if (!currentTask) return null;
+  // Use persisted tasksMeta dependencies (aligned with canStartFromState in task-readiness.js)
+  const tasks = taskState?.tasks ?? [];
+  const currentTaskMeta = tasks.find((t) => t.id === `task_${currentTask.num}`);
+  // Backward compat: missing dependencies field → no deps (matches R16 in task-readiness.js)
+  if (!currentTaskMeta || !Array.isArray(currentTaskMeta.dependencies) || currentTaskMeta.dependencies.length === 0) {
     return null;
   }
-  const tasks = taskState?.tasks ?? [];
-  const deps = currentTask.dependencies.map((depNum) => {
+  const deps = currentTaskMeta.dependencies.map((depNum) => {
     const depTask = tasks.find((t) => t.id === `task_${depNum}`);
     return { num: depNum, met: depTask?.status === 'completed' };
   });
@@ -102,7 +106,7 @@ function _buildTaskReason(currentTask, currentTaskIdx, taskData, claimOwner, wor
 
   const parts = [];
   // Task id + progress
-  parts.push(`Task ${currentTaskIdx + 1}/${taskData.length} (${currentTask.id}): ${currentTask.title}`);
+  parts.push(`Task ${currentTaskIdx + 1}/${taskData.length} (task_${currentTask.num}): ${currentTask.title}`);
 
   // Claim + PR slot
   if (claimOwner) {
