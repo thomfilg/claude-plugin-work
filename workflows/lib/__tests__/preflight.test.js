@@ -468,10 +468,8 @@ describe('preflight — pluggable checks (R12, §Pattern — pluggable checks)',
     const result = runPreflight(ctx, { checks });
 
     assert.equal(result.allow, false);
-    assert.ok(
-      result.reasons.includes('CTX_ERR') || result.reasons.includes('RULE_Z'),
-      'at least one deny reason present (context error + checks compose)'
-    );
+    assert.ok(result.reasons.includes('CTX_ERR'), 'context error reason must be present');
+    assert.ok(result.reasons.includes('RULE_Z'), 'check deny reason must be present');
   });
 
   it('check returning undefined is treated as "no opinion" (allow passthrough)', () => {

@@ -260,6 +260,7 @@ function isWriteAllowedPath(filePath, allowedPaths) {
 
   // Check PR{N}/ directory
   if (typeof allowedPaths.prDir === 'string' && allowedPaths.prDir.length > 0) {
+    if (!path.isAbsolute(allowedPaths.prDir)) return false;
     const prResolved = path.resolve(allowedPaths.prDir);
     if (normalized.startsWith(prResolved + path.sep) || normalized === prResolved) {
       return true;
@@ -268,6 +269,7 @@ function isWriteAllowedPath(filePath, allowedPaths) {
 
   // Check task${N}/ directory
   if (typeof allowedPaths.taskDir === 'string' && allowedPaths.taskDir.length > 0) {
+    if (!path.isAbsolute(allowedPaths.taskDir)) return false;
     const taskResolved = path.resolve(allowedPaths.taskDir);
     if (normalized.startsWith(taskResolved + path.sep) || normalized === taskResolved) {
       return true;
@@ -276,6 +278,7 @@ function isWriteAllowedPath(filePath, allowedPaths) {
 
   // Check shared-root whitelist at ticketRoot
   if (typeof allowedPaths.ticketRoot === 'string' && allowedPaths.ticketRoot.length > 0) {
+    if (!path.isAbsolute(allowedPaths.ticketRoot)) return false;
     const ticketResolved = path.resolve(allowedPaths.ticketRoot);
     // File must be directly at ticketRoot (not nested) and in the whitelist
     const dir = path.dirname(normalized);
@@ -353,8 +356,8 @@ function createClaimCheck(params) {
     if (!ctx.state || !ctx.state.tasksMeta) return null;
 
     // No taskNum requested → no claim enforcement needed
-    if (taskNum == null) return null; // no task context → skip claim check
-    // R6: taskNum set but no ownerId → unclaimed task write
+    if (taskNum == null) return null; // no task context → skip
+    // R6: taskNum present but no ownerId → unclaimed task write
     if (!ownerId) {
       return {
         allow: false,
