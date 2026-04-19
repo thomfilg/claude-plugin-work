@@ -400,7 +400,7 @@ describe('work-implement-enforce hook (GH-219 Task 14 — state-based)', () => {
       assert.strictEqual(result.decision, 'approve');
     });
 
-    it('should APPROVE production file when no tdd-phase.json and no developer agent', async () => {
+    it('should BLOCK production file when no tdd-phase.json and no developer agent', async () => {
       const env = createTestEnv('TDD-NOFILE-NOAGENT');
       const tp = makeTranscript('');
       const { result } = await runHookWithEnv(

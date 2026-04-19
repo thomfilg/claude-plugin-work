@@ -172,7 +172,7 @@ function isInImplementPhase(ctx) {
   const bootstrapDone = stepStatus.bootstrap === 'completed';
   const commitReached = stepStatus.commit === 'completed' || stepStatus.commit === 'in_progress';
 
-  // After bootstrap is done, before commit is reached
+  // After bootstrap (brief/spec/tasks) is done, before commit is reached
   return bootstrapDone && !commitReached;
 }
 
@@ -262,11 +262,11 @@ async function main() {
 
   // ── State-based workflow detection (GH-219 R1) ─────────────────────────
   // Load enforcement context via adapter instead of reading transcript
-  const ticketId = getCurrentTaskId();
+  const ticketId = process.env.TICKET_ID || getCurrentTaskId();
 
   // If no ticket ID can be derived, no workflow to enforce
   if (!ticketId) {
-    process.exit(0);
+    process.exit(0); // fail-open: no ticket context
   }
 
   const ctx = loadEnforcementContext(ticketId);

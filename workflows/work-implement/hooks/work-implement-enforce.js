@@ -234,8 +234,8 @@ function buildAllowedPaths(taskBase, safeTicketId) {
     ? parseInt(process.env.WORK_TASK_NUM, 10)
     : null;
 
-  // No task num = legacy mode, skip path gate
-  if (!taskNum || !Number.isInteger(taskNum) || taskNum < 1) return null;
+  // No task num = legacy mode; invalid taskNum = fail-closed
+  if (taskNum == null) return null; if (!Number.isInteger(taskNum) || taskNum < 1) return { prDir: null, taskDir: null, ticketRoot: null };
 
   const ticketRoot = path.join(taskBase, safeTicketId);
   let taskDir = null;
