@@ -129,7 +129,7 @@ function resolveTaskBase() {
     taskBase = process.env.TASKS_BASE || null;
   }
   if (!taskBase) {
-    taskBase = path.join(process.env.HOME, 'worktrees', 'tasks');
+    taskBase = (process.env.HOME || process.env.USERPROFILE) ? path.join(process.env.HOME || process.env.USERPROFILE, 'worktrees', 'tasks') : null;
   }
   return taskBase;
 }
