@@ -116,7 +116,7 @@ function allocateOutputFolder(ticketId, context = {}) {
       }
       const n = context.counters.aiRequestNext;
       if (!Number.isInteger(n) || n < 1) {
-        throw new Error(`Invalid aiRequestNext counter: expected positive integer, got ${JSON.stringify(n)}`);
+        throw new Error(`Invalid aiRequestNext counter: expected positive integer, got ${String(n)}`);
       }
       const seg = `${AI_REQUEST_PREFIX}${n}`; // counter validated above
       return {
@@ -136,7 +136,7 @@ function allocateOutputFolder(ticketId, context = {}) {
     }
     const n = context.counters.userRequestNext;
     if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`Invalid userRequestNext counter: expected positive integer, got ${JSON.stringify(n)}`);
+      throw new Error(`Invalid userRequestNext counter: expected positive integer, got ${String(n)}`);
     }
     const seg = `${USER_REQUEST_PREFIX}${n}`;
     return {
@@ -147,9 +147,13 @@ function allocateOutputFolder(ticketId, context = {}) {
     };
   }
 
+  // ── Reject unknown flow values ───────────────────────────────────────────
+  if (context.flow != null && context.flow !== 'in-flow' && context.flow !== 'out-of-flow') {
+    throw new Error(`Unknown flow type: ${String(context.flow)}. Expected "in-flow", "out-of-flow", or undefined.`);
+  }
+
   // ── Legacy-root fallback ─────────────────────────────────────────────────
   // No flow/task context: return the ticket root directory.
-  // Pairs with tdd-phase-state.js backward-compat legacy read path.
   return {
     kind: 'legacy-root',
     segment: null,
