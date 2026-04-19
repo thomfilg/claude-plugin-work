@@ -326,7 +326,7 @@ function cmdRecordRed(ticketId, args) {
         [...diff.split('\n'), ...staged.split('\n'), ...untracked.split('\n')].filter(Boolean)
       ),
     ];
-  } catch (e) { if (e && e.code !== "MODULE_NOT_FOUND") throw e;
+  } catch {
     // git not available or not a repo
   }
   const testFiles = allChanged.filter((f) => isTestFile(f));

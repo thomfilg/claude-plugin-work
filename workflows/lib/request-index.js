@@ -139,8 +139,8 @@ function acquireLock(lockPath) {
         } catch { /* lock disappeared — retry */ }
         // Yield briefly before retry — fs.accessSync is a no-op syscall
         // that yields to the event loop without busy-spinning or sleeping.
-        try { fs.accessSync(lockPath); } catch { /* expected */ }
-        continue;
+        try { fs.accessSync(lockPath); } catch { /* lock may have been released */ }
+        continue; // retry after brief yield
       }
       throw err;
     }

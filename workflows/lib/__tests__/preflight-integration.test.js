@@ -24,9 +24,8 @@ const path = require('path');
 
 // Isolated TASKS_BASE before any module requires
 const TEMP_TASKS_BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-integ-'));
-const SAVED_TASKS_BASE = process.env.TASKS_BASE;
+const SAVED_TASKS_BASE = process.env.TASKS_BASE; // save for restoration in after()
 process.env.TASKS_BASE = TEMP_TASKS_BASE;
-
 const { describe, it, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 
