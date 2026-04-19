@@ -115,10 +115,8 @@ function allocateOutputFolder(ticketId, context = {}) {
         );
       }
       const n = context.counters.aiRequestNext;
-      if (!Number.isInteger(n) || n < 1) {
-        throw new Error(`Invalid aiRequestNext counter: expected positive integer, got ${String(n)}`);
-      }
-      const seg = `${AI_REQUEST_PREFIX}${n}`; // counter validated above
+      if (!Number.isInteger(n) || n < 1) throw new Error(`Invalid aiRequestNext counter: expected positive integer, got ${String(n)}`);
+      const seg = `${AI_REQUEST_PREFIX}${n}`;
       return {
         kind: 'out-of-flow-ai',
         segment: seg,
@@ -135,9 +133,7 @@ function allocateOutputFolder(ticketId, context = {}) {
       );
     }
     const n = context.counters.userRequestNext;
-    if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`Invalid userRequestNext counter: expected positive integer, got ${String(n)}`);
-    }
+    if (!Number.isInteger(n) || n < 1) throw new Error(`Invalid userRequestNext counter: expected positive integer, got ${String(n)}`);
     const seg = `${USER_REQUEST_PREFIX}${n}`;
     return {
       kind: 'out-of-flow-user',
@@ -159,8 +155,7 @@ function allocateOutputFolder(ticketId, context = {}) {
     segment: null,
     root: ticketRoot,
     ticketRoot,
-  };
-}
+  }; } // end allocateOutputFolder
 
 module.exports = {
   allocateOutputFolder,
