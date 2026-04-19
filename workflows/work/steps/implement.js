@@ -31,8 +31,8 @@ function _readClaimOwner(tasksDir, taskNum) {
 // ─── GH-219 Task 16: Dependency-aware message builders ─────────────────────
 
 /**
- * Resolve the PR{N} worker slot for the current claim owner.
- * Returns the slot string (e.g. "PR1") or null if not applicable.
+ * Resolve the numeric worker slot for the current claim owner.
+ * Returns the slot number as a string (e.g. "2") or null if not applicable.
  *
  * @param {object|null} workState - Full work state
  * @param {string|null} claimOwner - Claim owner id (e.g. "PR1")
@@ -64,12 +64,15 @@ function _buildDependencyStatus(currentTask, taskState) {
   if (!currentTaskMeta || !Array.isArray(currentTaskMeta.dependencies) || currentTaskMeta.dependencies.length === 0) {
     return null;
   }
-  // Iterate persisted dependencies from tasksMeta (aligned with canStartFromState)
-  const deps = currentTaskMeta.dependencies.map((depNum) => {
+  // Build dependency list from persisted tasksMeta (aligned with canStartFromState).
+  // NOTE: This intentionally reads from taskState (persisted), NOT from currentTask.dependencies
+  // (parsed tasks.md), so the displayed status matches the orchestrator's readiness checks.
+  const deps = [];
+  for (const depNum of currentTaskMeta.dependencies) {
     const depTask = tasks.find((t) => t.id === `task_${depNum}`);
-    return { num: depNum, met: depTask?.status === 'completed' }; // resolved via persisted state
-  });
-  return { hasDeps: true, allMet: deps.every((d) => d.met), deps }; // deps from tasksMeta, not tasks.md
+    deps.push({ num: depNum, met: depTask?.status === 'completed' });
+  }
+  return { hasDeps: true, allMet: deps.every((d) => d.met), deps };
 }
 
 /**
@@ -180,11 +183,7 @@ module.exports = function implementStep(add, s, ctx) {
   }
 
   // ─── GH-219 Task 16: dependency-aware context extraction ─────────────
-  const currentTaskId = currentTask?.id ?? null;
-  const currentTaskMeta = currentTaskId
-    ? (taskState?.tasks ?? []).find((t) => t.id === currentTaskId) ?? null
-    : null;
-  // Claim owner derived from .claims/task-N.lock (single source of truth, not tasksMeta)
+  // Claim owner derived from .claims/task-N.lock (single source of truth)
   const claimOwner = currentTask ? _readClaimOwner(tasksDir, currentTask.num) : null;
   const workerSlot = _resolveWorkerSlot(s?.workState, claimOwner); // numeric slot from parallelWorkers
   const depStatus = _buildDependencyStatus(currentTask, taskState);
