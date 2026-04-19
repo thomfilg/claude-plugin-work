@@ -78,7 +78,6 @@ function installCtxMocks({ state = null, tasks = null, subtaskState = null, safe
       loadActiveSubtaskState: (tid) => (typeof subtaskState === 'function' ? subtaskState(tid) : subtaskState),
       allocateWorkerSlot: workState.allocateWorkerSlot,
       releaseWorkerSlot: workState.releaseWorkerSlot,
-      loadState: (tid) => (typeof state === 'function' ? state(tid) : state),
     },
   };
 

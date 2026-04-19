@@ -81,7 +81,7 @@ Action records in `.work-actions.json` use a discriminator to distinguish legacy
 
 ```
 Legacy rows:    { step, timestamp, what, meta? }
-Enforcement:    { kind: 'enforcement', origin, task, phase, action, allow, reason, outputPath, meta? }
+Enforcement:    { kind: 'enforcement', timestamp, origin, task, phase, action, allow, reason, outputPath, meta? }
 ```
 
 ## Step Flow
