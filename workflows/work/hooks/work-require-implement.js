@@ -152,10 +152,9 @@ function isFileAllowed(filePath) {
  * Determine if the workflow is in the implement phase using canonical state.
  * Replaces transcript-based `isWorkCommandActive`.
  *
- * Returns true when:
- *   - workflow is active (status === 'in_progress')
- *   - bootstrap step is completed
- *   - commit step has NOT been reached (not completed or in_progress)
+ * Returns true when the workflow is past bootstrap and before commit.
+ * This covers brief, spec, tasks, and implement phases — enforcement
+ * starts early so all code-editing steps require /work-implement delegation.
  *
  * Uses step statuses rather than currentStep index for robustness
  * against step-registry additions.
