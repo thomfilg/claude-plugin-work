@@ -98,14 +98,16 @@ function createTestEnv(ticketId, stateOverrides = {}) {
   };
 }
 
+const _transcriptPaths = [];
 function makeTranscript(content = '') {
   const tp = path.join(
     os.tmpdir(),
     'test-wie-' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.jsonl'
   );
-  fs.writeFileSync(tp, content);
+  fs.writeFileSync(tp, content); _transcriptPaths.push(tp);
   return tp;
 }
+afterEach(() => { while (_transcriptPaths.length) { try { fs.unlinkSync(_transcriptPaths.pop()); } catch { /* already cleaned */ } } });
 describe('work-implement-enforce hook (GH-219 Task 14 — state-based)', () => {
   it('should APPROVE non-blocked tools (Read, Bash)', async () => {
     const { result } = await runHook({ tool_name: 'Read', tool_input: {} });
