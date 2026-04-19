@@ -19,59 +19,19 @@ const fs = require('fs');
 const path = require('path');
 
 const { USER_REQUEST_PREFIX, AI_REQUEST_PREFIX } = require('./allocate-output-folder');
+const {
+  validateTicketId,
+  sanitizeTicketId,
+  resolveTasksBase,
+  assertPathContainment,
+} = require('./ticket-validation');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const INDEX_FILENAME = '.request-index.json';
 const INDEX_VERSION = 1;
 
-/** @type {RegExp} Reject path-traversal sequences, backslashes, and null bytes */
-const UNSAFE_TICKET_RE = /\.\.|[\\]|\x00/;
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Resolve TASKS_BASE from environment.
- * @returns {string}
- */
-function resolveTasksBase() {
-  if (process.env.TASKS_BASE) return process.env.TASKS_BASE;
-  throw new Error('TASKS_BASE is not configured. Set the TASKS_BASE environment variable.');
-}
-
-/**
- * Validate ticket ID — fail-closed before any filesystem I/O.
- * @param {unknown} ticketId
- */
-function validateTicketId(ticketId) {
-  if (typeof ticketId !== 'string' || ticketId.length === 0) {
-    throw new Error(
-      `Invalid ticket ID: expected non-empty string, received ${typeof ticketId === 'string' ? '""' : typeof ticketId}`
-    );
-  }
-  if (UNSAFE_TICKET_RE.test(ticketId)) {
-    throw new Error(
-      `Invalid ticket ID: contains unsafe characters (path traversal, backslash, or null byte): "${ticketId}"`
-    );
-  }
-}
-
-/**
- * Sanitize ticket ID for filesystem paths using config.safeTicketId when available.
- * @param {string} ticketId
- * @returns {string}
- */
-function sanitizeId(ticketId) {
-  try {
-    const config = require('./config');
-    if (config && typeof config.safeTicketId === 'function') {
-      return config.safeTicketId(ticketId);
-    }
-  } catch {
-    // fallback to raw ID
-  }
-  return ticketId;
-}
 
 /**
  * Resolve the ticket directory path.
@@ -80,14 +40,9 @@ function sanitizeId(ticketId) {
  */
 function ticketDir(ticketId) {
   const base = resolveTasksBase();
-  const dir = path.join(base, sanitizeId(ticketId));
-  // Defense-in-depth: ensure path stays under TASKS_BASE
-  const resolved = path.resolve(dir);
-  const resolvedBase = path.resolve(base);
-  if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + path.sep)) {
-    throw new Error(`ticketDir: resolved path escapes TASKS_BASE: ${dir}`);
-  }
-  return dir; // path-containment verified
+  const dir = path.resolve(base, sanitizeTicketId(ticketId));
+  assertPathContainment(dir, base, 'ticketDir');
+  return dir;
 }
 
 /**
