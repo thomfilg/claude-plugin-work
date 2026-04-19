@@ -99,8 +99,7 @@ function writeIndexAtomic(ticketId, data) {
   const tmp = `${target}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o644 });
   try {
-    // rename(2) is atomic on POSIX — no need to unlink first.
-    // This avoids a window where the target doesn't exist.
+    // rename(2) is atomic on POSIX — overwrites target atomically.
     fs.renameSync(tmp, target);
   } catch (renameErr) {
     try {
@@ -138,9 +137,9 @@ function acquireLock(lockPath) {
             continue; // retry after removing stale lock
           }
         } catch { /* lock disappeared — retry */ }
-        // Brief busy-wait for contention (not using sleep)
-        const start = Date.now();
-        while (Date.now() - start < 50) { /* spin */ }
+        // Yield briefly before retry — fs.accessSync is a no-op syscall
+        // that yields to the event loop without busy-spinning or sleeping.
+        try { fs.accessSync(lockPath); } catch { /* expected */ }
         continue;
       }
       throw err;

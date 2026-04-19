@@ -24,6 +24,7 @@ const path = require('path');
 
 // Isolated TASKS_BASE before any module requires
 const TEMP_TASKS_BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-integ-'));
+const SAVED_TASKS_BASE = process.env.TASKS_BASE;
 process.env.TASKS_BASE = TEMP_TASKS_BASE;
 
 const { describe, it, after, beforeEach } = require('node:test');
@@ -55,11 +56,12 @@ function cleanupTicket(ticketId) {
 }
 
 after(() => {
+  // Restore original TASKS_BASE
+  if (SAVED_TASKS_BASE) process.env.TASKS_BASE = SAVED_TASKS_BASE;
+  else delete process.env.TASKS_BASE;
   try {
     fs.rmSync(TEMP_TASKS_BASE, { recursive: true, force: true });
-  } catch {
-    /* best-effort */
-  }
+  } catch { /* best-effort */ }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
