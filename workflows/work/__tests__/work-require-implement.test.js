@@ -124,6 +124,7 @@ function runHookWithState(input, ticketId, stateOverrides = {}, envExtras = {}) 
     ...process.env,
     TASKS_BASE: fixture.tasksBase,
     WORKTREES_BASE: path.dirname(fixture.tasksBase),
+    TICKET_ID: ticketId,
     ...envExtras,
   };
   return runHookWithEnv(input, env).finally(() => fixture.cleanup());
