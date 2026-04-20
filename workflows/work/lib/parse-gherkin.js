@@ -196,7 +196,7 @@ function validate(parseResult, options) {
 
   if (totalScenarios < minScenarios) {
     validationErrors.push(
-      `Found ${totalScenarios} scenario(s), need at least ${minScenarios}`
+      `Found ${totalScenarios} scenario${totalScenarios === 1 ? '' : 's'}, need at least ${minScenarios}`
     );
   }
 

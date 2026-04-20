@@ -256,6 +256,14 @@ describe('parse-gherkin: parse', () => {
     // No Feature/Scenario structure → no features parsed, error reported
     assert.equal(result.features.length, 0);
     assert.ok(result.errors.length > 0);
+    assert.ok(result.errors[0].includes('No Gherkin section found'));
+  });
+
+  it('handles orphan scenario before any Feature line', () => {
+    const md = '## Test Scenarios (Gherkin)\n  Scenario: Orphan\n    Given something\n';
+    const result = parse(md);
+    // Should not crash; features should be empty or scenario silently dropped
+    assert.equal(result.features.length, 0);
   });
 
   it('recognizes alternate heading "## Test Scenarios" without (Gherkin)', () => {
@@ -293,7 +301,9 @@ describe('parse-gherkin: validate', () => {
     };
     const result = validate(parseResult, { minScenarios: 2 });
     assert.equal(result.valid, false);
-    assert.ok(result.errors.some((e) => /Found 1 scenario.*need at least 2/i.test(e)));
+    // Must use proper singular (no trailing 's' for count of 1)
+    assert.ok(result.errors[0].includes('Found 1 scenario,'));
+    assert.ok(!result.errors[0].includes('scenario(s)'));
   });
 
   it('passes when scenario count is exactly at threshold', () => {
@@ -351,7 +361,26 @@ describe('parse-gherkin: validate', () => {
     const parseResult = { features: [], errors: ['No Gherkin section found'] };
     const result = validate(parseResult);
     assert.equal(result.valid, false);
-    assert.ok(result.errors.some((e) => /Found 0 scenario.*need at least 2/i.test(e)));
+    // Must use proper plural (no parenthesized 's')
+    assert.ok(result.errors[0].includes('Found 0 scenarios,'));
+    assert.ok(!result.errors[0].includes('scenario(s)'));
+  });
+
+  it('reports one error per missing required tag', () => {
+    const parseResult = {
+      features: [{ name: 'F', scenarios: [{ name: 'S', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }] }] }],
+      errors: [],
+    };
+    const result = validate(parseResult, { minScenarios: 1, requireTags: ['@integration', '@e2e'] });
+    assert.equal(result.valid, false);
+    assert.equal(result.errors.length, 1);
+    assert.ok(result.errors[0].includes('@e2e'));
+  });
+
+  it('passes with requireTags: [] and minScenarios: 0', () => {
+    const parseResult = { features: [], errors: [] };
+    const result = validate(parseResult, { minScenarios: 0, requireTags: [] });
+    assert.equal(result.valid, true);
   });
 
   it('uses DEFAULT_MIN_SCENARIOS and DEFAULT_REQUIRED_TAGS when no options given', () => {
@@ -391,5 +420,10 @@ describe('parse-gherkin: hasSkipOverride', () => {
     assert.deepEqual(hasSkipOverride(null), { skip: false });
     assert.deepEqual(hasSkipOverride(undefined), { skip: false });
     assert.deepEqual(hasSkipOverride(''), { skip: false });
+  });
+
+  it('rejects skip comment with whitespace-only reason', () => {
+    const result = hasSkipOverride('<!-- gherkin-skip:   -->');
+    assert.equal(result.skip, false);
   });
 });
