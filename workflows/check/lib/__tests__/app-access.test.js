@@ -1,8 +1,10 @@
 'use strict';
 
-const { describe, it, beforeEach } = require('node:test');
+const { describe, it, beforeEach, after } = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('http');
 const config = require('../../../lib/config');
+const AppAccessStatus = require('../app-access-status');
 
 describe('discoverApps', () => {
   let discoverApps;
@@ -287,5 +289,203 @@ describe('validateManifestEntry', () => {
     });
     assert.equal(result.valid, false);
     assert.ok(result.errors.length >= 3);
+  });
+});
+
+describe('classifyResult', () => {
+  const { classifyResult } = require('../app-access');
+
+  it('returns NOT_CONFIGURED when healthResult is null', () => {
+    assert.equal(classifyResult(null, null), AppAccessStatus.NOT_CONFIGURED);
+  });
+
+  it('returns NOT_CONFIGURED when healthResult is undefined', () => {
+    assert.equal(classifyResult(undefined, undefined), AppAccessStatus.NOT_CONFIGURED);
+  });
+
+  it('returns ACCESS_FAILED when healthResult status is ACCESS_FAILED', () => {
+    const healthResult = { status: AppAccessStatus.ACCESS_FAILED };
+    assert.equal(classifyResult(healthResult, null), AppAccessStatus.ACCESS_FAILED);
+  });
+
+  it('returns READY when health is READY and no testResult', () => {
+    const healthResult = { status: AppAccessStatus.READY };
+    assert.equal(classifyResult(healthResult, null), AppAccessStatus.READY);
+  });
+
+  it('returns READY when health is READY and testResult is undefined', () => {
+    const healthResult = { status: AppAccessStatus.READY };
+    assert.equal(classifyResult(healthResult, undefined), AppAccessStatus.READY);
+  });
+
+  it('returns PASSED when health is READY and testResult.passed is true', () => {
+    const healthResult = { status: AppAccessStatus.READY };
+    assert.equal(classifyResult(healthResult, { passed: true }), AppAccessStatus.PASSED);
+  });
+
+  it('returns TEST_FAILED when health is READY and testResult.passed is false', () => {
+    const healthResult = { status: AppAccessStatus.READY };
+    assert.equal(classifyResult(healthResult, { passed: false }), AppAccessStatus.TEST_FAILED);
+  });
+
+  it('passes through non-READY, non-ACCESS_FAILED status from healthResult', () => {
+    const healthResult = { status: AppAccessStatus.NOT_CONFIGURED };
+    assert.equal(classifyResult(healthResult, null), AppAccessStatus.NOT_CONFIGURED);
+  });
+});
+
+describe('buildAccessPayload', () => {
+  const { buildAccessPayload } = require('../app-access');
+
+  it('returns structured payload with all fields from app and healthResult', () => {
+    const app = { name: 'my-app', defaultPort: 3000, healthEndpoint: '/health', appType: 'api' };
+    const healthResult = {
+      status: AppAccessStatus.READY,
+      url: 'http://host.docker.internal:3000',
+      diagnostics: null,
+    };
+    const payload = buildAccessPayload(app, healthResult);
+    assert.deepStrictEqual(payload, {
+      url: 'http://host.docker.internal:3000',
+      port: 3000,
+      healthEndpoint: '/health',
+      appName: 'my-app',
+      appType: 'api',
+      status: AppAccessStatus.READY,
+      diagnostics: null,
+    });
+  });
+
+  it('returns defaults when healthResult is null', () => {
+    const app = { name: 'my-app', defaultPort: 3000 };
+    const payload = buildAccessPayload(app, null);
+    assert.equal(payload.url, 'http://host.docker.internal:3000');
+    assert.equal(payload.port, 3000);
+    assert.equal(payload.healthEndpoint, '/');
+    assert.equal(payload.appName, 'my-app');
+    assert.equal(payload.appType, 'web');
+    assert.equal(payload.status, AppAccessStatus.NOT_CONFIGURED);
+    assert.equal(payload.diagnostics, null);
+  });
+
+  it('includes diagnostics from healthResult when present', () => {
+    const app = { name: 'my-app', defaultPort: 3000, appType: 'web' };
+    const healthResult = {
+      status: AppAccessStatus.ACCESS_FAILED,
+      url: 'http://host.docker.internal:3000',
+      diagnostics: { lsofOutput: 'node 1234 TCP *:3000' },
+    };
+    const payload = buildAccessPayload(app, healthResult);
+    assert.deepStrictEqual(payload.diagnostics, { lsofOutput: 'node 1234 TCP *:3000' });
+  });
+});
+
+describe('checkHealth', () => {
+  const { checkHealth } = require('../app-access');
+  /** @type {http.Server|null} */
+  let server = null;
+  /** @type {number} */
+  let serverPort = 0;
+
+  /**
+   * Start a test HTTP server that responds with the given status code.
+   * @param {number} statusCode
+   * @returns {Promise<number>} The port the server is listening on
+   */
+  function startServer(statusCode) {
+    return new Promise((resolve) => {
+      server = http.createServer((_req, res) => {
+        res.writeHead(statusCode);
+        res.end('ok');
+      });
+      server.listen(0, '127.0.0.1', () => {
+        serverPort = server.address().port;
+        resolve(serverPort);
+      });
+    });
+  }
+
+  after(async () => {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+      server = null;
+    }
+  });
+
+  it('returns READY on successful health check (200 response)', async () => {
+    const port = await startServer(200);
+    const app = { name: 'test-app', defaultPort: port, healthEndpoint: '/' };
+    const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, timeout: 2000 });
+    assert.equal(result.status, AppAccessStatus.READY);
+    assert.equal(result.url, `http://127.0.0.1:${port}`);
+    assert.equal(result.healthEndpoint, '/');
+    assert.equal(result.responseCode, 200);
+    await new Promise((resolve) => server.close(resolve));
+    server = null;
+  });
+
+  it('returns READY on 301 redirect response', async () => {
+    const port = await startServer(301);
+    const app = { name: 'test-app', defaultPort: port, healthEndpoint: '/' };
+    const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, timeout: 2000 });
+    assert.equal(result.status, AppAccessStatus.READY);
+    assert.equal(result.responseCode, 301);
+    await new Promise((resolve) => server.close(resolve));
+    server = null;
+  });
+
+  it('returns ACCESS_FAILED after retries on connection refused', async () => {
+    // Use a port that is not listening
+    const app = { name: 'test-app', defaultPort: 59999, healthEndpoint: '/' };
+    const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, retryInterval: 50, timeout: 1000 });
+    assert.equal(result.status, AppAccessStatus.ACCESS_FAILED);
+    assert.equal(result.responseCode, null);
+    assert.ok(result.error);
+    assert.ok(result.diagnostics);
+  });
+
+  it('returns ACCESS_FAILED on 503 response after retries', async () => {
+    const port = await startServer(503);
+    const app = { name: 'test-app', defaultPort: port, healthEndpoint: '/' };
+    const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, retryInterval: 50, timeout: 2000 });
+    assert.equal(result.status, AppAccessStatus.ACCESS_FAILED);
+    assert.equal(result.responseCode, 503);
+    assert.equal(result.error, 'HTTP 503');
+    await new Promise((resolve) => server.close(resolve));
+    server = null;
+  });
+
+  it('includes diagnostics with lsofOutput in failure result', async () => {
+    const app = { name: 'test-app', defaultPort: 59998, healthEndpoint: '/' };
+    const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, retryInterval: 50, timeout: 1000 });
+    assert.equal(result.status, AppAccessStatus.ACCESS_FAILED);
+    assert.ok('lsofOutput' in result.diagnostics);
+    assert.equal(typeof result.diagnostics.lsofOutput, 'string');
+  });
+
+  it('uses default healthEndpoint "/" when app has none', async () => {
+    const port = await startServer(200);
+    const app = { name: 'test-app', defaultPort: port };
+    const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, timeout: 2000 });
+    assert.equal(result.healthEndpoint, '/');
+    await new Promise((resolve) => server.close(resolve));
+    server = null;
+  });
+
+  it('retries before failing on non-success status', async () => {
+    let requestCount = 0;
+    server = http.createServer((_req, res) => {
+      requestCount++;
+      res.writeHead(500);
+      res.end('error');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    const app = { name: 'test-app', defaultPort: port, healthEndpoint: '/' };
+    const result = await checkHealth(app, { host: '127.0.0.1', retries: 3, retryInterval: 50, timeout: 2000 });
+    assert.equal(result.status, AppAccessStatus.ACCESS_FAILED);
+    assert.equal(requestCount, 3);
+    await new Promise((resolve) => server.close(resolve));
+    server = null;
   });
 });
