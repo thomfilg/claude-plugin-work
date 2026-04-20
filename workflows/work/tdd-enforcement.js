@@ -20,6 +20,7 @@ Initialize TDD state:
 
 Note: --task <N> is required when working inside a task-scoped workflow (tasks.md exists).
 Omit --task when running standalone /work-implement without task context.
+All subcommands (init, record-*, transition, exception) support --task.
 
 For each behavior change, cycle through RED → GREEN → REFACTOR:
 
@@ -49,7 +50,7 @@ Rules:
 - Evidence is recorded by the SCRIPT — it runs git diff and test commands itself.
 - Do NOT make local git commits during the cycle — the commit step handles that.
 - If the change is purely mechanical (config-only, no behavior change):
-  node <TDD_STATE_PATH> exception <TICKET_ID> --task <N> --reason "config-only change, no testable behavior"
+  node <TDD_STATE_PATH> exception <TICKET_ID> --task <N> --reason "config-only change, no testable behavior"  # --task supported
 `.trim();
 
 /**
