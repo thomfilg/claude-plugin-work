@@ -440,8 +440,10 @@ function readWorkState(ticketId) {
     let stepName;
     try {
       const { STEP_ORDER } = require(path.join(__dirname, '..', '..', 'work', 'step-registry'));
-      if (stepIndex >= 0 && stepIndex < STEP_ORDER.length) {
-        stepName = STEP_ORDER[stepIndex];
+      // currentStep in .work-state.json is 1-based (see work-state.js: stepIndex + 1)
+      const zeroBasedIndex = stepIndex - 1;
+      if (zeroBasedIndex >= 0 && zeroBasedIndex < STEP_ORDER.length) {
+        stepName = STEP_ORDER[zeroBasedIndex];
       }
     } catch {}
 
