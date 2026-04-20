@@ -72,7 +72,7 @@ describe('work-state.js', () => {
       cleanupTempWorkState(TICKET);
     });
 
-    it('should create state with all 16 steps as pending', async () => {
+    it('should create state with all 18 steps as pending', async () => {
       const { result, code } = await runWorkState(['init', TICKET]);
       assert.equal(code, 0);
       assert.equal(result.ticketId, TICKET);

@@ -55,9 +55,9 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
     }
   }
 
-  // GH-244: Helper for STEPS.spec_gate verify. Returns true iff spec.md
-  // exists for `ticketId` AND either hasSkipOverride returns true OR
-  // parse() + validate() passes. Fail-closed on any read/parse error.
+  // GH-244: Helper for STEPS.spec_gate verify. Returns true if spec is
+  // disabled, spec.md is missing (step SKIPs), skip override is present,
+  // or parse() + validate() passes. Fail-closed on any read/parse error.
   function verifySpecGate(ticketId) {
     // If spec is disabled, gate is auto-verified (nothing to validate)
     if (process.env.WORK_SPEC_ENABLED === '0') return true;
