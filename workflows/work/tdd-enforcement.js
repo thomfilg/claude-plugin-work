@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { taskSegment } = require('../lib/allocate-output-folder');
 
 const TDD_PROTOCOL = `
 TDD protocol (hook-enforced for this step):
@@ -53,10 +54,13 @@ Rules:
  * @param {string} tasksBase - TASKS_BASE root directory
  * @param {string} ticketId
  * @param {string} stepId - unused (reserved for multi-step enforcement)
+ * @param {number} [taskNum] - 1-indexed task number; when provided, reads from per-task path
  * @returns {{exists: boolean, parseError: boolean, evidence: object|null}}
  */
-function readTddEvidence(tasksBase, ticketId, stepId) {
-  const phasePath = path.join(tasksBase, ticketId, 'tdd-phase.json');
+function readTddEvidence(tasksBase, ticketId, stepId, taskNum) {
+  const phasePath = taskNum != null
+    ? path.join(tasksBase, ticketId, taskSegment(taskNum), 'tdd-phase.json')
+    : path.join(tasksBase, ticketId, 'tdd-phase.json');
   try {
     if (!fs.existsSync(phasePath)) return { exists: false, parseError: false, evidence: null };
   } catch {
