@@ -718,4 +718,151 @@ describe('tdd-phase-state CLI', () => {
       assert.strictEqual(exitCode, 0);
     });
   });
+  describe('multi-task TDD accumulation (GH-219 Task 5)', () => {
+    it('5.1: accumulates independent per-task state across full TDD lifecycle', () => {
+      const ticketId = 'TEST-MT1';
+      const tasksBase = path.join(homeDir, 'worktrees', 'tasks');
+      const failScript = createExitScript(scriptDir, 1);
+      const passScript = createExitScript(scriptDir, 0);
+
+      // 1. Init task 1
+      const initResult1 = runCli(`init ${ticketId} --task 1`, homeDir);
+      assert.strictEqual(initResult1.exitCode, 0);
+
+      // 2. Verify task1/tdd-phase.json exists with currentPhase: 'red', cycles: []
+      const task1Path = path.join(tasksBase, ticketId, 'task1', 'tdd-phase.json');
+      assert.ok(fs.existsSync(task1Path), 'task1/tdd-phase.json should exist after init');
+      const task1StateAfterInit = JSON.parse(fs.readFileSync(task1Path, 'utf8'));
+      assert.strictEqual(task1StateAfterInit.currentPhase, 'red');
+      assert.deepStrictEqual(task1StateAfterInit.cycles, []);
+
+      // 3. Record red for task 1 — requires a git repo with changed test files
+      const gitRepo = createTempGitRepo();
+      fs.writeFileSync(path.join(gitRepo, 'feature.test.ts'), 'describe("feature", () => {});');
+      execSync('git add feature.test.ts', { cwd: gitRepo, stdio: 'pipe' });
+      const redResult = runCli(
+        `record-red ${ticketId} --task 1 --cmd "${failScript}"`,
+        homeDir,
+        gitRepo
+      );
+      assert.strictEqual(redResult.exitCode, 0, `record-red should succeed, got: ${redResult.stderr || ''}`);
+
+      // 4. Transition task 1 to green
+      const transResult = runCli(`transition ${ticketId} green --task 1`, homeDir);
+      assert.strictEqual(transResult.exitCode, 0);
+
+      // 5. Record green for task 1
+      const greenResult = runCli(
+        `record-green ${ticketId} --task 1 --cmd "${passScript}"`,
+        homeDir
+      );
+      assert.strictEqual(greenResult.exitCode, 0, `record-green should succeed, got: ${greenResult.stderr || ''}`);
+
+      // 6. Verify task1/tdd-phase.json has non-empty cycles with red AND green evidence
+      const task1Final = JSON.parse(fs.readFileSync(task1Path, 'utf8'));
+      assert.ok(task1Final.cycles.length > 0, 'cycles should be non-empty');
+      assert.ok(task1Final.cycles[0].red, 'cycle should have red evidence');
+      assert.ok(task1Final.cycles[0].green, 'cycle should have green evidence');
+      assert.strictEqual(task1Final.cycles[0].red.testExitCode, 1);
+      assert.strictEqual(task1Final.cycles[0].green.testExitCode, 0);
+
+      // Snapshot task1 state for later comparison
+      const task1Snapshot = fs.readFileSync(task1Path, 'utf8');
+
+      // 7. Init task 2
+      const initResult2 = runCli(`init ${ticketId} --task 2`, homeDir);
+      assert.strictEqual(initResult2.exitCode, 0);
+
+      // 8. Verify task1/tdd-phase.json is UNMODIFIED
+      const task1AfterTask2Init = fs.readFileSync(task1Path, 'utf8');
+      assert.strictEqual(
+        task1AfterTask2Init,
+        task1Snapshot,
+        'task1/tdd-phase.json must not be modified by task 2 init'
+      );
+
+      // 9. Record red for task 2
+      const gitRepo2 = createTempGitRepo();
+      fs.writeFileSync(path.join(gitRepo2, 'other.test.ts'), 'describe("other", () => {});');
+      execSync('git add other.test.ts', { cwd: gitRepo2, stdio: 'pipe' });
+      const redResult2 = runCli(
+        `record-red ${ticketId} --task 2 --cmd "${failScript}"`,
+        homeDir,
+        gitRepo2
+      );
+      assert.strictEqual(redResult2.exitCode, 0, `record-red task 2 should succeed, got: ${redResult2.stderr || ''}`);
+
+      // 10. Verify both state files exist independently
+      const task2Path = path.join(tasksBase, ticketId, 'task2', 'tdd-phase.json');
+      assert.ok(fs.existsSync(task1Path), 'task1/tdd-phase.json should still exist');
+      assert.ok(fs.existsSync(task2Path), 'task2/tdd-phase.json should exist');
+
+      // Verify task2 has its own red evidence
+      const task2State = JSON.parse(fs.readFileSync(task2Path, 'utf8'));
+      assert.ok(task2State.cycles.length > 0, 'task2 cycles should be non-empty');
+      assert.ok(task2State.cycles[0].red, 'task2 cycle should have red evidence');
+      assert.strictEqual(task2State.cycles[0].red.testExitCode, 1);
+
+      // Clean up git repos
+      fs.rmSync(gitRepo, { recursive: true, force: true });
+      fs.rmSync(gitRepo2, { recursive: true, force: true });
+    });
+
+    it('5.2: no root tdd-phase.json created when using per-task paths', () => {
+      const ticketId = 'TEST-MT2';
+      const tasksBase = path.join(homeDir, 'worktrees', 'tasks');
+
+      // Init and record for task 1
+      runCli(`init ${ticketId} --task 1`, homeDir);
+      const task1Path = path.join(tasksBase, ticketId, 'task1', 'tdd-phase.json');
+      const state1 = JSON.parse(fs.readFileSync(task1Path, 'utf8'));
+      state1.currentPhase = 'green';
+      state1.cycles = [
+        {
+          cycle: 1,
+          red: {
+            testFiles: ['a.test.ts'],
+            testCommand: 'echo test',
+            testExitCode: 1,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ];
+      fs.writeFileSync(task1Path, JSON.stringify(state1, null, 2));
+
+      const passScript = createExitScript(scriptDir, 0);
+      runCli(`record-green ${ticketId} --task 1 --cmd "${passScript}"`, homeDir);
+
+      // Init and record for task 2
+      runCli(`init ${ticketId} --task 2`, homeDir);
+      const task2Path = path.join(tasksBase, ticketId, 'task2', 'tdd-phase.json');
+      const state2 = JSON.parse(fs.readFileSync(task2Path, 'utf8'));
+      state2.currentPhase = 'green';
+      state2.cycles = [
+        {
+          cycle: 1,
+          red: {
+            testFiles: ['b.test.ts'],
+            testCommand: 'echo test',
+            testExitCode: 1,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ];
+      fs.writeFileSync(task2Path, JSON.stringify(state2, null, 2));
+      runCli(`record-green ${ticketId} --task 2 --cmd "${passScript}"`, homeDir);
+
+      // Assert NO root tdd-phase.json exists
+      const rootPath = path.join(tasksBase, ticketId, 'tdd-phase.json');
+      assert.ok(
+        !fs.existsSync(rootPath),
+        'Root tdd-phase.json must NOT exist when using per-task paths'
+      );
+
+      // Confirm per-task files DO exist
+      assert.ok(fs.existsSync(task1Path), 'task1/tdd-phase.json should exist');
+      assert.ok(fs.existsSync(task2Path), 'task2/tdd-phase.json should exist');
+    });
+  });
+
 });
