@@ -23,8 +23,7 @@ Omit --task when running standalone /work-implement without task context.
 All subcommands (init, record-*, transition, exception) support --task when task context exists.
 
 For each behavior change, cycle through RED → GREEN → REFACTOR.
-Each phase has hook-enforced file restrictions:
-
+Each phase has hook-enforced file restrictions.
 RED Phase (write failing tests — hook enforced):
 - Hook BLOCKS Write/Edit to any non .test/.spec file
 - Write focused tests (1-3) that express expected behavior
