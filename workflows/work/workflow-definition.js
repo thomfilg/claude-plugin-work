@@ -59,6 +59,8 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
   // exists for `ticketId` AND either hasSkipOverride returns true OR
   // parse() + validate() passes. Fail-closed on any read/parse error.
   function verifySpecGate(ticketId) {
+    // If spec is disabled, gate is auto-verified (nothing to validate)
+    if (process.env.WORK_SPEC_ENABLED === '0') return true;
     try {
       const specPath = path.join(TASKS_BASE, safeTicketPath(ticketId), 'spec.md');
       if (!fs.existsSync(specPath)) return false;

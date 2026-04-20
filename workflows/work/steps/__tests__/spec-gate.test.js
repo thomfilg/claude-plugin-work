@@ -91,6 +91,16 @@ const SPEC_INVALID_GHERKIN = [
   '',
 ].join('\n');
 
+const SPEC_MALFORMED_GHERKIN = [
+  '# Spec',
+  '',
+  '## Test Scenarios (Gherkin)',
+  '',
+  'Some free text without any Feature or Scenario keywords.',
+  'This should trigger parse errors (no features found).',
+  '',
+].join('\n');
+
 const SPEC_WITH_SKIP_OVERRIDE = [
   '# Spec',
   '',
@@ -208,7 +218,7 @@ describe('spec-gate step', () => {
     assert.match(entries[0].reason, /0 @e2e/);
   });
 
-  // Case 6: Validation fails
+  // Case 6a: Validation fails (valid parse but thresholds not met)
   it('RUNs with error messages when validation fails', () => {
     const dir = makeTmpTasksDir(SPEC_INVALID_GHERKIN);
     createdDirs.push(dir);
@@ -219,6 +229,22 @@ describe('spec-gate step', () => {
     assert.equal(entries[0].action, 'RUN');
     assert.equal(entries[0].command, '/spec');
     assert.match(entries[0].reason, /need at least 2|No @integration or @e2e/i);
+    assert.equal(entries[0].agentType, 'skill');
+    assert.equal(entries[0].agentPrompt, '/spec');
+  });
+
+  // Case 6b: Parse errors (malformed gherkin with no features)
+  it('RUNs with parse errors when Gherkin is malformed', () => {
+    const dir = makeTmpTasksDir(SPEC_MALFORMED_GHERKIN);
+    createdDirs.push(dir);
+    const { add, entries } = makeAdd();
+    specGateStep(add, makeState(), makeCtx({ tasksDir: dir }));
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].step, STEPS.spec_gate);
+    assert.equal(entries[0].action, 'RUN');
+    assert.equal(entries[0].command, '/spec');
+    // Should include parse-level error about no Gherkin section/features found
+    assert.match(entries[0].reason, /No Gherkin section found/i);
     assert.equal(entries[0].agentType, 'skill');
     assert.equal(entries[0].agentPrompt, '/spec');
   });

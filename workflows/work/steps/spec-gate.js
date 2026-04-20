@@ -60,10 +60,12 @@ function specGateStep(add, s, ctx) {
     return;
   }
 
-  // Case 5: Validation passes
+  // Case 5+6: Parse and validate
   const parsed = parseGherkin.parse(markdown);
+  // If parse found errors and no features, report parse errors in the RUN reason
   const validation = parseGherkin.validate(parsed);
-  if (validation.valid) {
+  const allErrors = [...parsed.errors, ...validation.errors];
+  if (validation.valid && parsed.errors.length === 0) {
     const totalScenarios = parsed.features.reduce((sum, f) => sum + f.scenarios.length, 0);
     const integrationCount = parsed.features.reduce((sum, f) =>
       sum + f.scenarios.filter((sc) => sc.tags.includes('@integration')).length, 0);
@@ -74,8 +76,8 @@ function specGateStep(add, s, ctx) {
     return;
   }
 
-  // Case 6: Validation fails → RUN with retry to spec
-  add(STEPS.spec_gate, 'RUN', '/spec', validation.errors.join('; '), {
+  // Case 6: Validation or parse fails → RUN with retry to spec
+  add(STEPS.spec_gate, 'RUN', '/spec', allErrors.join('; '), {
     agentType: 'skill',
     agentPrompt: '/spec',
   });
