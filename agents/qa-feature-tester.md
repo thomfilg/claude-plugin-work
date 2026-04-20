@@ -108,7 +108,7 @@ Report one of these five statuses for each app:
 | `PASSED` | App is accessible and all tests passed |
 
 Valid failure statuses: `ACCESS_FAILED` (Playwright unavailable, connection refused), `BLOCKED` (environment issue).
-Never use: ~~PARTIAL PASS~~, ~~PASS (API only)~~, ~~INFRASTRUCTURE_FAILURE~~ (use `ACCESS_FAILED` instead).
+Deprecated statuses (never use): ~~PARTIAL PASS~~, ~~PASS (API only)~~, ~~INFRASTRUCTURE_FAILURE~~ (replaced by `ACCESS_FAILED`).
 
 **Forbidden test commands:** `pnpm test`, `vitest`, `jest`, `pnpm test:smoke`, `pnpm test:integration`, `pnpm test:e2e`. You are a manual tester using browser and curl.
 

@@ -44,7 +44,7 @@ describe('discoverApps', () => {
   it('returns empty array when WEB_APPS is undefined', () => {
     config.WEB_APPS = undefined;
     const apps = discoverApps();
-    assert.deepStrictEqual(apps, []);
+    assert.deepStrictEqual(apps, []); // empty when WEB_APPS undefined
   });
 
   it('returns entries for single-app repo', () => {
