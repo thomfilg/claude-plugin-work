@@ -75,7 +75,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
       return false;
     }
   }
-  // TODO(GH-244): Add verifySpecGate unit tests to workflow-definition.test.js
+  // GH-244: verifySpecGate tests added in workflow-definition.test.js
 
   // ─── Declarative policy config (GH-206 Task 12) ───────────────────────────
   //
