@@ -172,6 +172,33 @@ describe('validateManifestEntry', () => {
     assert.ok(result.errors[0].includes('dangerous shell characters'));
   });
 
+  it('rejects startCommand with > (output redirection)', () => {
+    const result = validateManifestEntry({
+      name: 'bad-app',
+      startCommand: 'pnpm dev > /tmp/out',
+    });
+    assert.equal(result.valid, false);
+    assert.ok(result.errors[0].includes('dangerous shell characters'));
+  });
+
+  it('rejects startCommand with < (input redirection)', () => {
+    const result = validateManifestEntry({
+      name: 'bad-app',
+      startCommand: 'pnpm dev < /tmp/in',
+    });
+    assert.equal(result.valid, false);
+    assert.ok(result.errors[0].includes('dangerous shell characters'));
+  });
+
+  it('rejects startCommand with ${VAR} (variable expansion)', () => {
+    const result = validateManifestEntry({
+      name: 'bad-app',
+      startCommand: 'pnpm dev ${HOME}',
+    });
+    assert.equal(result.valid, false);
+    assert.ok(result.errors[0].includes('dangerous shell characters'));
+  });
+
   // Port range tests
   it('rejects port below 1024', () => {
     const result = validateManifestEntry({

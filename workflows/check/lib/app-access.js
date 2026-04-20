@@ -1,6 +1,7 @@
 'use strict';
 
 const config = require('../../lib/config');
+const AppAccessStatus = require('./app-access-status');
 
 /**
  * Validate a manifest entry for security and correctness.
@@ -19,7 +20,7 @@ function validateManifestEntry(entry) {
 
   // Shell injection prevention for startCommand
   if (entry.startCommand) {
-    const dangerousChars = /[;|`]|\$\(|&&/;
+    const dangerousChars = /[;|<>`]|\$[\({]|&&|>>/;
     if (dangerousChars.test(entry.startCommand)) {
       errors.push(`startCommand contains dangerous shell characters: ${entry.startCommand}`);
     }
@@ -47,30 +48,17 @@ function validateManifestEntry(entry) {
  * @returns {Array<object>} Array of validated app configurations
  */
 function discoverApps() {
-  const apps = config.WEB_APPS;
-  if (!apps || !Array.isArray(apps) || apps.length === 0) return [];
-
-  return apps
-    .filter(app => app && app.name)
-    .map(app => {
-      const appType = app.appType || 'web';
-      return {
-        name: app.name,
-        defaultPort: app.defaultPort,
-        type: app.type,
-        appType,
-        healthEndpoint: app.healthEndpoint || (appType === 'api' ? '/health' : '/'),
-        startCommand: app.startCommand || `pnpm dev --filter=${app.name}`,
-      };
-    })
-    .filter(app => {
-      const validation = validateManifestEntry(app);
-      if (!validation.valid) {
-        console.error(`[app-access] Skipping invalid app "${app.name}": ${validation.errors.join(', ')}`);
-        return false;
-      }
-      return true;
-    });
+  if (!config.WEB_APPS || !Array.isArray(config.WEB_APPS) || config.WEB_APPS.length === 0) return [];
+  const map = config.webAppsMap();
+  const entries = Object.entries(map).map(([name, fields]) => ({ name, ...fields }));
+  return entries.filter(app => {
+    const validation = validateManifestEntry(app);
+    if (!validation.valid) {
+      console.error(`[app-access] Skipping invalid app "${app.name}": ${validation.errors.join(', ')}`);
+      return false;
+    }
+    return true;
+  });
 }
 
-module.exports = { discoverApps, validateManifestEntry };
+module.exports = { discoverApps, validateManifestEntry, AppAccessStatus };
