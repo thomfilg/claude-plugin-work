@@ -1481,4 +1481,9 @@ module.exports = {
   getChangedPaths,
   initState,
   getCodeContext,
+  // Gate-check exports: used by workflow-definition.js verify()
+  ghExec,
+  getPRInfo,
+  checkCI,
+  getReviews,
 };
