@@ -506,8 +506,13 @@ describe('checkHealth', () => {
   });
 
   it('returns ACCESS_FAILED after retries on connection refused', async () => {
-    // Use a high ephemeral port that is extremely unlikely to be in use
-    const app = { name: 'test-app', defaultPort: 59999, healthEndpoint: '/' };
+    // Bind and immediately close a server to get a guaranteed-unused port
+    const net = require('net');
+    const srv = net.createServer();
+    srv.listen(0);
+    const unusedPort = srv.address().port;
+    srv.close();
+    const app = { name: 'test-app', defaultPort: unusedPort, healthEndpoint: '/' };
     const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, retryInterval: 50, timeout: 1000 });
     assert.equal(result.status, AppAccessStatus.ACCESS_FAILED);
     assert.equal(result.responseCode, null);
@@ -527,7 +532,12 @@ describe('checkHealth', () => {
   });
 
   it('includes diagnostics with lsofOutput in failure result', async () => {
-    const app = { name: 'test-app', defaultPort: 59998, healthEndpoint: '/' };
+    const net = require('net');
+    const srv = net.createServer();
+    srv.listen(0);
+    const unusedPort = srv.address().port;
+    srv.close();
+    const app = { name: 'test-app', defaultPort: unusedPort, healthEndpoint: '/' };
     const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, retryInterval: 50, timeout: 1000 });
     assert.equal(result.status, AppAccessStatus.ACCESS_FAILED);
     assert.ok('lsofOutput' in result.diagnostics);
