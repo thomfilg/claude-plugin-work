@@ -18,6 +18,9 @@ Use tdd-phase-state.js CLI for evidence recording and phase transitions.
 Initialize TDD state:
   node <TDD_STATE_PATH> init <TICKET_ID> --task <N>
 
+Note: --task <N> is required when working inside a task-scoped workflow (tasks.md exists).
+Omit --task when running standalone /work-implement without task context.
+
 For each behavior change, cycle through RED → GREEN → REFACTOR:
 
 RED Phase (write failing tests):

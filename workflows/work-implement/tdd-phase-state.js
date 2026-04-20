@@ -466,12 +466,14 @@ function cmdException(ticketId, args) {
   if (!reason || !reason.trim()) {
     errorExit('Reason cannot be empty.');
   }
+  const taskNum = parseTask(args);
+  const opts = taskNum ? { taskNum } : undefined;
   const state = {
     currentPhase: 'exception',
     exception: reason,
     cycles: [],
   };
-  writeState(ticketId, state);
+  writeState(ticketId, state, opts);
   successOut({ ok: true, phase: 'exception', exception: reason });
 }
 

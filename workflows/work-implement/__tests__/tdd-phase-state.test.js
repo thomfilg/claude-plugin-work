@@ -330,6 +330,40 @@ describe('tdd-phase-state CLI', () => {
         `Expected error about empty reason, got: ${stderr}`
       );
     });
+
+    it('with --task writes to per-task path (GH-219 PR6)', () => {
+      const { stdout, exitCode } = runCli(
+        'exception TEST-EXC4 --task 2 --reason "config-only change"',
+        homeDir
+      );
+      assert.strictEqual(exitCode, 0);
+      const result = JSON.parse(stdout);
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.phase, 'exception');
+
+      // Verify state file is at per-task path
+      const perTaskPath = path.join(
+        homeDir, 'worktrees', 'tasks', 'TEST-EXC4', 'task2', 'tdd-phase.json'
+      );
+      assert.ok(fs.existsSync(perTaskPath), `Expected per-task state at ${perTaskPath}`);
+      const state = JSON.parse(fs.readFileSync(perTaskPath, 'utf8'));
+      assert.strictEqual(state.currentPhase, 'exception');
+      assert.strictEqual(state.exception, 'config-only change');
+
+      // Root path should NOT exist
+      const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-EXC4', 'tdd-phase.json');
+      assert.ok(!fs.existsSync(rootPath), 'Root state should NOT be created when --task is used');
+    });
+
+    it('without --task writes to root path (backward compat)', () => {
+      const { exitCode } = runCli(
+        'exception TEST-EXC5 --reason "no task context"',
+        homeDir
+      );
+      assert.strictEqual(exitCode, 0);
+      const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-EXC5', 'tdd-phase.json');
+      assert.ok(fs.existsSync(rootPath), `Expected root state at ${rootPath}`);
+    });
   });
 
   describe('phase validation in record commands', () => {
