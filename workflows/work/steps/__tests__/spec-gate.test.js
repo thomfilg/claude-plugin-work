@@ -243,8 +243,8 @@ describe('spec-gate step', () => {
     assert.equal(entries[0].step, STEPS.spec_gate);
     assert.equal(entries[0].action, 'RUN');
     assert.equal(entries[0].command, '/spec');
-    // Should include parse-level error about no Gherkin section/features found
-    assert.match(entries[0].reason, /No Gherkin section found/i);
+    // Should include parse-level error about no features/structure found
+    assert.match(entries[0].reason, /No Feature\/Scenario structure found/i);
     assert.equal(entries[0].agentType, 'skill');
     assert.equal(entries[0].agentPrompt, '/spec');
   });

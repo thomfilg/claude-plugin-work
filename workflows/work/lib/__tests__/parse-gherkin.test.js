@@ -256,7 +256,7 @@ describe('parse-gherkin: parse', () => {
     // No Feature/Scenario structure → no features parsed, error reported
     assert.equal(result.features.length, 0);
     assert.ok(result.errors.length > 0);
-    assert.ok(result.errors[0].includes('No Gherkin section found'));
+    assert.ok(result.errors[0].includes('No Feature/Scenario structure found'));
   });
 
   it('handles orphan scenario before any Feature line', () => {
@@ -296,7 +296,7 @@ describe('parse-gherkin: validate', () => {
 
   it('fails when scenario count is below threshold', () => {
     const parseResult = {
-      features: [{ name: 'F', scenarios: [{ name: 'S', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }] }] }],
+      features: [{ name: 'F', scenarios: [{ name: 'S', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'When', text: 'y' }, { keyword: 'Then', text: 'z' }] }] }],
       errors: [],
     };
     const result = validate(parseResult, { minScenarios: 2 });
@@ -311,8 +311,8 @@ describe('parse-gherkin: validate', () => {
       features: [{
         name: 'F',
         scenarios: [
-          { name: 'S1', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }] },
-          { name: 'S2', tags: [], steps: [{ keyword: 'Given', text: 'y' }] },
+          { name: 'S1', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'When', text: 'y' }, { keyword: 'Then', text: 'z' }] },
+          { name: 'S2', tags: [], steps: [{ keyword: 'Given', text: 'a' }, { keyword: 'When', text: 'b' }, { keyword: 'Then', text: 'c' }] },
         ],
       }],
       errors: [],
@@ -332,8 +332,8 @@ describe('parse-gherkin: validate', () => {
       features: [{
         name: 'F',
         scenarios: [
-          { name: 'S1', tags: ['@unit'], steps: [{ keyword: 'Given', text: 'x' }] },
-          { name: 'S2', tags: ['@unit'], steps: [{ keyword: 'Given', text: 'y' }] },
+          { name: 'S1', tags: ['@unit'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'When', text: 'y' }, { keyword: 'Then', text: 'z' }] },
+          { name: 'S2', tags: ['@unit'], steps: [{ keyword: 'Given', text: 'a' }, { keyword: 'When', text: 'b' }, { keyword: 'Then', text: 'c' }] },
         ],
       }],
       errors: [],
@@ -348,8 +348,8 @@ describe('parse-gherkin: validate', () => {
       features: [{
         name: 'F',
         scenarios: [
-          { name: 'S1', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }] },
-          { name: 'S2', tags: [], steps: [{ keyword: 'Given', text: 'y' }] },
+          { name: 'S1', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'When', text: 'y' }, { keyword: 'Then', text: 'z' }] },
+          { name: 'S2', tags: [], steps: [{ keyword: 'Given', text: 'a' }, { keyword: 'When', text: 'b' }, { keyword: 'Then', text: 'c' }] },
         ],
       }],
       errors: [],
@@ -363,8 +363,8 @@ describe('parse-gherkin: validate', () => {
       features: [{
         name: 'F',
         scenarios: [
-          { name: 'S1', tags: ['@e2e'], steps: [{ keyword: 'Given', text: 'x' }] },
-          { name: 'S2', tags: [], steps: [{ keyword: 'Given', text: 'y' }] },
+          { name: 'S1', tags: ['@e2e'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'When', text: 'y' }, { keyword: 'Then', text: 'z' }] },
+          { name: 'S2', tags: [], steps: [{ keyword: 'Given', text: 'a' }, { keyword: 'When', text: 'b' }, { keyword: 'Then', text: 'c' }] },
         ],
       }],
       errors: [],
@@ -378,7 +378,7 @@ describe('parse-gherkin: validate', () => {
       features: [{
         name: 'F',
         scenarios: [
-          { name: 'S1', tags: ['@e2e'], steps: [{ keyword: 'Given', text: 'x' }] },
+          { name: 'S1', tags: ['@e2e'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'When', text: 'y' }, { keyword: 'Then', text: 'z' }] },
         ],
       }],
       errors: [],
@@ -398,7 +398,7 @@ describe('parse-gherkin: validate', () => {
 
   it('reports single error when none of the required tags are present (OR semantics)', () => {
     const parseResult = {
-      features: [{ name: 'F', scenarios: [{ name: 'S', tags: ['@unit'], steps: [{ keyword: 'Given', text: 'x' }] }] }],
+      features: [{ name: 'F', scenarios: [{ name: 'S', tags: ['@unit'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'When', text: 'y' }, { keyword: 'Then', text: 'z' }] }] }],
       errors: [],
     };
     const result = validate(parseResult, { minScenarios: 1, requireTags: ['@integration', '@e2e'] });
@@ -417,6 +417,65 @@ describe('parse-gherkin: validate', () => {
   it('uses DEFAULT_MIN_SCENARIOS and DEFAULT_REQUIRED_TAGS when no options given', () => {
     assert.equal(DEFAULT_MIN_SCENARIOS, 2);
     assert.deepEqual(DEFAULT_REQUIRED_TAGS, ['@integration', '@e2e']);
+  });
+
+  it('fails when scenario is missing When step', () => {
+    const parseResult = {
+      features: [{
+        name: 'F',
+        scenarios: [
+          { name: 'Missing When', tags: ['@integration'], steps: [{ keyword: 'Given', text: 'x' }, { keyword: 'Then', text: 'z' }] },
+          { name: 'Complete', tags: [], steps: [{ keyword: 'Given', text: 'a' }, { keyword: 'When', text: 'b' }, { keyword: 'Then', text: 'c' }] },
+        ],
+      }],
+      errors: [],
+    };
+    const result = validate(parseResult, { minScenarios: 1, requireTags: ['@integration'] });
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('Missing When') && e.includes('When')));
+  });
+
+  it('fails when scenario has only Given and Then (missing When mentioned)', () => {
+    const parseResult = {
+      features: [{
+        name: 'F',
+        scenarios: [
+          { name: 'Incomplete scenario', tags: ['@e2e'], steps: [{ keyword: 'Given', text: 'setup' }, { keyword: 'Then', text: 'result' }] },
+          { name: 'Full', tags: [], steps: [{ keyword: 'Given', text: 'a' }, { keyword: 'When', text: 'b' }, { keyword: 'Then', text: 'c' }] },
+        ],
+      }],
+      errors: [],
+    };
+    const result = validate(parseResult, { minScenarios: 1, requireTags: ['@e2e'] });
+    assert.equal(result.valid, false);
+    const stepError = result.errors.find((e) => e.includes('Incomplete scenario'));
+    assert.ok(stepError);
+    assert.ok(stepError.includes('When'));
+    // Should only mention the missing keyword, not the ones already present
+    assert.ok(!stepError.includes('missing Given'));
+    assert.ok(!stepError.includes('missing Then'));
+  });
+
+  it('passes when scenario has Given/When/Then plus And (And extends previous)', () => {
+    const parseResult = {
+      features: [{
+        name: 'F',
+        scenarios: [
+          { name: 'With And', tags: ['@integration'], steps: [
+            { keyword: 'Given', text: 'setup' },
+            { keyword: 'And', text: 'more setup' },
+            { keyword: 'When', text: 'action' },
+            { keyword: 'Then', text: 'result' },
+            { keyword: 'And', text: 'another result' },
+          ]},
+          { name: 'Simple', tags: [], steps: [{ keyword: 'Given', text: 'a' }, { keyword: 'When', text: 'b' }, { keyword: 'Then', text: 'c' }] },
+        ],
+      }],
+      errors: [],
+    };
+    const result = validate(parseResult, { minScenarios: 1, requireTags: ['@integration'] });
+    assert.equal(result.valid, true);
+    assert.deepEqual(result.errors, []);
   });
 });
 

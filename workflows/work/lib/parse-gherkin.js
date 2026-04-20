@@ -163,7 +163,7 @@ function parse(markdown) {
 
   // If we found the section but no features, it's likely legacy free-text
   if (features.length === 0) {
-    errors.push('No Gherkin section found');
+    errors.push('No Feature/Scenario structure found in Gherkin section');
   }
 
   return { features, errors };
@@ -172,7 +172,9 @@ function parse(markdown) {
 /**
  * Validate a parse result against threshold and tag requirements.
  *
- * Note: This function validates the parse result structure only. Callers should also check parseResult.errors for parse-level issues.
+ * Note: `parseResult.errors` (parse-level issues such as missing steps or
+ * missing structure) are intentionally not checked here — callers are expected
+ * to inspect both `parseResult.errors` and the validation result independently.
  *
  * Default options: { minScenarios: 2, requireTags: ['@integration', '@e2e'] }
  *
@@ -210,6 +212,26 @@ function validate(parseResult, options) {
     );
     if (!hasAnyRequiredTag) {
       validationErrors.push(`No ${requireTags.join(' or ')} tag found`);
+    }
+  }
+
+  // Check each scenario has at least Given, When, Then steps
+  for (const feature of parseResult.features) {
+    for (const scenario of feature.scenarios) {
+      const keywords = new Set(scenario.steps.map((s) => s.keyword));
+      // And/But extend the previous keyword, so we only require the primary three
+      const hasGiven = keywords.has('Given');
+      const hasWhen = keywords.has('When');
+      const hasThen = keywords.has('Then');
+      if (!hasGiven || !hasWhen || !hasThen) {
+        const missing = [];
+        if (!hasGiven) missing.push('Given');
+        if (!hasWhen) missing.push('When');
+        if (!hasThen) missing.push('Then');
+        validationErrors.push(
+          `Scenario "${scenario.name}" is missing ${missing.join(', ')} step(s)`
+        );
+      }
     }
   }
 
