@@ -163,6 +163,22 @@ function createArtifactProtector(opts) {
       }
     }
 
+    // Check 3: Content guard (if specified on the rule)
+    if (rule.contentGuard && ['Write', 'Edit', 'MultiEdit'].includes(toolName)) {
+      const newContent = toolInput?.content || toolInput?.new_string || '';
+      if (newContent) {
+        const guardResult = rule.contentGuard(newContent, currentStep);
+        if (guardResult.blocked) {
+          return {
+            blocked: true,
+            file: bn,
+            rule: 'content',
+            message: guardResult.message,
+          };
+        }
+      }
+    }
+
     return { blocked: false };
   }
 

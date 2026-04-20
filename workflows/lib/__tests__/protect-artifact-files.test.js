@@ -297,3 +297,130 @@ describe('createArtifactProtector', () => {
     assert.equal(result.blocked, false);
   });
 });
+
+// ─── contentGuard ─────────────────────────────────────────────────────────────
+
+describe('contentGuard', () => {
+  const TICKET = 'TEST-123';
+
+  function makeProtectorWithGuard(guardFn, overrides = {}) {
+    return createArtifactProtector({
+      artifacts: [
+        {
+          basename: 'brief.md',
+          step: 'brief',
+          agents: ['brief-writer'],
+          contentGuard: guardFn,
+        },
+        { basename: 'spec.md', step: 'spec', agents: ['spec-writer'] },
+      ],
+      getStepInProgress: () => overrides.currentStep || 'brief',
+      isRunningInAgent: () => true,
+      getTicketId: () => TICKET,
+      ...overrides,
+    });
+  }
+
+  it('blocks when contentGuard returns blocked: true (Write)', () => {
+    const guard = () => ({ blocked: true, message: 'Content not allowed' });
+    const p = makeProtectorWithGuard(guard);
+    const result = p.check('Write', {
+      file_path: `/tasks/${TICKET}/brief.md`,
+      content: 'some content',
+    });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'content');
+    assert.equal(result.message, 'Content not allowed');
+  });
+
+  it('allows when contentGuard returns blocked: false (Write)', () => {
+    const guard = () => ({ blocked: false });
+    const p = makeProtectorWithGuard(guard);
+    const result = p.check('Write', {
+      file_path: `/tasks/${TICKET}/brief.md`,
+      content: 'some content',
+    });
+    assert.equal(result.blocked, false);
+  });
+
+  it('blocks when contentGuard returns blocked: true (Edit)', () => {
+    const guard = (content) => {
+      if (content.includes('bad')) return { blocked: true, message: 'Bad content in edit' };
+      return { blocked: false };
+    };
+    const p = makeProtectorWithGuard(guard);
+    const result = p.check('Edit', {
+      file_path: `/tasks/${TICKET}/brief.md`,
+      new_string: 'this is bad content',
+    });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'content');
+    assert.ok(result.message.includes('Bad content'));
+  });
+
+  it('blocks when contentGuard returns blocked: true (MultiEdit)', () => {
+    const guard = () => ({ blocked: true, message: 'Blocked by guard' });
+    const p = makeProtectorWithGuard(guard);
+    const result = p.check('MultiEdit', {
+      file_path: `/tasks/${TICKET}/brief.md`,
+      new_string: 'multi edit content',
+    });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'content');
+  });
+
+  it('does NOT call contentGuard for Bash tool', () => {
+    let called = false;
+    const guard = () => {
+      called = true;
+      return { blocked: true, message: 'Should not reach here' };
+    };
+    const p = makeProtectorWithGuard(guard);
+    // Bash that writes to brief.md — should be checked for step/agent but NOT contentGuard
+    const result = p.check('Bash', { command: `cat > /tasks/${TICKET}/brief.md` });
+    assert.equal(called, false);
+    assert.equal(result.blocked, false);
+  });
+
+  it('does NOT call contentGuard when rule has no contentGuard defined', () => {
+    // spec.md has no contentGuard in our setup
+    const p = makeProtectorWithGuard(null, { currentStep: 'spec' });
+    const result = p.check('Write', {
+      file_path: `/tasks/${TICKET}/spec.md`,
+      content: 'spec content',
+    });
+    assert.equal(result.blocked, false);
+  });
+
+  it('passes content and currentStep to contentGuard', () => {
+    let capturedContent = null;
+    let capturedStep = null;
+    const guard = (content, step) => {
+      capturedContent = content;
+      capturedStep = step;
+      return { blocked: false };
+    };
+    const p = makeProtectorWithGuard(guard, { currentStep: 'brief' });
+    p.check('Write', {
+      file_path: `/tasks/${TICKET}/brief.md`,
+      content: 'hello world',
+    });
+    assert.equal(capturedContent, 'hello world');
+    assert.equal(capturedStep, 'brief');
+  });
+
+  it('does not call contentGuard when content is empty', () => {
+    let called = false;
+    const guard = () => {
+      called = true;
+      return { blocked: true, message: 'Should not reach' };
+    };
+    const p = makeProtectorWithGuard(guard);
+    const result = p.check('Write', {
+      file_path: `/tasks/${TICKET}/brief.md`,
+      content: '',
+    });
+    assert.equal(called, false);
+    assert.equal(result.blocked, false);
+  });
+});
