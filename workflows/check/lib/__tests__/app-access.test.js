@@ -506,7 +506,7 @@ describe('checkHealth', () => {
   });
 
   it('returns ACCESS_FAILED after retries on connection refused', async () => {
-    // Use a port that is not listening
+    // Use a high ephemeral port that is extremely unlikely to be in use
     const app = { name: 'test-app', defaultPort: 59999, healthEndpoint: '/' };
     const result = await checkHealth(app, { host: '127.0.0.1', retries: 1, retryInterval: 50, timeout: 1000 });
     assert.equal(result.status, AppAccessStatus.ACCESS_FAILED);
