@@ -608,11 +608,14 @@ describe('TDD enforcement', () => {
     let origTasksBase;
 
     afterEach(() => {
-      // Restore original TASKS_BASE and clear module cache
+      // Restore original TASKS_BASE (or delete if not originally set) and clear module cache
       if (origTasksBase !== undefined) {
         process.env.TASKS_BASE = origTasksBase;
+      } else {
+        delete process.env.TASKS_BASE;
       }
-      delete require.cache[require.resolve('../work-state')]; // restore module cache
+      delete require.cache[require.resolve('../work-state')];
+      delete require.cache[require.resolve('../../lib/config')];
     });
 
     it('creates tdd-phase.json at per-task path with red phase and empty cycles', () => {

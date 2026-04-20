@@ -62,9 +62,10 @@ Rules:
  * @returns {{exists: boolean, parseError: boolean, evidence: object|null}}
  */
 function readTddEvidence(tasksBase, ticketId, stepId, taskNum) {
+  // taskSegment() validates taskNum internally (throws on non-positive-integer)
   const phasePath = taskNum != null
     ? path.join(tasksBase, ticketId, taskSegment(taskNum), 'tdd-phase.json')
-    : path.join(tasksBase, ticketId, 'tdd-phase.json');
+    : path.join(tasksBase, ticketId, 'tdd-phase.json'); // root fallback for non-task flows
   try {
     if (!fs.existsSync(phasePath)) return { exists: false, parseError: false, evidence: null };
   } catch {
