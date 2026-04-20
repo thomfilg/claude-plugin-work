@@ -44,7 +44,6 @@ const STEP_ORDER = Object.freeze([
   STEPS.brief,
   STEPS.brief_gate, // GH-215: must sit between brief and spec
   STEPS.spec,
-  // GH-244: must sit between spec and tasks
   STEPS.spec_gate,
   STEPS.tasks,
   STEPS.implement,
