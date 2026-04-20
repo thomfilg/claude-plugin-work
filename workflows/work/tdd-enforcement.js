@@ -22,7 +22,8 @@ Note: --task <N> is required when working inside a task-scoped workflow (tasks.m
 Omit --task when running standalone /work-implement without task context.
 All subcommands (init, record-*, transition, exception) support --task when task context exists.
 
-For each behavior change, cycle through RED → GREEN → REFACTOR:
+For each behavior change, cycle through RED → GREEN → REFACTOR.
+Each phase has hook-enforced file restrictions:
 
 RED Phase (write failing tests — hook enforced):
 - Hook BLOCKS Write/Edit to any non .test/.spec file

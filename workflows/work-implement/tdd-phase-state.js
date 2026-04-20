@@ -292,7 +292,7 @@ function cmdRecordRed(ticketId, args) {
   const taskNum = parseTask(args);
   const opts = taskNum ? { taskNum } : undefined;
 
-  const state = readState(ticketId, opts);
+  const state = readState(ticketId, opts); // reads per-task path when taskNum provided
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
   // Enforce phase consistency: record-red only allowed during red phase
   if (state.currentPhase !== 'red')
