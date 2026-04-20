@@ -108,9 +108,8 @@ function ticketRootStatePath(base, safeId) {
  * Resolve the state file path for a ticket.
  *
  * When taskNum is provided:
- *   - Write path: always per-task (TASKS_BASE/<ticket>/task${N}/tdd-phase.json)
- *   - Read path: per-task first; if missing, fallback to legacy root path
- *     (TASKS_BASE/<ticket>/tdd-phase.json) for backward compatibility.
+ *   - Always uses per-task path (TASKS_BASE/<ticket>/task${N}/tdd-phase.json).
+ *   - No fallback to legacy root (GH-219 Task 1).
  *
  * When taskNum is NOT provided:
  *   - Uses the legacy root path (backward compat).
@@ -118,7 +117,6 @@ function ticketRootStatePath(base, safeId) {
  * @param {string} ticketId - Raw ticket ID
  * @param {object} [opts] - Options
  * @param {number} [opts.taskNum] - Task number for per-task resolution
- * @param {boolean} [opts.forWrite] - If true, always return per-task path (no fallback)
  * @returns {string} Absolute path to tdd-phase.json
  */
 function getStatePath(ticketId, opts) {
@@ -134,19 +132,8 @@ function getStatePath(ticketId, opts) {
   if (taskNum != null && Number.isInteger(taskNum) && taskNum > 0) {
     const perTask = perTaskStatePath(base, safeId, taskNum);
 
-    if (opts && opts.forWrite) {
-      // Writes always target per-task path
-      resolved = perTask;
-    } else {
-      // Reads: per-task first, then legacy root fallback
-      if (fs.existsSync(perTask)) {
-        resolved = perTask;
-      } else {
-        // Legacy fallback: check ticketRoot for backward compat
-        const root = ticketRootStatePath(base, safeId);
-        resolved = fs.existsSync(root) ? root : perTask;
-      }
-    }
+    // Per-task path — always use it, no legacy root fallback (GH-219 Task 1)
+    resolved = perTask;
   } else {
     // No task number — legacy root path
     resolved = ticketRootStatePath(base, safeId);
@@ -302,8 +289,10 @@ function cmdRecordRed(ticketId, args) {
   if (!ticketId) errorExit('Missing ticket ID.');
   const cmd = parseCmd(args);
   if (!cmd) errorExit('Missing --cmd argument.');
+  const taskNum = parseTask(args);
+  const opts = taskNum ? { taskNum } : undefined;
 
-  const state = readState(ticketId);
+  const state = readState(ticketId, opts);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
   // Enforce phase consistency: record-red only allowed during red phase
   if (state.currentPhase !== 'red')
@@ -349,7 +338,7 @@ function cmdRecordRed(ticketId, args) {
     testExitCode: exitCode,
     timestamp: new Date().toISOString(),
   };
-  writeState(ticketId, state);
+  writeState(ticketId, state, opts);
   successOut({
     ok: true,
     phase: 'red',
@@ -363,8 +352,10 @@ function cmdRecordGreen(ticketId, args) {
   if (!ticketId) errorExit('Missing ticket ID.');
   const cmd = parseCmd(args);
   if (!cmd) errorExit('Missing --cmd argument.');
+  const taskNum = parseTask(args);
+  const opts = taskNum ? { taskNum } : undefined;
 
-  const state = readState(ticketId);
+  const state = readState(ticketId, opts);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
   // Enforce phase consistency: record-green only allowed during green phase
   if (state.currentPhase !== 'green')
@@ -385,7 +376,7 @@ function cmdRecordGreen(ticketId, args) {
     testExitCode: exitCode,
     timestamp: new Date().toISOString(),
   };
-  writeState(ticketId, state);
+  writeState(ticketId, state, opts);
   successOut({ ok: true, phase: 'green', cycle: state.currentCycle, testExitCode: exitCode });
 }
 
@@ -397,8 +388,10 @@ function cmdRecordRefactor(ticketId, args) {
   if (!ticketId) errorExit('Missing ticket ID.');
   const cmd = parseCmd(args);
   if (!cmd) errorExit('Missing --cmd argument.');
+  const taskNum = parseTask(args);
+  const opts = taskNum ? { taskNum } : undefined;
 
-  const state = readState(ticketId);
+  const state = readState(ticketId, opts);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
   // Enforce phase consistency: record-refactor only allowed during refactor phase
   if (state.currentPhase !== 'refactor')
@@ -419,15 +412,17 @@ function cmdRecordRefactor(ticketId, args) {
     testExitCode: exitCode,
     timestamp: new Date().toISOString(),
   };
-  writeState(ticketId, state);
+  writeState(ticketId, state, opts);
   successOut({ ok: true, phase: 'refactor', cycle: state.currentCycle, testExitCode: exitCode });
 }
 
-function cmdTransition(ticketId, targetPhase) {
+function cmdTransition(ticketId, targetPhase, args) {
   if (!ticketId) errorExit('Missing ticket ID.');
   if (!targetPhase) errorExit('Missing target phase.');
+  const taskNum = parseTask(args || []);
+  const opts = taskNum ? { taskNum } : undefined;
 
-  const state = readState(ticketId);
+  const state = readState(ticketId, opts);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
 
   // Validate transition
@@ -455,7 +450,7 @@ function cmdTransition(ticketId, targetPhase) {
     state.currentCycle += 1;
   }
 
-  writeState(ticketId, state);
+  writeState(ticketId, state, opts);
   successOut({ phase: state.currentPhase, cycle: state.currentCycle });
 }
 
@@ -510,7 +505,7 @@ switch (subcommand) {
     cmdRecordRefactor(ticketId, args.slice(2));
     break;
   case 'transition':
-    cmdTransition(ticketId, args[2]);
+    cmdTransition(ticketId, args[2], args.slice(2));
     break;
   case 'exception':
     cmdException(ticketId, args.slice(2));

@@ -456,7 +456,7 @@ describe('tdd-phase-state CLI', () => {
     });
   });
 
-  describe('per-task path with legacy root fallback (GH-219 Task 9)', () => {
+  describe('per-task path resolution (GH-219 Task 9 + Task 1)', () => {
     it('init with --task writes to TASKS_BASE/<ticket>/task${N}/tdd-phase.json', () => {
       const { stdout, exitCode } = runCli('init TEST-T9A --task 3', homeDir);
       assert.strictEqual(exitCode, 0);
@@ -478,17 +478,15 @@ describe('tdd-phase-state CLI', () => {
       assert.strictEqual(result.phase, 'red');
     });
 
-    it('current with --task falls back to legacy root when per-task path missing', () => {
+    it('current with --task does NOT fall back to legacy root (GH-219 Task 1)', () => {
       // Create state at root (legacy) path only
       runCli('init TEST-T9C', homeDir);
-      // Now read with --task — per-task file does not exist, should fallback to root
-      const { stdout, exitCode } = runCli('current TEST-T9C --task 2', homeDir);
-      assert.strictEqual(exitCode, 0);
-      const result = JSON.parse(stdout);
-      assert.strictEqual(result.phase, 'red');
+      // Now read with --task — per-task file does not exist, should NOT fallback to root
+      const { exitCode } = runCli('current TEST-T9C --task 2', homeDir);
+      assert.strictEqual(exitCode, 1, 'Should fail when per-task state does not exist, no root fallback');
     });
 
-    it('current with --task fails when neither per-task nor root exists', () => {
+    it('current with --task fails when per-task path does not exist', () => {
       const { exitCode } = runCli('current TEST-T9D --task 1', homeDir);
       assert.strictEqual(exitCode, 1);
     });
@@ -497,6 +495,176 @@ describe('tdd-phase-state CLI', () => {
       runCli('init TEST-T9E', homeDir);
       const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-T9E', 'tdd-phase.json');
       assert.ok(fs.existsSync(rootPath), `Expected root state at ${rootPath}`);
+    });
+  });
+
+
+  describe('no-fallback guard (GH-219 Task 1)', () => {
+    it('getStatePath with taskNum always returns per-task path, never root', () => {
+      // Init at root, then verify --task read does NOT find root state
+      runCli('init TEST-NOFALL', homeDir);
+      const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-NOFALL', 'tdd-phase.json');
+      assert.ok(fs.existsSync(rootPath), 'Root state should exist');
+
+      const perTaskPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-NOFALL', 'task1', 'tdd-phase.json');
+      assert.ok(!fs.existsSync(perTaskPath), 'Per-task state should NOT exist yet');
+
+      // Reading with --task 1 should fail (no per-task state), NOT fall back to root
+      const { exitCode } = runCli('current TEST-NOFALL --task 1', homeDir);
+      assert.strictEqual(exitCode, 1, 'Should not fall back to root path');
+    });
+  });
+
+  describe('record commands with --task (GH-219 Task 1)', () => {
+    it('record-green with --task reads/writes per-task path', () => {
+      // Init per-task state
+      runCli('init TEST-RG1 --task 2', homeDir);
+      // Set up state for green phase
+      const perTaskPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-RG1', 'task2', 'tdd-phase.json');
+      const state = JSON.parse(fs.readFileSync(perTaskPath, 'utf8'));
+      state.currentPhase = 'green';
+      state.cycles = [
+        {
+          cycle: 1,
+          red: {
+            testFiles: ['foo.test.ts'],
+            testCommand: 'echo test',
+            testExitCode: 1,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ];
+      fs.writeFileSync(perTaskPath, JSON.stringify(state, null, 2));
+
+      const passScript = createExitScript(scriptDir, 0);
+      const { stdout, exitCode } = runCli(
+        `record-green TEST-RG1 --task 2 --cmd "${passScript}"`,
+        homeDir
+      );
+      assert.strictEqual(exitCode, 0);
+      const result = JSON.parse(stdout);
+      assert.strictEqual(result.ok, true);
+
+      // Verify it wrote to per-task path, not root
+      const updatedState = JSON.parse(fs.readFileSync(perTaskPath, 'utf8'));
+      assert.strictEqual(updatedState.cycles[0].green.testExitCode, 0);
+      // Root path should NOT exist
+      const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-RG1', 'tdd-phase.json');
+      assert.ok(!fs.existsSync(rootPath), 'Root state should NOT be created');
+    });
+
+    it('record-refactor with --task reads/writes per-task path', () => {
+      runCli('init TEST-RR1 --task 4', homeDir);
+      const perTaskPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-RR1', 'task4', 'tdd-phase.json');
+      const state = JSON.parse(fs.readFileSync(perTaskPath, 'utf8'));
+      state.currentPhase = 'refactor';
+      state.cycles = [
+        {
+          cycle: 1,
+          red: {
+            testFiles: ['foo.test.ts'],
+            testCommand: 'echo test',
+            testExitCode: 1,
+            timestamp: new Date().toISOString(),
+          },
+          green: { testCommand: 'echo test', testExitCode: 0, timestamp: new Date().toISOString() },
+        },
+      ];
+      fs.writeFileSync(perTaskPath, JSON.stringify(state, null, 2));
+
+      const passScript = createExitScript(scriptDir, 0);
+      const { stdout, exitCode } = runCli(
+        `record-refactor TEST-RR1 --task 4 --cmd "${passScript}"`,
+        homeDir
+      );
+      assert.strictEqual(exitCode, 0);
+      const result = JSON.parse(stdout);
+      assert.strictEqual(result.ok, true);
+
+      const updatedState = JSON.parse(fs.readFileSync(perTaskPath, 'utf8'));
+      assert.strictEqual(updatedState.cycles[0].refactor.testExitCode, 0);
+    });
+
+    it('record-green without --task still uses root path (backward compat)', () => {
+      runCli('init TEST-RG2', homeDir);
+      const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-RG2', 'tdd-phase.json');
+      const state = JSON.parse(fs.readFileSync(rootPath, 'utf8'));
+      state.currentPhase = 'green';
+      state.cycles = [
+        {
+          cycle: 1,
+          red: {
+            testFiles: ['foo.test.ts'],
+            testCommand: 'echo test',
+            testExitCode: 1,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ];
+      fs.writeFileSync(rootPath, JSON.stringify(state, null, 2));
+
+      const passScript = createExitScript(scriptDir, 0);
+      const { stdout, exitCode } = runCli(
+        `record-green TEST-RG2 --cmd "${passScript}"`,
+        homeDir
+      );
+      assert.strictEqual(exitCode, 0);
+      const updatedState = JSON.parse(fs.readFileSync(rootPath, 'utf8'));
+      assert.strictEqual(updatedState.cycles[0].green.testExitCode, 0);
+    });
+  });
+
+  describe('transition with --task (GH-219 Task 1)', () => {
+    it('transition with --task reads/writes per-task path', () => {
+      runCli('init TEST-TR1 --task 3', homeDir);
+      const perTaskPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-TR1', 'task3', 'tdd-phase.json');
+      const state = JSON.parse(fs.readFileSync(perTaskPath, 'utf8'));
+      state.cycles = [
+        {
+          cycle: 1,
+          red: {
+            testFiles: ['foo.test.ts'],
+            testCommand: 'echo test',
+            testExitCode: 1,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ];
+      fs.writeFileSync(perTaskPath, JSON.stringify(state, null, 2));
+
+      const { stdout, exitCode } = runCli('transition TEST-TR1 green --task 3', homeDir);
+      assert.strictEqual(exitCode, 0);
+      const result = JSON.parse(stdout);
+      assert.strictEqual(result.phase, 'green');
+
+      const updatedState = JSON.parse(fs.readFileSync(perTaskPath, 'utf8'));
+      assert.strictEqual(updatedState.currentPhase, 'green');
+      // Root path should NOT exist
+      const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-TR1', 'tdd-phase.json');
+      assert.ok(!fs.existsSync(rootPath), 'Root state should NOT be created');
+    });
+
+    it('transition without --task still uses root path (backward compat)', () => {
+      runCli('init TEST-TR2', homeDir);
+      const rootPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-TR2', 'tdd-phase.json');
+      const state = JSON.parse(fs.readFileSync(rootPath, 'utf8'));
+      state.cycles = [
+        {
+          cycle: 1,
+          red: {
+            testFiles: ['foo.test.ts'],
+            testCommand: 'echo test',
+            testExitCode: 1,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ];
+      fs.writeFileSync(rootPath, JSON.stringify(state, null, 2));
+
+      const { stdout, exitCode } = runCli('transition TEST-TR2 green', homeDir);
+      assert.strictEqual(exitCode, 0);
+      const result = JSON.parse(stdout);
+      assert.strictEqual(result.phase, 'green');
     });
   });
 
