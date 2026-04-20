@@ -16,7 +16,7 @@ The TDD loop is enforced by hooks — file restrictions are automatic per phase.
 Use tdd-phase-state.js CLI for evidence recording and phase transitions.
 
 Initialize TDD state:
-  node <TDD_STATE_PATH> init <TICKET_ID>
+  node <TDD_STATE_PATH> init <TICKET_ID> --task <N>
 
 For each behavior change, cycle through RED → GREEN → REFACTOR:
 
@@ -24,29 +24,29 @@ RED Phase (write failing tests):
 - Hook BLOCKS Write/Edit to any non .test/.spec file
 - Write focused tests (1-3) that express expected behavior
 - Record evidence and transition:
-  node <TDD_STATE_PATH> record-red <TICKET_ID> --cmd "<targeted test command>"
-  node <TDD_STATE_PATH> transition <TICKET_ID> green
+  node <TDD_STATE_PATH> record-red <TICKET_ID> --task <N> --cmd "<targeted test command>"
+  node <TDD_STATE_PATH> transition <TICKET_ID> green --task <N>
 
 GREEN Phase (make tests pass):
 - Hook BLOCKS Write/Edit to .test/.spec files (prevents cheating)
 - Test helpers allowed: __mocks__/, __fixtures__/, test-utils, *.mock.*, *.fixture.*
 - Write minimum production code to make tests pass
 - Record evidence and transition:
-  node <TDD_STATE_PATH> record-green <TICKET_ID> --cmd "<same test command>"
-  node <TDD_STATE_PATH> transition <TICKET_ID> refactor
+  node <TDD_STATE_PATH> record-green <TICKET_ID> --task <N> --cmd "<same test command>"
+  node <TDD_STATE_PATH> transition <TICKET_ID> refactor --task <N>
 
 REFACTOR Phase (clean up):
 - No file restrictions
 - Refactor both test and production code
 - Record evidence:
-  node <TDD_STATE_PATH> record-refactor <TICKET_ID> --cmd "<broader test command>"
-  node <TDD_STATE_PATH> transition <TICKET_ID> red  (if more behaviors)
+  node <TDD_STATE_PATH> record-refactor <TICKET_ID> --task <N> --cmd "<broader test command>"
+  node <TDD_STATE_PATH> transition <TICKET_ID> red --task <N>  (if more behaviors)
 
 Rules:
 - Evidence is recorded by the SCRIPT — it runs git diff and test commands itself.
 - Do NOT make local git commits during the cycle — the commit step handles that.
 - If the change is purely mechanical (config-only, no behavior change):
-  node <TDD_STATE_PATH> exception <TICKET_ID> --reason "config-only change, no testable behavior"
+  node <TDD_STATE_PATH> exception <TICKET_ID> --task <N> --reason "config-only change, no testable behavior"
 `.trim();
 
 /**
