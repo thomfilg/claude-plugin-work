@@ -37,16 +37,23 @@ function hasActiveWorkSession() {
     if (!currentTicket) {
       try {
         let head;
-        const dotgit = fs.readFileSync('.git', 'utf-8').trim();
-        if (dotgit.startsWith('gitdir: ')) {
-          const gitdir = path.resolve(dotgit.slice('gitdir: '.length));
-          head = fs.readFileSync(path.join(gitdir, 'HEAD'), 'utf-8').trim();
+        const dotgitStat = fs.lstatSync('.git');
+        if (dotgitStat.isFile()) {
+          // Worktree: .git is a file containing "gitdir: <path>"
+          const dotgit = fs.readFileSync('.git', 'utf-8').trim();
+          if (dotgit.startsWith('gitdir: ')) {
+            const gitdir = path.resolve(dotgit.slice('gitdir: '.length));
+            head = fs.readFileSync(path.join(gitdir, 'HEAD'), 'utf-8').trim();
+          }
         } else {
+          // Normal repo: .git is a directory
           head = fs.readFileSync(path.join('.git', 'HEAD'), 'utf-8').trim();
         }
-        const ref = head.startsWith('ref: ') ? head.slice(5) : head;
-        const match = ref.match(/[A-Z]+-\d+/);
-        if (match) currentTicket = match[0];
+        if (head) {
+          const ref = head.startsWith('ref: ') ? head.slice(5) : head;
+          const match = ref.match(/[A-Z]+-\d+/);
+          if (match) currentTicket = match[0];
+        }
       } catch { /* no git context */ }
     }
 
