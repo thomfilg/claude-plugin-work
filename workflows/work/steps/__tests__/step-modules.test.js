@@ -278,9 +278,9 @@ describe('step modules', () => {
       it(`${file} must not contain 'SKIP' as an action argument`, () => {
         const filePath = path.join(__dirname, '..', file);
         const source = fs.readFileSync(filePath, 'utf8');
-        // Match 'SKIP' used as action argument in add() calls.
-        // This regex catches patterns like: add(..., 'SKIP', ...)
-        const skipMatches = source.match(/'SKIP'/g);
+        // Match 'SKIP' only when used as the action argument in add() calls.
+        // Pattern: add(anything, 'SKIP', ...) — ignores SKIP in comments or unrelated strings.
+        const skipMatches = source.match(/add\([^)]*,\s*'SKIP'\s*,/g);
         assert.equal(
           skipMatches,
           null,

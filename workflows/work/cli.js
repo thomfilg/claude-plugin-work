@@ -104,7 +104,7 @@ function main(deps) {
           suffix
         );
       } catch (err) {
-        console.log(JSON.stringify({ error: true, message: err.message }));
+        console.log(JSON.stringify({ error: true, message: err?.message || String(err) }));
         process.exit(1);
       }
 
