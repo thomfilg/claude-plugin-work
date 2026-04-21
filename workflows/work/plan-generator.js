@@ -156,7 +156,8 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
     planResult.fullTicket = planResult.ticket + '/' + suffix;
   }
 
-  // Safety net: reject any plan containing SKIP actions (GH-245)
+  // Safety net: reject any plan containing SKIP actions (GH-245).
+  // All step modules (including spec-gate.js) now emit DEFER instead of SKIP.
   validatePlan(plan);
 
   return planResult;
