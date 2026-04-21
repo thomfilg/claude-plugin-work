@@ -170,13 +170,11 @@ function main(deps) {
       result.summary = {
         total: result.plan.length,
         run: by('RUN').length,
-        skip: by('SKIP').length,
         defer: by('DEFER').length,
         pending: by('PENDING').length,
         firstAction: by('RUN')[0]?.step || by('DEFER')[0]?.step || 'none',
         stepsToRun: by('RUN').map((s) => s.step),
         stepsDeferred: by('DEFER').map((s) => s.step),
-        stepsSkipped: by('SKIP').map((s) => s.step),
       };
       console.log(JSON.stringify(result, null, 2));
       break;
