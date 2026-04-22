@@ -2,7 +2,8 @@
 
 19 specialized agents in `agents/`. Dispatched via `Task()` — never self-invoke recursively.
 
-For project overview and development rules see **[CLAUDE.md](./CLAUDE.md)**. For detailed documentation see **[docs/README.md](./docs/README.md)**.
+For project overview and development rules see **[CLAUDE.md](./CLAUDE.md)**.
+For detailed documentation see **[docs/README.md](./docs/README.md)**.
 
 ## Review guidelines
 
