@@ -95,6 +95,7 @@ function briefGateStep(add, s, ctx) {
       agentPrompt: `Use AskUserQuestion to resolve ${blocking.length} unresolved open question(s) in brief.md, then call applyBriefResolutions() to persist the answers.`,
       askUserQuestionPayload: buildAskUserQuestionPayload(blocking),
       onResolve: 'rewrite brief.md',
+      postResolveCommand: `node -e "require('${path.join(__dirname, 'brief-gate.js')}').applyBriefResolutions('${briefPath}', JSON.parse(process.argv[1]))" "$RESOLUTIONS_JSON"`,
     }
   );
 }

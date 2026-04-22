@@ -185,6 +185,27 @@ describe('brief-gate step', () => {
     assert.match(entry.agentPrompt, /applyBriefResolutions/, 'agentPrompt must mention applyBriefResolutions');
   });
 
+  it('RUN entry includes postResolveCommand referencing applyBriefResolutions', () => {
+    const dir = makeTmpTasksDir(BRIEF_ONE_BLOCKING_ARCH);
+    createdDirs.push(dir);
+    const { add, entries } = makeAdd();
+    briefGateStep(add, makeState(), makeCtx({ tasksDir: dir }));
+    assert.equal(entries.length, 1);
+    const entry = entries[0];
+    assert.equal(entry.action, 'RUN');
+    assert.equal(typeof entry.postResolveCommand, 'string', 'RUN entry must carry postResolveCommand string');
+    assert.match(entry.postResolveCommand, /applyBriefResolutions/, 'postResolveCommand must reference applyBriefResolutions');
+    assert.match(entry.postResolveCommand, /brief-gate\.js/, 'postResolveCommand must require brief-gate.js');
+    assert.match(entry.postResolveCommand, /\$RESOLUTIONS_JSON/, 'postResolveCommand must reference $RESOLUTIONS_JSON placeholder');
+    assert.match(entry.postResolveCommand, /node -e/, 'postResolveCommand must be a node -e one-liner');
+    // Verify the path includes the actual briefPath (tasks dir + brief.md)
+    const expectedBriefPath = path.join(dir, 'brief.md');
+    assert.ok(
+      entry.postResolveCommand.includes(expectedBriefPath),
+      `postResolveCommand must include briefPath: ${expectedBriefPath}`
+    );
+  });
+
   it('emits RUN (not SKIP) when brief.md is unreadable so planner shows gate needs attention', () => {
     const dir = makeTmpTasksDir(null); // no brief.md file
     createdDirs.push(dir);
