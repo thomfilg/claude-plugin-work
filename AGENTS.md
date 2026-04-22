@@ -2,7 +2,7 @@
 
 19 specialized agents in `agents/`. Dispatched via `Task()` — never self-invoke recursively.
 
-For detailed documentation see **[docs/README.md](./docs/README.md)**.
+For project overview and development rules see **[CLAUDE.md](./CLAUDE.md)**. For detailed documentation see **[docs/README.md](./docs/README.md)**.
 
 ## Review guidelines
 
@@ -68,7 +68,7 @@ For detailed documentation see **[docs/README.md](./docs/README.md)**.
 | implement | developer-* (by file type) |
 | commit | commit-writer |
 | check | code-checker, quality-checker, qa-*, completion-checker |
-| pr | pr-generator |
+| pr | pr-generator, pr-post-generator |
 
 ## Authorization
 
