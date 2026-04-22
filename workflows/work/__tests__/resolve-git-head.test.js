@@ -1,0 +1,71 @@
+/**
+ * Tests for resolveGitHead logic (GH-260 Issue 1)
+ *
+ * Verifies that the resolveGitHead helper correctly handles
+ * worktree .git files (which contain "gitdir: <path>").
+ *
+ * Uses node:test + node:assert/strict with temp directories.
+ */
+
+const { describe, it, afterEach } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { resolveGitHead } = require('../git-utils');
+
+describe('resolveGitHead (GH-260 Issue 1)', () => {
+  const tmpDirs = [];
+
+  function makeTmpDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh260-'));
+    tmpDirs.push(dir);
+    return dir;
+  }
+
+  afterEach(() => {
+    for (const d of tmpDirs) {
+      fs.rmSync(d, { recursive: true, force: true });
+    }
+    tmpDirs.length = 0;
+  });
+
+  it('should read HEAD from the gitdir path in a worktree .git file', () => {
+    const worktree = makeTmpDir();
+    const gitdir = makeTmpDir();
+
+    fs.writeFileSync(path.join(gitdir, 'HEAD'), 'ref: refs/heads/GH-260-fix\n');
+    fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${gitdir}\n`);
+
+    const result = resolveGitHead(worktree);
+    assert.equal(result, 'ref: refs/heads/GH-260-fix', 'Should read HEAD from gitdir');
+  });
+
+  it('should handle relative gitdir paths in worktree .git file', () => {
+    const worktree = makeTmpDir();
+    const mainRepo = path.join(worktree, '..', 'main-repo', '.git');
+    fs.mkdirSync(path.dirname(mainRepo), { recursive: true });
+    fs.mkdirSync(path.join(mainRepo, 'worktrees', 'wt1'), { recursive: true });
+    fs.writeFileSync(
+      path.join(mainRepo, 'worktrees', 'wt1', 'HEAD'),
+      'ref: refs/heads/feature-branch\n'
+    );
+
+    const relPath = path.relative(worktree, path.join(mainRepo, 'worktrees', 'wt1'));
+    fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${relPath}\n`);
+
+    const result = resolveGitHead(worktree);
+    assert.equal(result, 'ref: refs/heads/feature-branch', 'Should resolve relative gitdir');
+  });
+
+  it('should throw for unexpected .git content', () => {
+    const worktree = makeTmpDir();
+    fs.writeFileSync(path.join(worktree, '.git'), 'some random content\n');
+
+    assert.throws(
+      () => resolveGitHead(worktree),
+      /unexpected \.git content/,
+      'Should throw for non-gitdir content'
+    );
+  });
+});

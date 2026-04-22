@@ -152,10 +152,8 @@ function getWorkflowDefinition() {
       TASKS_BASE,
       safeTicketPath: (id) => tp.sanitizeTicketIdForPath(id, tp.getProviderConfig({ skipPrompt: true })),
       resolveGitHead: () => {
-        const fs = require('fs');
-        const gitFile = path.join(process.cwd(), '.git');
-        const content = fs.readFileSync(gitFile, 'utf-8').trim();
-        return content.startsWith('gitdir:') ? content : fs.readFileSync(path.join('.git', 'HEAD'), 'utf-8').trim();
+        const { resolveGitHead } = require(path.join(__dirname, 'git-utils'));
+        return resolveGitHead();
       },
     });
   }

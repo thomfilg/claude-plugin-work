@@ -296,6 +296,29 @@ describe('transition-step.js (GH-260): generic step-verify gate', () => {
     assert.equal(result.success, true, 'Step with no verify should be allowed');
   });
 
+  it('should throw when softSteps is missing from deps', () => {
+    const { transitionStep } = require('../transition-step');
+    const { STEPS, ALL_STEPS } = require('../step-registry');
+
+    const followUpIdx = ALL_STEPS.indexOf(STEPS.follow_up);
+    const deps = createDeps({
+      workflowCanTransition: () => true,
+      commandMap: [],
+    });
+    delete deps.softSteps;
+
+    const ws = deps.loadWorkState('TEST-VERIFY-REQ-001');
+    ws.currentStep = followUpIdx + 1;
+    ws.stepStatus[STEPS.follow_up] = 'in_progress';
+    deps._savedStates['TEST-VERIFY-REQ-001'] = ws;
+
+    assert.throws(
+      () => transitionStep('TEST-VERIFY-REQ-001', STEPS.ci, deps),
+      (err) => err instanceof TypeError,
+      'Should throw TypeError when softSteps is missing'
+    );
+  });
+
   it('should block ci → cleanup when CI verify returns false', () => {
     const { transitionStep } = require('../transition-step');
     const { STEPS, ALL_STEPS } = require('../step-registry');
