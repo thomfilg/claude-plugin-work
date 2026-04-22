@@ -167,6 +167,8 @@ function buildTransitionDeps() {
   // When STEP_VERIFY_ENABLED=0, treat all steps as soft (skip verify functions).
   // This prevents verify functions that do real I/O (git, fs) from blocking
   // transitions in CI test suites that don't test the verify gate itself.
+  // When STEP_VERIFY_ENABLED=0, disable the generic verify gate so that
+  // tests exercising transitions don't hit verify functions with real I/O.
   const stepVerifyDisabled = process.env.STEP_VERIFY_ENABLED === '0';
   return {
     tp,

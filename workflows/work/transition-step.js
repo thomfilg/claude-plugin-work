@@ -129,7 +129,7 @@ function transitionStep(ticket, targetStep, deps) {
   // for follow_up, ci, and any other step with a verify() in workflow-definition.js.
   // The TDD and check-to-PR gates above remain as explicit fast-path checks with
   // better error messages; this gate acts as a universal catch-all.
-  if (isForward && !softSteps.has(currentStep)) {
+  if (isForward && !softSteps.has(currentStep) && !TDD_GATED_STEPS.includes(currentStep)) {
     const entry = commandMap.find((c) => c.step === currentStep && typeof c.verify === 'function');
     if (entry) {
       let verified;

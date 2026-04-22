@@ -224,10 +224,10 @@ function transitionStep(workflow, stateInstance, instanceId, targetStep) {
     let verifyResult;
     try {
       verifyResult = workflow.verifyStep(currentStep, targetStep, instanceId);
-    } catch {
+    } catch (err) {
       return {
         error: true,
-        message: `BLOCKED: ${currentStep} verify threw — cannot transition to ${targetStep}`,
+        message: `BLOCKED: ${currentStep} verify threw — cannot transition to ${targetStep}: ${err && err.message ? err.message : String(err)}`,
         gate: 'step-verify',
         step: currentStep,
         from: currentStep,
