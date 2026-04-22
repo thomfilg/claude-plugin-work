@@ -279,7 +279,7 @@ function checkCI(prNumber) {
 
 // ── Reviews ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_BOT_REVIEWERS = 'copilot-pull-request-reviewer,cursor-ai[bot]';
+const DEFAULT_BOT_REVIEWERS = 'copilot-pull-request-reviewer,cursor-ai[bot],chatgpt-codex-connector[bot]';
 
 function getBotReviewers() {
   const env = process.env.FOLLOW_UP_PR_BOT_REVIEWERS;
@@ -305,7 +305,7 @@ function isBotAuthorLogin(author, botReviewers) {
   // Exact match against configured bot reviewers (case-insensitive)
   if (reviewers.includes(lower)) return true;
   // Match known aliases used by classifyCommentPriority
-  if (lower === 'copilot' || lower === 'cursor-ai[bot]') return true;
+  if (lower === 'copilot' || lower === 'cursor-ai[bot]' || lower === 'chatgpt-codex-connector[bot]' || lower === 'chatgpt-codex-connector') return true;
   // Fuzzy match: strip [bot] suffix from configured names
   return reviewers.some((bot) => bot.includes('[bot]') && lower === bot.replace('[bot]', ''));
 }
@@ -509,6 +509,18 @@ function classifyCommentPriority(author, body) {
     }
     // No severity marker found — default to medium (blocking)
     return 'medium';
+  }
+
+  // Codex (chatgpt-codex-connector[bot]): parse P-level badges or treat non-inline as low
+  if (author === 'chatgpt-codex-connector[bot]' || author === 'chatgpt-codex-connector') {
+    const badgeMatch = (body || '').match(/!\[P(\d)/);
+    if (badgeMatch) {
+      const level = parseInt(badgeMatch[1], 10);
+      if (level <= 1) return 'high';
+      if (level <= 2) return 'medium';
+      return 'low';
+    }
+    return 'low';
   }
 
   // Human reviewers: always blocking
