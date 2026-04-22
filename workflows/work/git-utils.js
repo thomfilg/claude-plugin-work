@@ -31,10 +31,11 @@ function resolveGitHead(cwd) {
   // Worktree — .git is a file containing "gitdir: <path>"
   const dotgit = fs.readFileSync(dotgitPath, 'utf-8').trim();
   if (dotgit.startsWith('gitdir: ')) {
-    const gitdir = path.resolve(path.dirname(dotgitPath), dotgit.slice('gitdir: '.length));
+    const rawGitdir = dotgit.slice('gitdir: '.length);
+    const gitdir = path.resolve(path.dirname(dotgitPath), rawGitdir);
     return fs.readFileSync(path.join(gitdir, 'HEAD'), 'utf-8').trim();
   }
-  throw new Error('unexpected .git content');
+  throw new Error(`unexpected .git content in ${dotgitPath}`);
 }
 
 module.exports = { resolveGitHead };
