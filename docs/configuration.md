@@ -1,6 +1,6 @@
 # Configuration
 
-The plugin uses environment variables for configuration, loaded via `.envrc` files and resolved through `workflows/lib/config.js`.
+The plugin uses environment variables for configuration, resolved through `workflows/lib/config.js` from the repo `.env` file or the current process environment (e.g., populated by `direnv` from `.envrc`).
 
 ## Environment Variables
 

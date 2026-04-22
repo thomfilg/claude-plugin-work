@@ -171,7 +171,11 @@ All hooks follow a strict fail-open policy:
 | `check-start-env.js` | Start dev servers |
 | `check-validate-reports.js` | Validate report format and status |
 
-Note: `enforce-screenshot-requirement.js` lives in `workflows/lib/hooks/` (shared hooks), not in the check-specific hooks directory. It is consumed by the check workflow but is architecturally a shared enforcement hook.
+### Shared hooks used by /check (`workflows/lib/hooks/`)
+
+| Hook | Purpose |
+|---|---|
+| `enforce-screenshot-requirement.js` | Block QA without screenshots (GH-207) |
 
 ## Session Guard
 

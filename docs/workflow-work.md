@@ -4,7 +4,7 @@ The main orchestrator workflow that drives ticket-to-PR delivery through 18 dete
 
 ## Invocation
 
-```
+```bash
 /work TICKET-123
 /work TICKET-123 "Optional description"
 ```
