@@ -10,24 +10,29 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  statuses: write
 
 jobs:
-  check-ai-review:
+  ai-review-gate:
     runs-on: ubuntu-latest
-    name: AI Review Required
+    name: AI Review Gate
     steps:
-      - name: Check for AI review approval
+      - name: Set AI review status
         uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo } = context.repo;
-            const pull_number = context.payload.pull_request?.number
-              || context.payload.review?.pull_request?.number;
+            const pr = context.payload.pull_request
+              || context.payload.review?.pull_request;
 
-            if (!pull_number) {
-              core.setFailed('Could not determine PR number');
+            if (!pr) {
+              core.setFailed('Could not determine PR');
               return;
             }
+
+            const sha = pr.head.sha;
+            const pull_number = pr.number;
+            const statusContext = 'AI Review Required';
 
             const { data: reviews } = await github.rest.pulls.listReviews({
               owner,
@@ -35,7 +40,6 @@ jobs:
               pull_number,
             });
 
-            // Look for AI reviewer bots — add more bot logins as needed
             const aiReviewerLogins = [
               'copilot-pull-request-reviewer',
               'github-copilot[bot]',
@@ -47,27 +51,48 @@ jobs:
             );
 
             if (aiReviews.length === 0) {
-              core.setFailed(
-                'No AI review found. Waiting for Copilot or ChatGPT Codex to review this PR.'
-              );
+              // No AI review yet — set PENDING status
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha,
+                state: 'pending',
+                context: statusContext,
+                description: 'Waiting for AI review (Copilot / ChatGPT Codex)',
+              });
+              console.log('No AI review yet — status set to pending');
               return;
             }
 
-            // Check if any AI reviewer has unresolved "changes requested"
-            // Use the LAST review from each bot as the current state
+            // Get latest review from each bot
             const latestByBot = new Map();
             for (const review of aiReviews) {
               latestByBot.set(review.user.login, review);
             }
 
+            // Check for "changes requested"
             for (const [login, review] of latestByBot) {
               if (review.state === 'CHANGES_REQUESTED') {
-                core.setFailed(
-                  `AI reviewer ${login} requested changes. Address the feedback before merging.`
-                );
+                await github.rest.repos.createCommitStatus({
+                  owner,
+                  repo,
+                  sha,
+                  state: 'failure',
+                  context: statusContext,
+                  description: `${login} requested changes`,
+                });
+                console.log(`AI reviewer ${login} requested changes — status set to failure`);
                 return;
               }
             }
 
-            console.log(`AI review present from: ${[...latestByBot.keys()].join(', ')}`);
-            console.log('AI Review Gate passed.');
+            // AI review present, no blocking feedback
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha,
+              state: 'success',
+              context: statusContext,
+              description: `Reviewed by ${[...latestByBot.keys()].join(', ')}`,
+            });
+            console.log('AI review present — status set to success');
