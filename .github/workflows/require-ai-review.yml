@@ -5,7 +5,7 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, dismissed]
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ jobs:
   ai-review-gate:
     runs-on: ubuntu-latest
     name: AI Review Gate
-    if: github.event.pull_request.base.ref == 'main' || github.event.review.pull_request.base.ref == 'main'
+    if: github.event.pull_request.base.ref == 'main'
     steps:
       - name: Set AI review status
         uses: actions/github-script@v7
@@ -86,7 +86,9 @@ jobs:
                   context: statusContext,
                   description: `${login} requested changes`,
                 });
-                console.log(`AI reviewer ${login} requested changes — status set to failure`);
+                const msg = `AI reviewer ${login} requested changes`;
+                console.log(`${msg} — status set to failure`);
+                core.setFailed(msg);
                 return;
               }
             }
