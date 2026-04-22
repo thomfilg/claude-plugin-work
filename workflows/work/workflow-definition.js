@@ -61,7 +61,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
   function verifySpecGate(ticketId) {
     try {
       const specPath = path.join(TASKS_BASE, safeTicketPath(ticketId), 'spec.md');
-      if (!fs.existsSync(specPath)) return false; // No spec.md = fail-closed
+      if (!fs.existsSync(specPath)) return false; // GH-253: fail-closed — missing spec blocks the gate
       const parseGherkin = require(path.join(__dirname, 'lib', 'parse-gherkin'));
       const markdown = fs.readFileSync(specPath, 'utf-8');
       const skipResult = parseGherkin.hasSkipOverride(markdown);
