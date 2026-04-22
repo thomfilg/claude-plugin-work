@@ -207,13 +207,9 @@ function transitionStep(workflow, stateInstance, instanceId, targetStep) {
     };
   }
 
-  // Initialize state if needed
-  if (!ws) {
-    ws = stateInstance.init(instanceId, allSteps);
-  }
-
   // GH-260: Generic step-verify gate — run workflow's verifyStep callback
-  // before allowing forward transitions. Blocks BEFORE any state mutation.
+  // before allowing forward transitions. Blocks BEFORE any state mutation
+  // (including init), so failed first transitions don't create orphan state files.
   //
   // verifyStep contract: return falsy to allow, or an object with either
   // { blocked: true } or { error: true } to block the transition.
@@ -244,6 +240,11 @@ function transitionStep(workflow, stateInstance, instanceId, targetStep) {
         to: targetStep,
       };
     }
+  }
+
+  // Initialize state if needed (after verify gate — blocked transitions don't create state)
+  if (!ws) {
+    ws = stateInstance.init(instanceId, allSteps);
   }
 
   // Snapshot state before mutations — used for full rollback if onTransition fails
