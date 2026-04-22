@@ -212,11 +212,26 @@ function transitionStep(workflow, stateInstance, instanceId, targetStep) {
     ws = stateInstance.init(instanceId, allSteps);
   }
 
-  // Snapshot state before mutations — used for full rollback if onTransition fails
-  const preTransitionState = structuredClone(ws);
-
+  // GH-260: Generic step-verify gate — run workflow's verifyStep callback
+  // before allowing forward transitions. Blocks BEFORE any state mutation.
   const currentIdx = allSteps.indexOf(currentStep);
   const targetIdx = allSteps.indexOf(targetStep);
+  if (targetIdx > currentIdx && typeof workflow.verifyStep === 'function') {
+    const verifyResult = workflow.verifyStep(currentStep, targetStep, instanceId);
+    if (verifyResult && verifyResult.blocked) {
+      return {
+        error: true,
+        message: verifyResult.message || `BLOCKED: ${currentStep} not verified — cannot transition to ${targetStep}`,
+        gate: verifyResult.gate || 'step-verify',
+        step: currentStep,
+        from: currentStep,
+        to: targetStep,
+      };
+    }
+  }
+
+  // Snapshot state before mutations — used for full rollback if onTransition fails
+  const preTransitionState = structuredClone(ws);
 
   // Mark current as completed, target as in_progress
   ws.stepStatus[currentStep] = 'completed';

@@ -142,7 +142,27 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
     MAIN_WORKTREE_FOLDER,
   });
 }
+// GH-260: Lazy-init workflow definition for step-verify gate in transitions.
+// Cached after first call to avoid re-creating on every transition.
+let _workflowDef = null;
+function getWorkflowDefinition() {
+  if (!_workflowDef) {
+    const createWorkflowDefinition = require(path.join(__dirname, 'workflow-definition'));
+    _workflowDef = createWorkflowDefinition({
+      TASKS_BASE,
+      safeTicketPath: (id) => tp.sanitizeTicketIdForPath(id, tp.getProviderConfig({ skipPrompt: true })),
+      resolveGitHead: () => {
+        const fs = require('fs');
+        const gitFile = path.join(process.cwd(), '.git');
+        const content = fs.readFileSync(gitFile, 'utf-8').trim();
+        return content.startsWith('gitdir:') ? content : fs.readFileSync(path.join('.git', 'HEAD'), 'utf-8').trim();
+      },
+    });
+  }
+  return _workflowDef;
+}
 function buildTransitionDeps() {
+  const { workflow } = getWorkflowDefinition();
   return {
     tp,
     STEPS,
@@ -159,6 +179,9 @@ function buildTransitionDeps() {
     saveWorkState,
     getCurrentStep,
     TASKS_BASE,
+    // GH-260: generic step-verify gate
+    softSteps: workflow.softSteps,
+    commandMap: workflow.commandMap,
   };
 }
 function transitionStep(ticket, targetStep) {
