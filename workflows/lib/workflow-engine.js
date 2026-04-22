@@ -214,11 +214,15 @@ function transitionStep(workflow, stateInstance, instanceId, targetStep) {
 
   // GH-260: Generic step-verify gate — run workflow's verifyStep callback
   // before allowing forward transitions. Blocks BEFORE any state mutation.
+  //
+  // verifyStep contract: return falsy to allow, or an object with either
+  // { blocked: true } or { error: true } to block the transition.
+  // Optional fields: message (string), gate (string).
   const currentIdx = allSteps.indexOf(currentStep);
   const targetIdx = allSteps.indexOf(targetStep);
   if (targetIdx > currentIdx && typeof workflow.verifyStep === 'function') {
     const verifyResult = workflow.verifyStep(currentStep, targetStep, instanceId);
-    if (verifyResult && verifyResult.blocked) {
+    if (verifyResult && (verifyResult.blocked || verifyResult.error)) {
       return {
         error: true,
         message: verifyResult.message || `BLOCKED: ${currentStep} not verified — cannot transition to ${targetStep}`,

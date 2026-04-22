@@ -614,6 +614,31 @@ describe('verifyStep callback (GH-260)', () => {
     assert.strictEqual(ws.stepStatus['step_b'], 'pending');
   });
 
+  it('blocks forward transition when verifyStep returns { error: true }', () => {
+    const wf = mockWorkflow({
+      stateDir,
+      verifyStep: (currentStep, targetStep, instanceId) => ({
+        error: true,
+        message: `Step ${currentStep} failed verification`,
+        gate: 'step-verify',
+      }),
+    });
+    const stateInstance = new WorkflowState(wf.name, wf.stateDir);
+    const steps = wf.steps.map((s) => s.id);
+    stateInstance.init('verify-error-1', steps);
+    stateInstance.setStepStatus('verify-error-1', 'step_a', 'in_progress');
+
+    const result = transitionStep(wf, stateInstance, 'verify-error-1', 'step_b');
+    assert.strictEqual(result.error, true);
+    assert.strictEqual(result.gate, 'step-verify');
+    assert.ok(result.message.includes('failed verification'));
+
+    // State should be unchanged
+    const ws = stateInstance.load('verify-error-1');
+    assert.strictEqual(ws.stepStatus['step_a'], 'in_progress');
+    assert.strictEqual(ws.stepStatus['step_b'], 'pending');
+  });
+
   it('allows forward transition when verifyStep returns falsy', () => {
     const wf = mockWorkflow({
       stateDir,
