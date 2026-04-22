@@ -8,7 +8,7 @@
  * - Step DEFERs when spec.md already exists
  * - Step RUNs when spec.md is missing
  *
- * Run: npx vitest run workflows/work/steps/__tests__/spec.test.js
+ * Run: node --test workflows/work/steps/__tests__/spec.test.js
  */
 
 'use strict';

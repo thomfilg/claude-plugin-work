@@ -7,7 +7,7 @@
  * - Step DEFERs when brief.md already exists
  * - Step RUNs when brief.md is missing
  *
- * Run: npx vitest run workflows/work/steps/__tests__/brief.test.js
+ * Run: node --test workflows/work/steps/__tests__/brief.test.js
  */
 
 'use strict';

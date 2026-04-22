@@ -8,7 +8,7 @@
  * - Step RUNs when spec.md exists and tasks.md is missing
  * - Step DEFERs when spec.md is missing (cannot generate tasks)
  *
- * Run: npx vitest run workflows/work/steps/__tests__/tasks.test.js
+ * Run: node --test workflows/work/steps/__tests__/tasks.test.js
  */
 
 'use strict';
