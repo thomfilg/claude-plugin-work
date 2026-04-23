@@ -166,6 +166,7 @@ const CHECK_GATE_RULES = [
     check(dir) {
       const tasksPath = path.join(dir, 'tasks.md');
       if (!fileExists(tasksPath)) return []; // single-task mode, skip
+      const { validateTddEvidence } = require(path.join(__dirname, 'tdd-enforcement'));
       const taskDirs = listFiles(dir, /^task\d+$/).filter((d) => {
         try {
           return fs.statSync(d).isDirectory();
@@ -183,14 +184,10 @@ const CHECK_GATE_RULES = [
           continue;
         }
         try {
-          const state = JSON.parse(fs.readFileSync(tddPath, 'utf8'));
-          if (typeof state.exception === 'string' && state.exception.trim() !== '') continue;
-          if (!Array.isArray(state.cycles) || state.cycles.length === 0) {
-            reasons.push(`${taskName}/tdd-phase.json has no TDD cycles or exception`);
-            continue;
-          }
-          if (!state.cycles.some((c) => c.red && c.green)) {
-            reasons.push(`${taskName}/tdd-phase.json has no complete RED→GREEN cycle`);
+          const state = JSON.parse(readFile(tddPath));
+          const validation = validateTddEvidence(state);
+          if (!validation.valid) {
+            reasons.push(`${taskName}/tdd-phase.json: ${validation.reason}`);
           }
         } catch {
           reasons.push(`${taskName}/tdd-phase.json is not valid JSON`);

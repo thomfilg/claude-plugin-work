@@ -151,6 +151,8 @@ describe('archiveStepArtifacts', () => {
   // ─── Per-task archival (GH-259 Task 6) ──────────────────────────────────
 
   it('archives per-task files to runs/runN/taskM/', () => {
+    // tasks.md must exist for per-task archival (GH-259)
+    fs.writeFileSync(path.join(tmpDir, 'tasks.md'), '# Tasks\n', 'utf-8');
     // Create task subdirectories with artifact files
     fs.mkdirSync(path.join(tmpDir, 'task1'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'task2'), { recursive: true });
@@ -171,6 +173,8 @@ describe('archiveStepArtifacts', () => {
   });
 
   it('archives root and per-task files together', () => {
+    // tasks.md must exist for per-task archival (GH-259)
+    fs.writeFileSync(path.join(tmpDir, 'tasks.md'), '# Tasks\n', 'utf-8');
     // Root-level artifact
     touch('dev-quality.check.md');
 

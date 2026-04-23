@@ -107,7 +107,8 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
   }
 
   // Scan taskN/ subdirectories for matching artifacts (GH-259)
-  try {
+  // Only recurse when tasks.md exists (multi-task mode)
+  if (fileExists(path.join(tasksDir, 'tasks.md'))) try {
     const taskDirs = fs
       .readdirSync(tasksDir)
       .filter((d) => /^task\d+$/.test(d))

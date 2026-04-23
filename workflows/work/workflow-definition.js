@@ -77,8 +77,10 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
 
   // GH-259 Task 7.2: Helper to verify per-task TDD evidence when tasks.md exists.
   // Returns true if no tasks.md, or if every taskN/ dir has valid tdd-phase.json.
+  // Uses validateTddEvidence from tdd-enforcement.js (single source of truth).
   function verifyPerTaskTDD(ticketId) {
     try {
+      const { validateTddEvidence } = require(path.join(__dirname, 'tdd-enforcement'));
       const dir = path.join(TASKS_BASE, safeTicketPath(ticketId));
       const tasksPath = path.join(dir, 'tasks.md');
       if (!fs.existsSync(tasksPath)) return true; // single-task mode — no per-task check
@@ -89,9 +91,8 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
         const tddPath = path.join(dir, taskEntry.name, 'tdd-phase.json');
         if (!fs.existsSync(tddPath)) return false;
         const state = JSON.parse(fs.readFileSync(tddPath, 'utf-8'));
-        if (typeof state.exception === 'string' && state.exception.trim() !== '') continue;
-        if (!Array.isArray(state.cycles) || state.cycles.length === 0) return false;
-        if (!state.cycles.some((c) => c.red && c.green)) return false;
+        const validation = validateTddEvidence(state);
+        if (!validation.valid) return false;
       }
       return true;
     } catch {
