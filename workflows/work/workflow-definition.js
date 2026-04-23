@@ -86,7 +86,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
       const tasksPath = path.join(dir, 'tasks.md');
       if (!fs.existsSync(tasksPath)) return true; // single-task mode — no per-task check
       const tasks = taskParser.parseTasks(dir);
-      if (!tasks || tasks.length === 0) return true; // unparseable tasks.md
+      if (!tasks || tasks.length === 0) return false; // fail-closed: unparseable tasks.md blocks gate
       const expectedTasks = tasks.filter((t) => !t.isCheckpoint);
       if (expectedTasks.length === 0) return true; // all checkpoint tasks
       for (const task of expectedTasks) {
