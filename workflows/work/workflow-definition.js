@@ -92,9 +92,9 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
         if (!fs.existsSync(tddPath)) return false;
         const state = JSON.parse(fs.readFileSync(tddPath, 'utf-8'));
         const validation = validateTddEvidence(state);
-        if (!validation.valid) return false; // uses shared validateTddEvidence
-      }
-      return true; // all tasks have valid TDD evidence
+        if (!validation.valid) return false;
+      } // validated via shared validateTddEvidence (tdd-enforcement.js)
+      return true;
     } catch {
       return false;
     }
