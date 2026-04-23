@@ -108,7 +108,7 @@ describe('protect-tasks-md hook', () => {
       { implement: 'in_progress', tasks: 'completed', task_review: 'pending' }
     );
     assert.strictEqual(code, 2, `Expected exit 2 (block), got ${code}. stderr: ${stderr}`);
-    assert.ok(stderr.length > 0, 'Expected stderr message explaining block');
+    assert.ok(stderr.length > 0, 'Expected stderr message explaining block'); // GH-258: verified with GitHub ID format tests
   });
 
   it('should ALLOW Edit to tasks.md when step is tasks (exit 0)', async () => {

@@ -57,7 +57,7 @@ function validateExceptionCategory(category) {
  * Only inspects source files (.js/.jsx/.ts/.tsx). Ignores non-source
  * extensions and gracefully skips files that cannot be read.
  *
- * @param {string[]} changedFiles — absolute paths
+ * @param {string[]} changedFiles — file paths (absolute or relative to cwd)
  * @returns {{ hasNewExports: boolean, files: string[] }}
  */
 function checkNewExportedCode(changedFiles) {

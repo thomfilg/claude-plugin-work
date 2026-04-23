@@ -66,6 +66,7 @@ function getStepInProgress(ticketId) {
     const tasksBase = getConfig('TASKS_BASE');
     if (!tasksBase) return null;
 
+    // GH-258: ticketId is already sanitized by getTicketId (via config.safeTicketId)
     const statePath = path.join(tasksBase, ticketId, '.work-state.json');
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     const stepStatus = state.stepStatus || {};
