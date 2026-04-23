@@ -522,7 +522,10 @@ function cmdException(ticketId, args) {
       const staged = execSync('git diff --cached --diff-filter=A --name-only', { encoding: 'utf8' }).trim();
       const untracked = execSync('git ls-files --others --exclude-standard', { encoding: 'utf8' }).trim();
       allChanged = [...new Set([...diff.split('\n'), ...staged.split('\n'), ...untracked.split('\n')].filter(Boolean))];
-    } catch { /* git not available */ }
+    } catch {
+      // Fail-open: git not available or not a repo — allow exception.
+      // This follows project convention (CLAUDE.md: hooks catch errors and exit 0).
+    }
 
     const exportCheck = checkNewExportedCode(allChanged);
     if (exportCheck.hasNewExports) {

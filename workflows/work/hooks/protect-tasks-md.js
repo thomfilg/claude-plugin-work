@@ -41,7 +41,13 @@ function getTicketId(hookData) {
       })
       .trim();
     const match = branch.match(/^(GH-\d+|[A-Z]+-\d+)/i);
-    return match ? match[1] : null;
+    if (!match) return null;
+    let ticketId = match[1];
+    try {
+      const config = require(path.join(__dirname, '..', '..', 'lib', 'config'));
+      ticketId = config.safeTicketId(ticketId);
+    } catch { /* use raw if config unavailable */ }
+    return ticketId;
   } catch {
     return null;
   }

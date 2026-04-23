@@ -199,4 +199,29 @@ describe('protect-tasks-md hook', () => {
     );
     assert.strictEqual(code, 0, 'Expected exit 0 (allow) for non-blocked tool');
   });
+
+  it('should BLOCK Edit to tasks.md for GitHub-style ticket ID GH-258 (exit 2)', async () => {
+    const { code, stderr } = await runHookWithState(
+      {
+        tool_name: 'Edit',
+        tool_input: { file_path: '/home/user/project/tasks/GH-258/tasks.md' },
+      },
+      'GH-258',
+      { implement: 'in_progress', tasks: 'completed', task_review: 'pending' }
+    );
+    assert.strictEqual(code, 2, `Expected exit 2 (block) for GH-258, got ${code}. stderr: ${stderr}`);
+    assert.ok(stderr.length > 0, 'Expected stderr message explaining block');
+  });
+
+  it('should ALLOW Edit to tasks.md for GH-258 when step is tasks (exit 0)', async () => {
+    const { code } = await runHookWithState(
+      {
+        tool_name: 'Edit',
+        tool_input: { file_path: '/home/user/project/tasks/GH-258/tasks.md' },
+      },
+      'GH-258',
+      { tasks: 'in_progress', implement: 'pending', task_review: 'pending' }
+    );
+    assert.strictEqual(code, 0, 'Expected exit 0 (allow) for GH-258 during tasks step');
+  });
 });

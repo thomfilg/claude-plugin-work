@@ -909,6 +909,18 @@ describe('TDD enforcement', () => {
       const result = validateTddEvidence({ exception: 42, cycles: [] });
       assert.equal(result.valid, false);
     });
+
+    it('structured exception with missing reason rejects', () => {
+      const result = validateTddEvidence({ exception: { category: 'config-only' }, cycles: [] });
+      assert.equal(result.valid, false);
+      assert.ok(result.reason.includes('Exception reason is required'), `Expected reason message, got: ${result.reason}`);
+    });
+
+    it('structured exception with empty reason rejects', () => {
+      const result = validateTddEvidence({ exception: { category: 'config-only', reason: '  ' }, cycles: [] });
+      assert.equal(result.valid, false);
+      assert.ok(result.reason.includes('Exception reason is required'), `Expected reason message, got: ${result.reason}`);
+    });
   });
 
   describe('task-review uses per-task tasksDir', () => {

@@ -103,6 +103,10 @@ function validateTddEvidence(evidence) {
       const { ALLOWED_CATEGORIES } = require('../work-implement/exception-validator');
       const cat = evidence.exception.category;
       if (typeof cat === 'string' && ALLOWED_CATEGORIES.includes(cat)) {
+        const reason = evidence.exception.reason;
+        if (typeof reason !== 'string' || !reason.trim()) {
+          return { valid: false, reason: 'Exception reason is required and must be a non-empty string.' };
+        }
         return { valid: true, reason: '' };
       }
       return { valid: false, reason: 'Invalid exception category: "' + cat + '". Allowed: ' + ALLOWED_CATEGORIES.join(', ') + '.' };
