@@ -268,7 +268,9 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
                 return typeof cat === 'string' && ALLOWED_CATEGORIES.includes(cat) &&
                   typeof reason === 'string' && reason.trim() !== '';
               } catch {
-                return typeof state.exception.category === 'string'; // fallback if module unavailable
+                // Fallback: accept if category and reason are non-empty strings
+                return typeof state.exception.category === 'string' && state.exception.category.trim() !== '' &&
+                  typeof state.exception.reason === 'string' && state.exception.reason.trim() !== '';
               }
             }
             if (!Array.isArray(state.cycles) || state.cycles.length === 0) return false;
