@@ -50,7 +50,9 @@ Rules:
 - Evidence is recorded by the SCRIPT — it runs git diff and test commands itself.
 - Do NOT make local git commits during the cycle — the commit step handles that.
 - If the change is purely mechanical (config-only, no behavior change):
-  node <TDD_STATE_PATH> exception <TICKET_ID> --task <N> --reason "config-only change, no testable behavior"  # --task supported
+  node <TDD_STATE_PATH> exception <TICKET_ID> --task <N> --category <category> --reason "<reason>"
+  Allowed categories: checkpoint, config-only, file-move, mechanical-refactor
+  Exception is BLOCKED when git diff contains new files with exports (use TDD instead).
 `.trim();
 
 /**
