@@ -58,7 +58,7 @@ describe('check step', () => {
     assert.ok(Array.isArray(entries[0].preCommands));
     assert.equal(entries[0].preCommands.length, 4);
     assert.match(entries[0].preCommands[0], /rm -f.*\.check\.md/);
-    assert.match(entries[0].preCommands[1], /rm -f.*task\*.*\.check\.md/);
+    assert.match(entries[0].preCommands[1], /rm -f.*task\[0-9\]\*.*\.check\.md/);
     assert.match(entries[0].preCommands[2], /\.pr-update-sha/);
     assert.match(entries[0].preCommands[3], /\.post-pr-update-sha/);
   });

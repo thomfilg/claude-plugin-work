@@ -45,10 +45,10 @@ describe('check step: rework preCommands (GH-259 Task 7.3)', () => {
       'should still clean ticket-root *.check.md'
     );
 
-    // New cleanup: per-task *.check.md (e.g. rm -f "${tasksDir}"/task*/*.check.md)
+    // New cleanup: per-task *.check.md (e.g. rm -f "${tasksDir}"/task[0-9]*/*.check.md)
     assert.ok(
-      preCommands.some((cmd) => /task\*/.test(cmd) && /\*\.check\.md/.test(cmd)),
-      'should clean per-task *.check.md files (task*/*.check.md)'
+      preCommands.some((cmd) => /task\[0-9\]\*/.test(cmd) && /\*\.check\.md/.test(cmd)),
+      'should clean per-task *.check.md files (task[0-9]*/*.check.md)'
     );
   });
 
