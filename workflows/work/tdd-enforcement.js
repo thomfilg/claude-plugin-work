@@ -90,8 +90,23 @@ function validateTddEvidence(evidence) {
     return { valid: false, reason: 'Evidence is null or not an object' };
   }
 
-  if (typeof evidence.exception === 'string' && evidence.exception.trim() !== '') {
-    return { valid: true, reason: '' };
+  // Exception handling: accept both legacy string and structured { category, reason }
+  if (evidence.exception != null) {
+    // Legacy format: bare string (backward compat)
+    if (typeof evidence.exception === 'string' && evidence.exception.trim() !== '') {
+      return { valid: true, reason: '' };
+    }
+    // Structured format: { category, reason }
+    if (typeof evidence.exception === 'object' && evidence.exception !== null) {
+      const { ALLOWED_CATEGORIES } = require('../work-implement/exception-validator');
+      const cat = evidence.exception.category;
+      if (typeof cat === 'string' && ALLOWED_CATEGORIES.includes(cat)) {
+        return { valid: true, reason: '' };
+      }
+      return { valid: false, reason: 'Invalid exception category: "' + cat + '". Allowed: ' + ALLOWED_CATEGORIES.join(', ') + '.' };
+    }
+    // exception exists but is neither string nor valid object
+    return { valid: false, reason: 'Exception field has invalid format' };
   }
 
   const cycles = evidence.cycles;
