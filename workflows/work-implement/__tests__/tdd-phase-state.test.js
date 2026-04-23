@@ -869,6 +869,47 @@ describe('tdd-phase-state CLI', () => {
         `Expected token error for gated exception, got: ${stderr}`
       );
     });
+
+    it('--category file-move bypasses heuristic even with staged file containing module.exports', () => {
+      const gitRepo = createTempGitRepo();
+      fs.mkdirSync(path.join(gitRepo, 'src'), { recursive: true });
+      fs.writeFileSync(
+        path.join(gitRepo, 'src', 'moved-module.js'),
+        'function helper() {}\nmodule.exports = { helper };\n'
+      );
+      execSync('git add src/moved-module.js', { cwd: gitRepo, stdio: 'pipe' });
+
+      const { stdout, exitCode } = runCli(
+        'exception TEST-FM1 --category file-move --reason "rename src/old.js to src/moved-module.js" --task 1',
+        homeDir,
+        gitRepo
+      );
+      assert.strictEqual(exitCode, 0);
+      const result = JSON.parse(stdout);
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.category, 'file-move');
+
+      fs.rmSync(gitRepo, { recursive: true, force: true });
+    });
+
+    it('rejected exception (invalid --category) writes audit record with allow: false', () => {
+      const { exitCode } = runCli(
+        'exception TEST-AUD1 --category bogus --reason "test" --task 3',
+        homeDir
+      );
+      assert.strictEqual(exitCode, 1);
+
+      // Check audit file for audit record
+      const actionsPath = path.join(homeDir, 'worktrees', 'tasks', 'TEST-AUD1', '.work-actions.json');
+      assert.ok(fs.existsSync(actionsPath), `Expected audit file at ${actionsPath}`);
+      const actions = JSON.parse(fs.readFileSync(actionsPath, 'utf8'));
+      const auditRecord = actions.find(
+        (a) => a.action === 'tdd-exception' && a.allow === false
+      );
+      assert.ok(auditRecord, 'Expected audit record with allow: false');
+      assert.strictEqual(auditRecord.allow, false);
+      assert.ok(auditRecord.reason.includes('bogus'), 'Expected reason to contain category');
+    });
   });
 
     describe('multi-task TDD accumulation (GH-219 Task 5)', () => {

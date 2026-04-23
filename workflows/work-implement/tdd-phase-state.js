@@ -465,12 +465,30 @@ function cmdTransition(ticketId, targetPhase, args) {
   successOut({ phase: state.currentPhase, cycle: state.currentCycle });
 }
 
+function auditException(ticketId, taskNum, category, reason, allow) {
+  try {
+    const { appendEnforcementAudit } = require('../work/work-actions');
+    appendEnforcementAudit(ticketId, {
+      origin: 'ai-subtask',
+      task: taskNum || null,
+      phase: null,
+      action: 'tdd-exception',
+      allow,
+      reason: (category || 'unknown') + ': ' + (reason || ''),
+      outputPath: null,
+      meta: { category },
+    });
+  } catch { /* fail-open */ }
+}
+
 function cmdException(ticketId, args) {
   if (!ticketId) errorExit('Missing ticket ID.');
 
   // Parse --category (required)
   const category = parseCategory(args);
+  const taskNum = safeParseTask(args);
   if (!category) {
+    auditException(ticketId, taskNum, null, null, false);
     errorExit('Missing --category argument. Usage: node tdd-phase-state.js exception <TICKET_ID> --category <category> --reason "<reason>"');
   }
 
@@ -478,34 +496,37 @@ function cmdException(ticketId, args) {
   const { validateExceptionCategory, checkNewExportedCode } = require('./exception-validator');
   const catResult = validateExceptionCategory(category);
   if (!catResult.valid) {
+    auditException(ticketId, taskNum, category, null, false);
     errorExit('Invalid exception category: ' + catResult.reason);
   }
 
   // Parse --reason (required)
   const reasonIdx = args.indexOf('--reason');
   if (reasonIdx === -1 || reasonIdx + 1 >= args.length) {
+    auditException(ticketId, taskNum, category, null, false);
     errorExit('Missing --reason argument.');
   }
   const reason = args[reasonIdx + 1];
   if (!reason || !reason.trim()) {
+    auditException(ticketId, taskNum, category, '', false);
     errorExit('Reason cannot be empty.');
   }
 
-  const taskNum = safeParseTask(args);
   const opts = taskNum ? { taskNum } : undefined;
 
-  // Heuristic check: detect new exported code (skip for checkpoint)
-  if (category !== 'checkpoint') {
+  // Heuristic check: detect new exported code (skip for checkpoint and file-move)
+  if (category !== 'checkpoint' && category !== 'file-move') {
     let allChanged = [];
     try {
-      const diff = execSync('git diff --name-only', { encoding: 'utf8' }).trim();
-      const staged = execSync('git diff --cached --name-only', { encoding: 'utf8' }).trim();
+      const diff = execSync('git diff --diff-filter=A --name-only', { encoding: 'utf8' }).trim();
+      const staged = execSync('git diff --cached --diff-filter=A --name-only', { encoding: 'utf8' }).trim();
       const untracked = execSync('git ls-files --others --exclude-standard', { encoding: 'utf8' }).trim();
       allChanged = [...new Set([...diff.split('\n'), ...staged.split('\n'), ...untracked.split('\n')].filter(Boolean))];
     } catch { /* git not available */ }
 
     const exportCheck = checkNewExportedCode(allChanged);
     if (exportCheck.hasNewExports) {
+      auditException(ticketId, taskNum, category, reason, false);
       errorExit('New exported code detected in: ' + exportCheck.files.join(', ') + '. TDD is required for new code with exports. Use the RED-GREEN-REFACTOR cycle instead of exception mode.');
     }
   }
@@ -518,20 +539,7 @@ function cmdException(ticketId, args) {
   };
   writeState(ticketId, state, opts);
 
-  // Audit trail (fail-open)
-  try {
-    const { appendEnforcementAudit } = require('../../work/work-actions');
-    appendEnforcementAudit(ticketId, {
-      origin: 'ai-subtask',
-      task: taskNum || null,
-      phase: null,
-      action: 'tdd-exception',
-      allow: true,
-      reason: category + ': ' + reason,
-      outputPath: null,
-      meta: { category },
-    });
-  } catch { /* fail-open */ }
+  auditException(ticketId, taskNum, category, reason, true);
 
   successOut({ ok: true, phase: 'exception', category, reason });
 }

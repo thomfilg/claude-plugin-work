@@ -168,7 +168,7 @@ describe('protect-tasks-md hook', () => {
     const { code } = await runHookWithState(
       {
         tool_name: 'Write',
-        tool_input: { file_path: '/some/path/tasks.md' },
+        tool_input: { file_path: '/home/user/project/tasks/GH-99/tasks.md' },
       },
       'GH-99',
       { implement: 'in_progress', tasks: 'completed', task_review: 'pending' }
@@ -180,7 +180,7 @@ describe('protect-tasks-md hook', () => {
     const { code } = await runHookWithState(
       {
         tool_name: 'MultiEdit',
-        tool_input: { file_path: '/some/path/tasks.md' },
+        tool_input: { file_path: '/home/user/project/tasks/GH-99/tasks.md' },
       },
       'GH-99',
       { implement: 'in_progress', tasks: 'completed', task_review: 'pending' }
