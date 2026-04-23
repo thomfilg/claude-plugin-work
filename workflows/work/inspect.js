@@ -136,7 +136,9 @@ function inspect(ticket, providerConfig, suffix, deps) {
   // Uses deps.fileExists/readFile/listFiles for testability (consistent with the rest of inspect).
   if (fileExists(path.join(s.tasksDir, 'tasks.md'))) {
     s.perTaskReports = {};
-    const taskDirNames = listFiles(s.tasksDir, /^task\d+$/).map((fp) => path.basename(fp));
+    const taskDirNames = listFiles(s.tasksDir, /^task\d+$/)
+      .filter((fp) => { try { return fs.statSync(fp).isDirectory(); } catch { return false; } })
+      .map((fp) => path.basename(fp));
     for (const taskDirName of taskDirNames) {
       const taskDir = path.join(s.tasksDir, taskDirName);
       const taskReport = { tddPhase: null, checkReports: [] };
