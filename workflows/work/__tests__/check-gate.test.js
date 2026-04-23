@@ -350,11 +350,53 @@ describe('check-gate (unit)', () => {
     assert.ok(reasons[0].toLowerCase().includes('json'));
   });
 
-  it('per-task-tdd-evidence rule skips when tasks.md exists but no taskN dirs yet', () => {
+  it('per-task-tdd-evidence rule fails when tasks.md declares tasks but no taskN dirs exist', () => {
     const dir = path.join(TEMP, testTicket);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'tasks.md'), '# Tasks\n\n## Task 1\n');
-    // No task directories created yet
+    // No task directories created yet — gate must catch this
+    const rule = CHECK_GATE_RULES.find((r) => r.name === 'per-task-tdd-evidence');
+    const reasons = rule.check(dir, testTicket);
+    assert.equal(reasons.length, 1);
+    assert.ok(reasons[0].includes('task1'));
+    assert.ok(reasons[0].toLowerCase().includes('tdd'));
+  });
+
+  it('per-task-tdd-evidence rule fails when tasks.md declares 3 tasks but only 2 dirs exist', () => {
+    const dir = path.join(TEMP, testTicket);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'tasks.md'), '# Tasks\n\n## Task 1\n## Task 2\n## Task 3\n');
+    writeTaskFile(
+      'task1',
+      'tdd-phase.json',
+      JSON.stringify({ cycles: [{ red: { ts: 1 }, green: { ts: 2 } }] })
+    );
+    writeTaskFile(
+      'task2',
+      'tdd-phase.json',
+      JSON.stringify({ cycles: [{ red: { ts: 1 }, green: { ts: 2 } }] })
+    );
+    // task3 directory does not exist at all
+    const rule = CHECK_GATE_RULES.find((r) => r.name === 'per-task-tdd-evidence');
+    const reasons = rule.check(dir, testTicket);
+    assert.equal(reasons.length, 1);
+    assert.ok(reasons[0].includes('task3'));
+    assert.ok(reasons[0].toLowerCase().includes('tdd'));
+  });
+
+  it('per-task-tdd-evidence rule skips checkpoint tasks from tasks.md', () => {
+    const dir = path.join(TEMP, testTicket);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'tasks.md'),
+      '# Tasks\n\n## Task 1\n— Implement feature\n### Type\nimplementation\n\n## Task 2\n— Checkpoint\n### Type\ncheckpoint\n'
+    );
+    writeTaskFile(
+      'task1',
+      'tdd-phase.json',
+      JSON.stringify({ cycles: [{ red: { ts: 1 }, green: { ts: 2 } }] })
+    );
+    // task2 is a checkpoint — no dir needed
     const rule = CHECK_GATE_RULES.find((r) => r.name === 'per-task-tdd-evidence');
     const reasons = rule.check(dir, testTicket);
     assert.deepStrictEqual(reasons, []);

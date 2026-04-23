@@ -81,16 +81,16 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
   function verifyPerTaskTDD(ticketId) {
     try {
       const { validateTddEvidence } = require(path.join(__dirname, 'tdd-enforcement'));
+      const taskParser = require(path.join(__dirname, 'task-parser'));
       const dir = path.join(TASKS_BASE, safeTicketPath(ticketId));
       const tasksPath = path.join(dir, 'tasks.md');
       if (!fs.existsSync(tasksPath)) return true; // single-task mode — no per-task check
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      const taskDirs = entries.filter((e) => e.isDirectory() && /^task\d+$/.test(e.name));
-      // Intentional: no task dirs yet means implementation hasn't started creating
-      // per-task artifacts. Return true to avoid blocking pre-implementation steps.
-      if (taskDirs.length === 0) return true;
-      for (const taskEntry of taskDirs) {
-        const tddPath = path.join(dir, taskEntry.name, 'tdd-phase.json');
+      const tasks = taskParser.parseTasks(dir);
+      if (!tasks || tasks.length === 0) return true; // unparseable tasks.md
+      const expectedTasks = tasks.filter((t) => !t.isCheckpoint);
+      if (expectedTasks.length === 0) return true; // all checkpoint tasks
+      for (const task of expectedTasks) {
+        const tddPath = path.join(dir, `task${task.num}`, 'tdd-phase.json');
         if (!fs.existsSync(tddPath)) return false;
         const state = JSON.parse(fs.readFileSync(tddPath, 'utf-8'));
         const validation = validateTddEvidence(state);

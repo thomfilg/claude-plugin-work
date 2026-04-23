@@ -135,6 +135,69 @@ describe('workflow-definition: check verify with per-task TDD (GH-259 Task 7.2)'
     assert.equal(verify(ticketId), true);
   });
 
+  it('check verify fails when tasks.md declares 3 tasks but only 2 dirs exist', () => {
+    const tmp = makeTmpDir();
+    tmpDirs.push(tmp);
+    const ticketId = 'GH-280';
+    const dir = path.join(tmp, ticketId);
+    fs.mkdirSync(dir, { recursive: true });
+
+    fs.writeFileSync(path.join(dir, 'code-review.check.md'), 'Status: APPROVED');
+    fs.writeFileSync(path.join(dir, 'tests.check.md'), 'Status: APPROVED');
+    fs.writeFileSync(path.join(dir, 'completion.check.md'), 'Status: COMPLETE');
+    fs.writeFileSync(path.join(dir, 'README.md'), '# README');
+    fs.writeFileSync(path.join(dir, 'qa-feature.check.md'), 'Status: APPROVED');
+
+    fs.writeFileSync(path.join(dir, 'tasks.md'), '# Tasks\n## Task 1\n## Task 2\n## Task 3\n');
+    const task1 = path.join(dir, 'task1');
+    const task2 = path.join(dir, 'task2');
+    fs.mkdirSync(task1, { recursive: true });
+    fs.mkdirSync(task2, { recursive: true });
+    fs.writeFileSync(
+      path.join(task1, 'tdd-phase.json'),
+      JSON.stringify({ cycles: [{ red: { ts: 1 }, green: { ts: 2 } }] })
+    );
+    fs.writeFileSync(
+      path.join(task2, 'tdd-phase.json'),
+      JSON.stringify({ cycles: [{ red: { ts: 1 }, green: { ts: 2 } }] })
+    );
+    // task3 dir does not exist — gate must catch this
+
+    const { workflow } = createWorkflowDefinition(makeDeps(tmp));
+    const verify = getVerify(workflow, STEPS.check);
+    assert.equal(verify(ticketId), false);
+  });
+
+  it('check verify skips checkpoint tasks from tasks.md', () => {
+    const tmp = makeTmpDir();
+    tmpDirs.push(tmp);
+    const ticketId = 'GH-281';
+    const dir = path.join(tmp, ticketId);
+    fs.mkdirSync(dir, { recursive: true });
+
+    fs.writeFileSync(path.join(dir, 'code-review.check.md'), 'Status: APPROVED');
+    fs.writeFileSync(path.join(dir, 'tests.check.md'), 'Status: APPROVED');
+    fs.writeFileSync(path.join(dir, 'completion.check.md'), 'Status: COMPLETE');
+    fs.writeFileSync(path.join(dir, 'README.md'), '# README');
+    fs.writeFileSync(path.join(dir, 'qa-feature.check.md'), 'Status: APPROVED');
+
+    fs.writeFileSync(
+      path.join(dir, 'tasks.md'),
+      '# Tasks\n## Task 1\n— Implement feature\n### Type\nimplementation\n\n## Task 2\n— Checkpoint\n### Type\ncheckpoint\n'
+    );
+    const task1 = path.join(dir, 'task1');
+    fs.mkdirSync(task1, { recursive: true });
+    fs.writeFileSync(
+      path.join(task1, 'tdd-phase.json'),
+      JSON.stringify({ cycles: [{ red: { ts: 1 }, green: { ts: 2 } }] })
+    );
+    // task2 is checkpoint — no dir needed
+
+    const { workflow } = createWorkflowDefinition(makeDeps(tmp));
+    const verify = getVerify(workflow, STEPS.check);
+    assert.equal(verify(ticketId), true);
+  });
+
   it('check verify passes when taskN/ has exception mode in tdd-phase.json', () => {
     const tmp = makeTmpDir();
     tmpDirs.push(tmp);

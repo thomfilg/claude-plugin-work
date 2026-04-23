@@ -167,17 +167,15 @@ const CHECK_GATE_RULES = [
       const tasksPath = path.join(dir, 'tasks.md');
       if (!fileExists(tasksPath)) return []; // single-task mode, skip
       const { validateTddEvidence } = require(path.join(__dirname, 'tdd-enforcement'));
-      const taskDirs = listFiles(dir, /^task\d+$/).filter((d) => {
-        try {
-          return fs.statSync(d).isDirectory();
-        } catch {
-          return false;
-        }
-      });
-      if (taskDirs.length === 0) return []; // no task dirs yet
+      const taskParser = require(path.join(__dirname, 'task-parser'));
+      const tasks = taskParser.parseTasks(dir);
+      if (!tasks || tasks.length === 0) return []; // unparseable tasks.md
+      const expectedTasks = tasks.filter((t) => !t.isCheckpoint);
+      if (expectedTasks.length === 0) return []; // all checkpoint tasks
       const reasons = [];
-      for (const taskDirPath of taskDirs) {
-        const taskName = path.basename(taskDirPath);
+      for (const task of expectedTasks) {
+        const taskName = `task${task.num}`;
+        const taskDirPath = path.join(dir, taskName);
         const tddPath = path.join(taskDirPath, 'tdd-phase.json');
         if (!fileExists(tddPath)) {
           reasons.push(`Missing TDD evidence: ${taskName}/tdd-phase.json`);
@@ -190,7 +188,9 @@ const CHECK_GATE_RULES = [
             reasons.push(`${taskName}/tdd-phase.json: ${validation.reason}`);
           }
         } catch (e) {
-          reasons.push(`${taskName}/tdd-phase.json: ${e instanceof SyntaxError ? 'invalid JSON' : e?.message || 'read error'}`);
+          reasons.push(
+            `${taskName}/tdd-phase.json: ${e instanceof SyntaxError ? 'invalid JSON' : e?.message || 'read error'}`
+          );
         }
       }
       return reasons;
