@@ -72,6 +72,8 @@ function getStepInProgress(ticketId) {
     }
     return null;
   } catch {
+    // Fail-open by design (CLAUDE.md convention): if workflow state is unreadable
+    // or no step is in_progress, allow the edit rather than block legitimate work.
     return null;
   }
 }
@@ -80,6 +82,7 @@ const protector = createArtifactProtector({
   artifacts: [{ basename: 'tasks.md', step: CANONICAL_STEP }],
   getStepInProgress,
   getTicketId,
+  // Bash write-vector detection is handled by createArtifactProtector (checks basename in command strings)
 });
 
 async function main() {
