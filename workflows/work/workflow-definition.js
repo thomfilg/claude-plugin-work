@@ -472,7 +472,8 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
               const entries = JSON.parse(fs.readFileSync(accountabilityFile, 'utf-8'));
               if (!Array.isArray(entries) || entries.length < result.strictCommentCount)
                 return false;
-              // GH-285: userApproval check removed — disposition + reason is sufficient
+              // GH-285: userApproval requirement removed per brief resolution —
+              // disposition + reason fields are sufficient proof of comment triage.
               if (!entries.every((e) => e.disposition && e.reason)) return false;
             }
 
