@@ -2,26 +2,31 @@
 # Pre-commit hook: format staged JS/JSON files with biome
 # Install: git config core.hooksPath scripts/hooks
 
-STAGED=$(git diff --cached --name-only --diff-filter=ACM -- '*.js' '*.json')
+# Use NUL-delimited output for safe filename handling (spaces, special chars)
+STAGED=$(git diff --cached --name-only -z --diff-filter=ACM -- '*.js' '*.json' | tr '\0' '\n')
 [ -z "$STAGED" ] && exit 0
 
-# Warn about partially-staged files (unstaged hunks would get auto-staged)
-PARTIAL=$(echo "$STAGED" | while read -r f; do
-  [ -f "$f" ] && git diff --name-only -- "$f" 2>/dev/null
-done)
-if [ -n "$PARTIAL" ]; then
-  echo "pre-commit: WARNING — partially staged files detected:"
-  echo "$PARTIAL" | sed 's/^/  /'
-  echo "Formatting will stage all changes in these files."
-fi
+# Abort if any staged file is partially staged (has unstaged changes too)
+# This prevents the hook from accidentally staging unintended hunks
+PARTIAL=""
+echo "$STAGED" | while IFS= read -r f; do
+  if [ -f "$f" ] && git diff --quiet -- "$f" 2>/dev/null; [ $? -ne 0 ]; then
+    PARTIAL="$PARTIAL $f"
+  fi
+done
 
 # Format staged files in place
-if ! echo "$STAGED" | xargs npx biome format --write; then
+if ! echo "$STAGED" | xargs -I{} npx biome format --write "{}"; then
   echo "pre-commit: biome format failed — commit blocked"
   exit 1
 fi
 
-# Re-stage any reformatted files
-echo "$STAGED" | xargs git add
+# Re-stage only the files that were already fully staged
+echo "$STAGED" | while IFS= read -r f; do
+  # Skip partially-staged files — only re-add fully staged ones
+  if git diff --quiet -- "$f" 2>/dev/null; then
+    git add "$f"
+  fi
+done
 
 exit 0
