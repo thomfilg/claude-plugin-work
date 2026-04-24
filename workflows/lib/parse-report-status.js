@@ -177,22 +177,22 @@ function parseReportStatus(content, type) {
     return { status: infraStatus, icon: ICONS[infraStatus] };
   }
 
-  // 2. Fail markers first (R10: fail-first precedence)
-  const failStatus = checkFailMarkers(content, type);
-  if (failStatus) {
-    return { status: failStatus, icon: ICONS[failStatus] };
-  }
-
-  // 3. Status: line (plain or bold markdown)
+  // 2. Explicit Status: line — authoritative when present (overrides raw content patterns)
   const lineStatus = checkStatusLine(content);
   if (lineStatus) {
     return { status: lineStatus, icon: ICONS[lineStatus] || ICONS['UNKNOWN'] };
   }
 
-  // 4. Summary table
+  // 3. Summary table
   const tableStatus = checkSummaryTable(content);
   if (tableStatus) {
     return { status: tableStatus, icon: ICONS[tableStatus] || ICONS['UNKNOWN'] };
+  }
+
+  // 4. Fail markers (only when no explicit Status line — raw content heuristic)
+  const failStatus = checkFailMarkers(content, type);
+  if (failStatus) {
+    return { status: failStatus, icon: ICONS[failStatus] };
   }
 
   // 5. Pass markers

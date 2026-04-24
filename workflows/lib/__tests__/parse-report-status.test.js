@@ -119,8 +119,8 @@ describe('parseReportStatus — summary table format', () => {
 // ---------------------------------------------------------------------------
 // R10: Fail-first precedence
 // ---------------------------------------------------------------------------
-describe('parseReportStatus — fail-first precedence (R10)', () => {
-  it('returns NEEDS_WORK when CRITICAL present alongside APPROVED', () => {
+describe('parseReportStatus — Status line priority', () => {
+  it('explicit Status: APPROVED overrides CRITICAL markers in body', () => {
     const content = [
       'Status: APPROVED',
       '',
@@ -128,21 +128,27 @@ describe('parseReportStatus — fail-first precedence (R10)', () => {
       '### CRITICAL: Memory leak in handler',
     ].join('\n');
     const result = parseReportStatus(content, 'codeReview');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 
-  it('returns NEEDS_WORK when fail pattern present with pass pattern for tests', () => {
-    const content = ['✅ PASS: 10 tests', '❌ FAIL: 2 tests'].join('\n');
-    const result = parseReportStatus(content, 'tests');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
-  });
-
-  it('returns NEEDS_WORK for code review with NEEDS_WORK status and APPROVED in body', () => {
+  it('explicit Status: NEEDS_WORK is respected even with APPROVED in body', () => {
     const content = ['Status: NEEDS_WORK', '', 'Previously APPROVED items remain valid.'].join(
       '\n'
     );
     const result = parseReportStatus(content, 'codeReview');
     assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+  });
+
+  it('fail markers win when no explicit Status line exists', () => {
+    const content = ['✅ PASS: 10 tests', '❌ FAIL: 2 tests'].join('\n');
+    const result = parseReportStatus(content, 'tests');
+    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+  });
+
+  it('Status: APPROVED overrides fail patterns in raw test output', () => {
+    const content = ['```', 'ℹ fail 16', '```', '', 'Status: APPROVED'].join('\n');
+    const result = parseReportStatus(content, 'tests');
+    assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 });
 
@@ -219,14 +225,14 @@ describe('parseReportStatus — CRITICAL section header false-negative (GH-232)'
     assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 
-  it('still returns NEEDS_WORK when CRITICAL appears in issue body (not header)', () => {
+  it('explicit Status: APPROVED overrides CRITICAL in body', () => {
     const content = 'Status: APPROVED\n\n## Issues\n### CRITICAL: Memory leak in handler';
     const result = parseReportStatus(content, 'codeReview');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 
-  it('still returns NEEDS_WORK for bare CRITICAL word in prose', () => {
-    const content = 'Status: APPROVED\n\nFound a CRITICAL bug in the parser.';
+  it('CRITICAL in prose triggers NEEDS_WORK when no explicit Status line', () => {
+    const content = 'Found a CRITICAL bug in the parser.';
     const result = parseReportStatus(content, 'codeReview');
     assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
   });
@@ -269,12 +275,12 @@ describe('parseReportStatus — acceptance criteria', () => {
     assert.equal(result.icon, '✅');
   });
 
-  it('content with CRITICAL and APPROVED returns NEEDS_WORK for codeReview', () => {
+  it('explicit Status: APPROVED takes priority over CRITICAL in body for codeReview', () => {
     const content =
       'Status: APPROVED\n\n## Issues\n### CRITICAL: Unhandled error\nSome detail here.';
     const result = parseReportStatus(content, 'codeReview');
-    assert.equal(result.status, 'NEEDS_WORK');
-    assert.equal(result.icon, '⚠️');
+    assert.equal(result.status, 'APPROVED');
+    assert.equal(result.icon, '✅');
   });
 
   it('exports parseReportStatus as a function', () => {
