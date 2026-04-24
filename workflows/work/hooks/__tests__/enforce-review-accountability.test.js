@@ -103,7 +103,7 @@ function runHook(input, { cwd, envOverrides = {} } = {}) {
 
 const FOLLOW_UP_INPUT = {
   tool_name: 'Bash',
-  tool_input: { command: 'node workflows/work/steps/follow-up-pr.js' },
+  tool_input: { command: 'node workflows/work/scripts/follow-up-pr.js' },
 };
 
 describe('enforce-review-accountability: file field not required', () => {
