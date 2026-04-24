@@ -635,8 +635,15 @@ describe('per-task path enforcement for .check.md', () => {
 
   function makeProtector(overrides = {}) {
     return createArtifactProtector({
-      artifacts: [{ pattern: /\.check\.md$/, step: 'check', agents: ['code-checker'] }],
-      getStepInProgress: () => overrides.currentStep || 'check',
+      artifacts: [
+        {
+          pattern: /\.check\.md$/,
+          step: 'check',
+          allowedSteps: ['task_review'],
+          agents: ['code-checker'],
+        },
+      ],
+      getStepInProgress: () => overrides.currentStep || 'task_review',
       isRunningInAgent: overrides.isRunningInAgent || (() => true),
       getTicketId: () => overrides.ticketId || TICKET,
       ...overrides,
