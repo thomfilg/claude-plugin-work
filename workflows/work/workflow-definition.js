@@ -261,6 +261,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
               typeof state.exception === 'object' &&
               state.exception !== null
             ) {
+              // If exception-validator fails to load, the outer catch returns false (fail-closed)
               const { ALLOWED_CATEGORIES } = require(path.join(__dirname, '..', 'work-implement', 'exception-validator'));
               const cat = state.exception.category;
               const reason = state.exception.reason;
