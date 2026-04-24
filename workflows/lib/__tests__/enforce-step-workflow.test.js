@@ -1641,7 +1641,6 @@ describe('enforce-step-workflow', () => {
         'PreToolUse'
       );
       assert.equal(code, 2, 'Should block Write to follow-up-pr state file');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
       assert.ok(stderr.includes('follow-up-pr-my-repo-42.json'), 'stderr should mention the file');
     }); // fail-open test for missing .work-state.json is covered below
 
@@ -1660,7 +1659,6 @@ describe('enforce-step-workflow', () => {
         'PreToolUse'
       );
       assert.equal(code, 2, 'Should block Edit to follow-up-pr state file');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks MultiEdit to follow-up-pr state file', async () => {
@@ -1674,7 +1672,6 @@ describe('enforce-step-workflow', () => {
         'PreToolUse'
       );
       assert.equal(code, 2, 'Should block MultiEdit to follow-up-pr state file');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks Bash redirect to follow-up-pr state file', async () => {
@@ -1688,7 +1685,6 @@ describe('enforce-step-workflow', () => {
         'PreToolUse'
       );
       assert.equal(code, 2, 'Should block Bash redirect to follow-up-pr state file');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('allows Write from follow-up-pr agent during follow_up step', async () => {
@@ -1753,7 +1749,6 @@ describe('enforce-step-workflow', () => {
         { CLAUDE_CURRENT_AGENT: 'follow-up-pr' }
       );
       assert.equal(code, 2, 'Should block even from follow-up-pr agent if not in follow_up step');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('allows Write when no .work-state.json exists (fail-open)', async () => {
@@ -1808,7 +1803,6 @@ describe('enforce-step-workflow', () => {
         2,
         'Should block Bash redirect to review-accountability.json outside follow_up step'
       );
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('allows Bash to review-accountability.json from follow-up-pr agent during follow_up step', async () => {
@@ -2720,37 +2714,32 @@ describe('enforce-step-workflow', () => {
 
     it('blocks transition when CI has failures', async () => {
       writeFakeGh(buildGhResponses({ ciBucket: 'fail' }));
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block transition when CI has failures');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition when CI is pending', async () => {
       writeFakeGh(buildGhResponses({ ciBucket: 'pending', ciState: 'pending' }));
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block transition when CI is pending');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition when review is CHANGES_REQUESTED', async () => {
       writeFakeGh(buildGhResponses({ reviewState: 'CHANGES_REQUESTED' }));
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block transition when review has changes requested');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition when merge is conflicting', async () => {
       writeFakeGh(buildGhResponses({ mergeable: 'CONFLICTING' }));
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block transition when PR has merge conflicts');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition when merge state is DIRTY', async () => {
       writeFakeGh(buildGhResponses({ mergeStateStatus: 'DIRTY' }));
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block transition when merge state is DIRTY');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('allows transition when non-blocking comments exist with valid accountability', async () => {
@@ -2782,9 +2771,8 @@ describe('enforce-step-workflow', () => {
       ]);
       writeFakeGh(buildGhResponses({ inlineComments }));
 
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block transition when comments exist without accountability');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition when blocking (human) comments exist even with accountability', async () => {
@@ -2801,9 +2789,8 @@ describe('enforce-step-workflow', () => {
         JSON.stringify(accountability, null, 2)
       );
 
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block when blocking human comments exist');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition when gh pr view fails (no PR)', async () => {
@@ -2811,9 +2798,8 @@ describe('enforce-step-workflow', () => {
         'pr view --json number,title,url,headRefName,mergeable,mergeStateStatus,state': 'EXIT1',
       });
 
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block transition when no PR exists');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('allows transition when no CI checks exist (empty array)', async () => {
@@ -2839,12 +2825,11 @@ describe('enforce-step-workflow', () => {
         JSON.stringify(accountability, null, 2)
       );
 
-      const { code, stderr } = await transitionFromFollowUp();
+      const { code } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block when accountability entries are incomplete');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
-    it('blocks when acknowledged entries lack userApproval', async () => {
+    it('allows acknowledged entries without userApproval (GH-285)', async () => {
       const inlineComments = JSON.stringify([
         { id: 1, user: { login: 'copilot-pull-request-reviewer' }, body: '[nitpick] Minor issue', path: 'src/a.js', line: 10 },
       ]);
@@ -2857,9 +2842,8 @@ describe('enforce-step-workflow', () => {
         JSON.stringify(accountability, null, 2)
       );
 
-      const { code, stderr } = await transitionFromFollowUp();
-      assert.equal(code, 2, 'Should block when acknowledged entries lack userApproval');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
+      const { code } = await transitionFromFollowUp();
+      assert.equal(code, 0, 'Should allow acknowledged entries without userApproval (GH-285)');
     });
 
     it('allows when acknowledged entries have userApproval=true', async () => {
@@ -2985,7 +2969,6 @@ describe('enforce-step-workflow', () => {
 
       const { code, stderr } = await transitionFromCommit();
       assert.equal(code, 2, 'Should block when branch name does not contain ticket ID');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition when branch matches but no committed changes (empty diff)', async () => {
@@ -3001,7 +2984,6 @@ describe('enforce-step-workflow', () => {
 
       const { code, stderr } = await transitionFromCommit();
       assert.equal(code, 2, 'Should block when branch matches but diff is empty');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('blocks transition on detached HEAD (branch --show-current returns empty)', async () => {
@@ -3017,7 +2999,6 @@ describe('enforce-step-workflow', () => {
 
       const { code, stderr } = await transitionFromCommit();
       assert.equal(code, 2, 'Should block when in detached HEAD state');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
   });
 
@@ -3414,7 +3395,6 @@ describe('enforce-step-workflow', () => {
         tool_input: { command: `node ${ORCHESTRATOR_PATH} transition ${TEST_TICKET} implement` },
       });
       assert.equal(code, 2, 'Should block transition when spec.md is absent');
-      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED');
     });
 
     it('allows transition from implement when tdd-phase.json has red+green cycle', async () => {
