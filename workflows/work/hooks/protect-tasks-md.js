@@ -18,6 +18,8 @@ const path = require('path');
 const { logHookError } = require(path.join(__dirname, '..', '..', 'lib', 'hook-error-log'));
 const { createArtifactProtector } = require(path.join(__dirname, '..', '..', 'lib', 'protect-artifact-files'));
 
+const ALLOWED_STEPS = new Set(['tasks', 'task_review']);
+
 /**
  * Get the ticket ID from TICKET_ID env var or derive from branch/cwd.
  * Reuses the canonical getCurrentTaskId from get-ticket-id.js.
@@ -50,6 +52,8 @@ function getTicketId(hookData) {
 
 /**
  * Get the current in_progress step from .work-state.json.
+ * Returns the raw step name so createArtifactProtector can match against
+ * both the primary step and allowedSteps.
  * @param {string} ticketId
  * @returns {string|null}
  */
@@ -105,7 +109,7 @@ async function main() {
       if (cwd.startsWith(path.join(tasksBase, ticketId))) {
         // We're inside the ticket directory — relative tasks.md is ticket-scoped
         const step = getStepInProgress(ticketId);
-        if (step !== 'tasks' && step !== 'task_review') {
+        if (!ALLOWED_STEPS.has(step)) {
           process.stderr.write('BLOCKED: Bash write to tasks.md via relative path during ' + (step || 'unknown') + ' step.\n');
           process.exit(2);
         }

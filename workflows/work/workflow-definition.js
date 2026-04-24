@@ -261,20 +261,11 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
               typeof state.exception === 'object' &&
               state.exception !== null
             ) {
-              try {
-                const { ALLOWED_CATEGORIES } = require(path.join(__dirname, '..', 'work-implement', 'exception-validator'));
-                const cat = state.exception.category;
-                const reason = state.exception.reason;
-                return typeof cat === 'string' && ALLOWED_CATEGORIES.includes(cat) &&
-                  typeof reason === 'string' && reason.trim() !== '';
-              } catch {
-                // Fallback: hardcoded allowlist when exception-validator module unavailable
-                const FALLBACK_CATEGORIES = ['checkpoint', 'config-only', 'file-move', 'mechanical-refactor'];
-                const cat = state.exception.category;
-                const reason = state.exception.reason;
-                return typeof cat === 'string' && FALLBACK_CATEGORIES.includes(cat) &&
-                  typeof reason === 'string' && reason.trim() !== '';
-              }
+              const { ALLOWED_CATEGORIES } = require(path.join(__dirname, '..', 'work-implement', 'exception-validator'));
+              const cat = state.exception.category;
+              const reason = state.exception.reason;
+              return typeof cat === 'string' && ALLOWED_CATEGORIES.includes(cat) &&
+                typeof reason === 'string' && reason.trim() !== '';
             }
             if (!Array.isArray(state.cycles) || state.cycles.length === 0) return false;
             // At least one cycle must have both red and green evidence

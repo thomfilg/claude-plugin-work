@@ -36,6 +36,7 @@ const EXPORT_PATTERNS = [
   /export\s+abstract\s+class\b/,
   /export\s*\{/,
   /export\s*\*\s*from\b/,
+  /export\s*=\s*/,
 ];
 
 // ─── validateExceptionCategory ──────────────────────────────────────────────
