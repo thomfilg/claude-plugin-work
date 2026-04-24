@@ -11,13 +11,14 @@ const SCRIPT = path.join(__dirname, '..', 'follow-up-pr-comments.js');
  * Helper: run the script with args and env overrides.
  * Returns { status, stdout, stderr }.
  */
-function run(args, envOverrides = {}) {
+function run(args, envOverrides = {}, opts = {}) {
   const env = { ...process.env, ...envOverrides };
   try {
     const stdout = execFileSync(process.execPath, [SCRIPT, ...args], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
       env,
+      cwd: opts.cwd,
       timeout: 10000,
     });
     return { status: 0, stdout, stderr: '' };
@@ -58,6 +59,11 @@ function envFor(tmpDir) {
     TASKS_BASE: tmpDir,
     TICKET_PROVIDER: 'github',
   };
+}
+
+/** cwd for child process — must contain GH-276 so getCurrentTaskId() resolves */
+function cwdFor(ctx) {
+  return ctx.ticketDir; // e.g., /tmp/fup-comments-xxx/GH-276
 }
 
 /** Build a sample state object with given comments */
@@ -121,7 +127,7 @@ describe('follow-up-pr-comments CLI', () => {
 
     it('exits 1 when no snapshot exists', () => {
       ctx = createTempState(null);
-      const result = run(['--next-comment'], envFor(ctx.tmpDir));
+      const result = run(['--next-comment'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 1);
       assert.match(result.stderr, /snapshot/i);
     });
@@ -133,7 +139,7 @@ describe('follow-up-pr-comments CLI', () => {
         makeComment({ id: 3, priority: 'medium', body: 'Medium prio' }),
       ];
       ctx = createTempState(makeState(comments));
-      const result = run(['--next-comment'], envFor(ctx.tmpDir));
+      const result = run(['--next-comment'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
       const parsed = JSON.parse(result.stdout);
       assert.equal(parsed.id, 2);
@@ -148,7 +154,7 @@ describe('follow-up-pr-comments CLI', () => {
         makeComment({ id: 2, status: 'skipped' }),
       ];
       ctx = createTempState(makeState(comments));
-      const result = run(['--next-comment'], envFor(ctx.tmpDir));
+      const result = run(['--next-comment'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
       const parsed = JSON.parse(result.stdout);
       assert.deepEqual(parsed, { done: true });
@@ -166,7 +172,7 @@ describe('follow-up-pr-comments CLI', () => {
         }),
       ];
       ctx = createTempState(makeState(comments));
-      const result = run(['--next-comment'], envFor(ctx.tmpDir));
+      const result = run(['--next-comment'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
       const parsed = JSON.parse(result.stdout);
       assert.equal(parsed.id, 42);
@@ -185,7 +191,7 @@ describe('follow-up-pr-comments CLI', () => {
         makeComment({ id: 2, priority: 'medium' }),
       ];
       ctx = createTempState(makeState(comments));
-      const result = run(['--next-comment'], envFor(ctx.tmpDir));
+      const result = run(['--next-comment'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
       const parsed = JSON.parse(result.stdout);
       assert.equal(parsed.id, 2);
@@ -205,7 +211,8 @@ describe('follow-up-pr-comments CLI', () => {
       ctx = createTempState(makeState(comments));
       const result = run(
         ['--solve-comment', '100', 'abc1234', 'Fixed error handling'],
-        envFor(ctx.tmpDir)
+        envFor(ctx.tmpDir),
+        { cwd: cwdFor(ctx) }
       );
       assert.equal(result.status, 0);
 
@@ -231,7 +238,7 @@ describe('follow-up-pr-comments CLI', () => {
     it('exits 1 for unknown comment ID', () => {
       const comments = [makeComment({ id: 100 })];
       ctx = createTempState(makeState(comments));
-      const result = run(['--solve-comment', '999', 'abc1234', 'Fix'], envFor(ctx.tmpDir));
+      const result = run(['--solve-comment', '999', 'abc1234', 'Fix'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 1);
       assert.match(result.stderr, /not found/i);
     });
@@ -239,7 +246,7 @@ describe('follow-up-pr-comments CLI', () => {
     it('validates commitSha format (hex 7-40 chars)', () => {
       const comments = [makeComment({ id: 100 })];
       ctx = createTempState(makeState(comments));
-      const result = run(['--solve-comment', '100', 'short', 'Fix'], envFor(ctx.tmpDir));
+      const result = run(['--solve-comment', '100', 'short', 'Fix'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 1);
       assert.match(result.stderr, /commit/i);
     });
@@ -248,7 +255,7 @@ describe('follow-up-pr-comments CLI', () => {
       const comments = [makeComment({ id: 100 })];
       ctx = createTempState(makeState(comments));
       const longDesc = 'x'.repeat(600);
-      const result = run(['--solve-comment', '100', 'abc1234def0', longDesc], envFor(ctx.tmpDir));
+      const result = run(['--solve-comment', '100', 'abc1234def0', longDesc], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
 
       const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
@@ -267,7 +274,7 @@ describe('follow-up-pr-comments CLI', () => {
         makeComment({ id: 200, author: 'reviewer', body: 'Nitpick', path: 'src/b.js' }),
       ];
       ctx = createTempState(makeState(comments));
-      const result = run(['--skip-comment', '200', 'Non-blocking nitpick'], envFor(ctx.tmpDir));
+      const result = run(['--skip-comment', '200', 'Non-blocking nitpick'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
 
       const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
@@ -284,7 +291,7 @@ describe('follow-up-pr-comments CLI', () => {
     it('exits 1 for unknown comment ID', () => {
       const comments = [makeComment({ id: 200 })];
       ctx = createTempState(makeState(comments));
-      const result = run(['--skip-comment', '999', 'Reason'], envFor(ctx.tmpDir));
+      const result = run(['--skip-comment', '999', 'Reason'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 1);
       assert.match(result.stderr, /not found/i);
     });
@@ -293,7 +300,7 @@ describe('follow-up-pr-comments CLI', () => {
       const comments = [makeComment({ id: 200 })];
       ctx = createTempState(makeState(comments));
       const longReason = 'y'.repeat(600);
-      const result = run(['--skip-comment', '200', longReason], envFor(ctx.tmpDir));
+      const result = run(['--skip-comment', '200', longReason], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
 
       const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
@@ -316,7 +323,7 @@ describe('follow-up-pr-comments CLI', () => {
         makeComment({ id: 5, status: 'unsolved' }),
       ];
       ctx = createTempState(makeState(comments));
-      const result = run(['--status'], envFor(ctx.tmpDir));
+      const result = run(['--status'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
       const parsed = JSON.parse(result.stdout);
       assert.deepEqual(parsed, {
@@ -330,7 +337,7 @@ describe('follow-up-pr-comments CLI', () => {
 
     it('returns zeros when no snapshot exists', () => {
       ctx = createTempState(null);
-      const result = run(['--status'], envFor(ctx.tmpDir));
+      const result = run(['--status'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
       const parsed = JSON.parse(result.stdout);
       assert.deepEqual(parsed, {
@@ -375,42 +382,43 @@ describe('follow-up-pr-comments CLI', () => {
       ];
       ctx = createTempState(makeState(comments));
       const env = envFor(ctx.tmpDir);
+      const cwd = { cwd: cwdFor(ctx) };
 
       // Get first (high priority)
-      let result = run(['--next-comment'], env);
+      let result = run(['--next-comment'], env, cwd);
       assert.equal(result.status, 0);
       let next = JSON.parse(result.stdout);
       assert.equal(next.id, 1);
 
       // Solve it
-      result = run(['--solve-comment', '1', 'aabbccdd', 'Fixed auth'], env);
+      result = run(['--solve-comment', '1', 'aabbccdd', 'Fixed auth'], env, cwd);
       assert.equal(result.status, 0);
 
       // Get next (medium priority)
-      result = run(['--next-comment'], env);
+      result = run(['--next-comment'], env, cwd);
       next = JSON.parse(result.stdout);
       assert.equal(next.id, 2);
 
       // Skip it
-      result = run(['--skip-comment', '2', 'Conflicts with user intent'], env);
+      result = run(['--skip-comment', '2', 'Conflicts with user intent'], env, cwd);
       assert.equal(result.status, 0);
 
       // Get next (low priority)
-      result = run(['--next-comment'], env);
+      result = run(['--next-comment'], env, cwd);
       next = JSON.parse(result.stdout);
       assert.equal(next.id, 3);
 
       // Solve it
-      result = run(['--solve-comment', '3', 'ddeeff00', 'Fixed nitpick'], env);
+      result = run(['--solve-comment', '3', 'ddeeff00', 'Fixed nitpick'], env, cwd);
       assert.equal(result.status, 0);
 
       // Next should be done
-      result = run(['--next-comment'], env);
+      result = run(['--next-comment'], env, cwd);
       next = JSON.parse(result.stdout);
       assert.deepEqual(next, { done: true });
 
       // Status check
-      result = run(['--status'], env);
+      result = run(['--status'], env, cwd);
       const status = JSON.parse(result.stdout);
       assert.equal(status.total, 3);
       assert.equal(status.solved, 2);
@@ -449,21 +457,21 @@ describe('follow-up-pr-comments CLI', () => {
     it('accepts string review IDs (e.g. PRR_kwDO...) for --solve-comment', () => {
       const comments = [makeComment({ id: 'PRR_kwDO123' })];
       ctx = createTempState(makeState(comments));
-      const result = run(['--solve-comment', 'PRR_kwDO123', 'abc1234def0', 'Fix'], envFor(ctx.tmpDir));
+      const result = run(['--solve-comment', 'PRR_kwDO123', 'abc1234def0', 'Fix'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
     });
 
     it('accepts string review IDs for --skip-comment', () => {
       const comments = [makeComment({ id: 'PRR_kwDO456' })];
       ctx = createTempState(makeState(comments));
-      const result = run(['--skip-comment', 'PRR_kwDO456', 'Low priority'], envFor(ctx.tmpDir));
+      const result = run(['--skip-comment', 'PRR_kwDO456', 'Low priority'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 0);
     });
 
     it('rejects empty commentId for --solve-comment', () => {
       const comments = [makeComment({ id: 100 })];
       ctx = createTempState(makeState(comments));
-      const result = run(['--solve-comment', '', 'abc1234', 'Fix'], envFor(ctx.tmpDir));
+      const result = run(['--solve-comment', '', 'abc1234', 'Fix'], envFor(ctx.tmpDir), { cwd: cwdFor(ctx) });
       assert.equal(result.status, 1);
     });
 
