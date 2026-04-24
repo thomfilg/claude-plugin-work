@@ -246,7 +246,8 @@ function handleSnapshot(prNumber) {
           const body = (cm.body || '').trim();
           const filePath = cm.path || null;
           // Include line in hash key so same-text comments on different lines are preserved
-          const hashKey = `${filePath || ''}:${cm.line || cm.original_line || ''}:${computeCommentHash(filePath, body)}`;
+          // Key on comment ID to preserve all distinct comments (two bots can post same text on same line)
+          const hashKey = String(cm.id);
 
           if (seenHashes.has(hashKey)) continue;
           seenHashes.add(hashKey);
