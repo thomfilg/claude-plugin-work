@@ -185,13 +185,15 @@ function createArtifactProtector(opts) {
             const isWithinTicketDir =
               relPath !== '' && !relPath.startsWith('..') && !path.isAbsolute(relPath);
 
+            // Compute task number before branching — needed by both branches
+            const totalTasks = state.tasksMeta.totalTasks;
+            const rawCurrentIdx = state.tasksMeta.currentTaskIndex;
+            const currentIdx = Number.isInteger(rawCurrentIdx) ? rawCurrentIdx : 0;
+            const normalizedIdx = Math.min(Math.max(currentIdx, 0), totalTasks - 1);
+            const taskNum = normalizedIdx + 1;
+
             if (isWithinTicketDir && !relPath.includes(path.sep)) {
               // File is at ticket root (e.g., tasks/GH-258/tests.check.md) — block
-              const totalTasks = state.tasksMeta.totalTasks;
-              const rawCurrentIdx = state.tasksMeta.currentTaskIndex;
-              const currentIdx = Number.isInteger(rawCurrentIdx) ? rawCurrentIdx : 0;
-              const normalizedIdx = Math.min(Math.max(currentIdx, 0), totalTasks - 1);
-              const taskNum = normalizedIdx + 1;
               return {
                 blocked: true,
                 file: bn,
@@ -201,6 +203,20 @@ function createArtifactProtector(opts) {
                   `You are in per-task mode (tasks.md exists). Write your report to the task folder instead:\n` +
                   `  ${path.join(resolvedTicketDir, 'task' + taskNum, bn)}\n`,
               };
+            } else if (isWithinTicketDir) {
+              // File is in a subdirectory — validate it's the correct task folder
+              const expectedPrefix = 'task' + taskNum + path.sep;
+              if (!relPath.startsWith(expectedPrefix) && relPath !== 'task' + taskNum) {
+                return {
+                  blocked: true,
+                  file: bn,
+                  rule: 'per-task-path',
+                  message:
+                    `BLOCKED: Cannot write ${bn} to wrong task folder.\n` +
+                    `You are working on task ${taskNum}. Write your report to:\n` +
+                    `  ${path.join(resolvedTicketDir, 'task' + taskNum, bn)}\n`,
+                };
+              }
             }
           }
         }

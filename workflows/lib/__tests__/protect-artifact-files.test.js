@@ -803,6 +803,56 @@ describe('per-task path enforcement for .check.md', () => {
     assert.ok(result.message.includes('task3'));
   });
 
+  it('blocks .check.md written to wrong task folder', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(path.join(ticketDir, 'task3'), { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 0 } })
+    );
+
+    const p = makeProtector();
+    // currentTaskIndex=0 → task1, but writing to task3/
+    const filePath = path.join(ticketDir, 'task3', 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('task 1'));
+    assert.ok(result.message.includes('wrong task folder'));
+  });
+
+  it('allows .check.md written to correct task folder', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(path.join(ticketDir, 'task1'), { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 0 } })
+    );
+
+    const p = makeProtector();
+    // currentTaskIndex=0 → task1, writing to task1/ — should be allowed
+    const filePath = path.join(ticketDir, 'task1', 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, false);
+  });
+
+  it('blocks .check.md written to non-task subdirectory', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(path.join(ticketDir, 'notes'), { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 0 } })
+    );
+
+    const p = makeProtector();
+    // Writing to notes/ — not a valid task folder
+    const filePath = path.join(ticketDir, 'notes', 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('wrong task folder'));
+  });
+
   it('handles non-integer float currentTaskIndex by defaulting to 0', () => {
     const ticketDir = path.join(tmpDir, TICKET);
     fs.mkdirSync(ticketDir, { recursive: true });
