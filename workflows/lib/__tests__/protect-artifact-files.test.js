@@ -4,7 +4,7 @@
  * Run: node --test lib/__tests__/protect-artifact-files.test.js
  */
 
-const { describe, it } = require('node:test');
+const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { createArtifactProtector, matchesRule } = require('../protect-artifact-files');
 
@@ -577,5 +577,136 @@ describe('contentGuard with Edit tool (file-read simulation)', () => {
 
     assert.equal(result.blocked, true);
     assert.equal(result.rule, 'content');
+  });
+});
+
+// ─── Per-task path enforcement (.check.md) ────────────────────────────────────
+
+describe('per-task path enforcement for .check.md', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const TICKET = 'TEST-456';
+
+  let tmpDir;
+  let savedTasksBase;
+
+  function makeProtector(overrides = {}) {
+    return createArtifactProtector({
+      artifacts: [
+        { pattern: /\.check\.md$/, step: 'check', agents: ['code-checker'] },
+      ],
+      getStepInProgress: () => overrides.currentStep || 'check',
+      isRunningInAgent: overrides.isRunningInAgent || (() => true),
+      getTicketId: () => overrides.ticketId || TICKET,
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'paf-pertask-'));
+    savedTasksBase = process.env.TASKS_BASE;
+    process.env.TASKS_BASE = tmpDir;
+  });
+
+  afterEach(() => {
+    if (savedTasksBase !== undefined) {
+      process.env.TASKS_BASE = savedTasksBase;
+    } else {
+      delete process.env.TASKS_BASE;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('blocks .check.md at ticket root when tasksMeta.totalTasks > 0', () => {
+    // Create .work-state.json with per-task mode
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 1 } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('task2'));
+    assert.ok(result.message.includes('per-task mode'));
+  });
+
+  it('allows .check.md in task subfolder when per-task mode active', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(path.join(ticketDir, 'task2'), { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 1 } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'task2', 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, false);
+  });
+
+  it('allows .check.md at ticket root when no tasksMeta', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ currentStep: 'check' })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, false);
+  });
+
+  it('fails open when .work-state.json is missing', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    // No .work-state.json created
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, false);
+  });
+
+  it('block message includes correct task number and suggested path', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 5, currentTaskIndex: 3 } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'code.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.ok(result.message.includes('task4'));
+    assert.ok(result.message.includes('code.check.md'));
+  });
+
+  it('only applies to Write/Edit/MultiEdit tools, not Bash', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 0 } })
+    );
+
+    const p = makeProtector();
+    // Bash command referencing .check.md — per-task check should NOT apply
+    // (Bash is handled by step/agent checks but not per-task path)
+    const result = p.check('Bash', {
+      command: `cat > ${path.join(ticketDir, 'tests.check.md')}`,
+    });
+    // Bash writes are checked for step/agent but per-task path enforcement
+    // only applies to Write/Edit/MultiEdit (line 168 condition)
+    assert.equal(result.blocked, false);
   });
 });

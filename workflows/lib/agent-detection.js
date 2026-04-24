@@ -136,6 +136,17 @@ function isRunningInAgent(transcriptPath, agentAliases, hookData) {
   }
   if (currentAgent) debugLog('env', `no match for CLAUDE_CURRENT_AGENT=${currentAgent}`);
 
+  // Primary-B: Check hookData.agent_type (set by Claude Code when hook fires inside a subagent)
+  const agentType = hookData?.agent_type;
+  if (
+    agentType &&
+    agentAliases.some((alias) => normalizeAgentName(alias) === normalizeAgentName(agentType))
+  ) {
+    debugLog('hookData', `matched agent_type=${agentType}`);
+    return true;
+  }
+  if (agentType) debugLog('hookData', `no match for agent_type=${agentType}`);
+
   // Secondary: Check hookData for subagent_type (available when parent invokes Task/Agent)
   const subagentType = hookData?.tool_input?.subagent_type;
   if (

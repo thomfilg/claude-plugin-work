@@ -163,7 +163,44 @@ function createArtifactProtector(opts) {
       }
     }
 
-    // Check 3: Content guard (if specified on the rule)
+    // Check 3: Per-task path enforcement — when tasks.md exists, .check.md reports
+    // must go to tasks/ticketId/task${N}/ not tasks/ticketId/ root
+    if (bn.endsWith('.check.md') && ['Write', 'Edit', 'MultiEdit'].includes(toolName)) {
+      try {
+        const fs = require('fs');
+        const getConfigMod = require(path.join(__dirname, 'get-config'));
+        const tasksBase = getConfigMod.require('TASKS_BASE');
+        const statePath = path.join(tasksBase, ticketId, '.work-state.json');
+        if (fs.existsSync(statePath)) {
+          const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+          if (state.tasksMeta && state.tasksMeta.totalTasks > 0) {
+            // Per-task mode active — check file path is under task${N}/
+            const ticketDir = path.join(tasksBase, ticketId);
+            const relPath = filePath.startsWith(ticketDir)
+              ? filePath.slice(ticketDir.length + 1)
+              : '';
+            if (relPath && !relPath.includes('/')) {
+              // File is at ticket root (e.g., tasks/GH-258/tests.check.md) — block
+              const currentIdx = state.tasksMeta.currentTaskIndex || 0;
+              const taskNum = currentIdx + 1;
+              return {
+                blocked: true,
+                file: bn,
+                rule: 'per-task-path',
+                message:
+                  `BLOCKED: Cannot write ${bn} at ticket root.\n` +
+                  `You are in per-task mode (tasks.md exists). Write your report to the task folder instead:\n` +
+                  `  ${path.join(ticketDir, 'task' + taskNum, bn)}\n`,
+              };
+            }
+          }
+        }
+      } catch {
+        // fail-open
+      }
+    }
+
+    // Check 4: Content guard (if specified on the rule)
     if (rule.contentGuard && ['Write', 'Edit', 'MultiEdit'].includes(toolName)) {
       let guardContent = '';
       if (toolName === 'Write') {
