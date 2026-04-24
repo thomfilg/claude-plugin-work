@@ -170,7 +170,11 @@ function createArtifactProtector(opts) {
         const fs = require('fs');
         const getConfigMod = require(path.join(__dirname, 'get-config'));
         const tasksBase = getConfigMod.require('TASKS_BASE');
-        const statePath = path.join(tasksBase, ticketId, '.work-state.json');
+        // Sanitize ticketId for filesystem path (e.g. GitHub #123 → GH-123)
+        const safeId = getConfigMod.safeTicketId
+          ? getConfigMod.safeTicketId(ticketId)
+          : ticketId;
+        const statePath = path.join(tasksBase, safeId, '.work-state.json');
         if (fs.existsSync(statePath)) {
           const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
           if (state.tasksMeta && state.tasksMeta.totalTasks > 0) {
@@ -179,7 +183,7 @@ function createArtifactProtector(opts) {
             // (e.g., ../../ticketId/file.check.md). path.relative then gives a
             // canonical relative path; we verify it doesn't escape with '..'
             // and doesn't contain path.sep (i.e., it's a direct child, not nested).
-            const resolvedTicketDir = path.resolve(path.join(tasksBase, ticketId));
+            const resolvedTicketDir = path.resolve(path.join(tasksBase, safeId));
             const resolvedFilePath = path.resolve(filePath);
             const relPath = path.relative(resolvedTicketDir, resolvedFilePath);
             const isWithinTicketDir =
@@ -192,6 +196,9 @@ function createArtifactProtector(opts) {
             const normalizedIdx = Math.min(Math.max(currentIdx, 0), totalTasks - 1);
             const taskNum = normalizedIdx + 1;
 
+            // Two-branch enforcement:
+            // 1. Block writes at ticket root (no path separator in relPath)
+            // 2. Block writes to wrong task folder (relPath doesn't start with taskN/)
             if (isWithinTicketDir && !relPath.includes(path.sep)) {
               // File is at ticket root (no path separator) — block and suggest correct task folder
               return {
@@ -200,7 +207,7 @@ function createArtifactProtector(opts) {
                 rule: 'per-task-path',
                 message:
                   `BLOCKED: Cannot write ${bn} at ticket root.\n` +
-                  `You are in per-task mode (tasks.md exists). Write your report to the task folder instead:\n` +
+                  `Per-task mode is active for this ticket. Write your report to the task folder instead:\n` +
                   `  ${path.join(resolvedTicketDir, 'task' + taskNum, bn)}\n`,
               };
             } else if (isWithinTicketDir) {

@@ -628,7 +628,7 @@ describe('per-task path enforcement for .check.md', () => {
     assert.equal(result.blocked, true);
     assert.equal(result.rule, 'per-task-path');
     assert.ok(result.message.includes('task2'));
-    assert.ok(result.message.includes('per-task mode'));
+    assert.ok(result.message.includes('Per-task mode'));
   });
 
   it('allows .check.md in task subfolder when per-task mode active', () => {
