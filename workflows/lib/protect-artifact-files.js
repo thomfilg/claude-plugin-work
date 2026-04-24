@@ -232,6 +232,19 @@ function createArtifactProtector(opts) {
             const normalizedIdx = Math.min(Math.max(currentIdx, 0), totalTasks - 1);
             const taskNum = normalizedIdx + 1;
 
+            // Block writes that escape the ticket directory via traversal
+            if (isEscapingTicketDir) {
+              return {
+                blocked: true,
+                file: bn,
+                rule: 'per-task-path',
+                message:
+                  `BLOCKED: Cannot write ${bn} outside ticket directory.\n` +
+                  `The resolved path escapes the ticket folder. Write your report to:\n` +
+                  `  ${path.join(resolvedTicketDir, 'task' + taskNum, bn)}\n`,
+              };
+            }
+
             // Two-branch enforcement:
             // 1. Block writes at ticket root (no path separator in relPath)
             // 2. Block writes to wrong task folder (relPath doesn't start with taskN/)

@@ -964,4 +964,41 @@ describe('per-task path enforcement for .check.md', () => {
     // 1.7 is not an integer, defaults to 0, taskNum=1
     assert.ok(result.message.includes('task1'));
   });
+
+  it('blocks .check.md that escapes ticket directory via ../.. traversal', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(path.join(ticketDir, 'task1'), { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 0 } })
+    );
+
+    const p = makeProtector();
+    // Construct path manually to preserve ../.. segments (path.join normalizes them away)
+    const filePath = ticketDir + '/task1/../../other/tests.check.md';
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('outside ticket directory'));
+  });
+
+  it('fails open when ticketId contains ../ (path traversal)', () => {
+    // Create a state file at the traversal target to prove it is NOT read
+    const outsideDir = path.join(tmpDir, 'secret');
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(outsideDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 0 } })
+    );
+
+    // ticketId with ../ that would escape TASKS_BASE
+    const maliciousId = '../secret';
+    const p = makeProtector({ ticketId: maliciousId });
+    // The file path includes the malicious ticketId so the ticket-folder check passes
+    const filePath = path.join(tmpDir, maliciousId, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    // Should NOT block — per-task enforcement is skipped (fail-open)
+    // because statePath escapes TASKS_BASE
+    assert.equal(result.blocked, false);
+  });
 });
