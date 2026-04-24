@@ -441,7 +441,7 @@ function handleStatus() {
       solved,
       skipped,
       remaining,
-      strictCommentCount: state.strictCommentCount || total,
+      strictCommentCount: state.strictCommentCount ?? total,
     })
   );
   process.exit(0);
