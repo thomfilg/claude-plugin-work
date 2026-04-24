@@ -193,7 +193,7 @@ function createArtifactProtector(opts) {
             const taskNum = normalizedIdx + 1;
 
             if (isWithinTicketDir && !relPath.includes(path.sep)) {
-              // File is at ticket root (e.g., tasks/GH-258/tests.check.md) — block
+              // File is at ticket root (no path separator) — block and suggest correct task folder
               return {
                 blocked: true,
                 file: bn,
