@@ -2825,8 +2825,9 @@ describe('enforce-step-workflow', () => {
         JSON.stringify(accountability, null, 2)
       );
 
-      const { code } = await transitionFromFollowUp();
+      const { code, stderr } = await transitionFromFollowUp();
       assert.equal(code, 2, 'Should block when accountability entries are incomplete');
+      assert.ok(stderr.includes('BLOCKED'), 'stderr should contain BLOCKED marker');
     });
 
     it('allows acknowledged entries without userApproval (GH-285)', async () => {
