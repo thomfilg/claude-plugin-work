@@ -98,11 +98,7 @@ describe('parseReportStatus — bold markdown format', () => {
 // ---------------------------------------------------------------------------
 describe('parseReportStatus — summary table format', () => {
   it('recognizes | Status | APPROVED | in a table', () => {
-    const content = [
-      '| Field | Value |',
-      '|-------|-------|',
-      '| Status | APPROVED |',
-    ].join('\n');
+    const content = ['| Field | Value |', '|-------|-------|', '| Status | APPROVED |'].join('\n');
     const result = parseReportStatus(content, 'tests');
     assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
@@ -136,20 +132,15 @@ describe('parseReportStatus — fail-first precedence (R10)', () => {
   });
 
   it('returns NEEDS_WORK when fail pattern present with pass pattern for tests', () => {
-    const content = [
-      '✅ PASS: 10 tests',
-      '❌ FAIL: 2 tests',
-    ].join('\n');
+    const content = ['✅ PASS: 10 tests', '❌ FAIL: 2 tests'].join('\n');
     const result = parseReportStatus(content, 'tests');
     assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
   });
 
   it('returns NEEDS_WORK for code review with NEEDS_WORK status and APPROVED in body', () => {
-    const content = [
-      'Status: NEEDS_WORK',
-      '',
-      'Previously APPROVED items remain valid.',
-    ].join('\n');
+    const content = ['Status: NEEDS_WORK', '', 'Previously APPROVED items remain valid.'].join(
+      '\n'
+    );
     const result = parseReportStatus(content, 'codeReview');
     assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
   });
@@ -385,10 +376,7 @@ describe('parseReplyDecisions — multiple issues', () => {
 
 describe('parseReplyDecisions — missing fields', () => {
   it('sets empty reason when Reason field is missing', () => {
-    const content = [
-      '## Issue: Some issue',
-      '**Decision:** FIXED',
-    ].join('\n');
+    const content = ['## Issue: Some issue', '**Decision:** FIXED'].join('\n');
 
     const result = parseReplyDecisions(content);
     assert.equal(result.length, 1);
@@ -398,10 +386,7 @@ describe('parseReplyDecisions — missing fields', () => {
   });
 
   it('sets UNKNOWN decision when Decision field is missing', () => {
-    const content = [
-      '## Issue: Orphaned issue',
-      '**Reason:** Something happened.',
-    ].join('\n');
+    const content = ['## Issue: Orphaned issue', '**Reason:** Something happened.'].join('\n');
 
     const result = parseReplyDecisions(content);
     assert.equal(result.length, 1);
@@ -577,11 +562,7 @@ describe('isCodeReviewResolved — no blocking issues', () => {
   });
 
   it('returns resolved:true when report has "No critical issues" text', () => {
-    const report = [
-      '## Code Review',
-      'Status: APPROVED',
-      'No critical issues found.',
-    ].join('\n');
+    const report = ['## Code Review', 'Status: APPROVED', 'No critical issues found.'].join('\n');
 
     const result = isCodeReviewResolved(report, '');
     assert.equal(result.resolved, true);
@@ -606,5 +587,113 @@ describe('isCodeReviewResolved — null safety', () => {
 describe('isCodeReviewResolved — exports', () => {
   it('exports isCodeReviewResolved as a function', () => {
     assert.equal(typeof isCodeReviewResolved, 'function');
+  });
+});
+
+// ===========================================================================
+// GH-232 Task 4: extractIssueTitles spurious title filtering
+// ===========================================================================
+describe('isCodeReviewResolved — spurious title filtering (GH-232)', () => {
+  it('does not treat bold CRITICAL keyword in body as an issue title', () => {
+    const report = [
+      '### 🔴 CRITICAL ISSUES',
+      '**CRITICAL** mention in body text should not be an issue.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, '');
+    // "CRITICAL" alone should be filtered out as a spurious title
+    assert.equal(
+      result.resolved,
+      true,
+      'CRITICAL keyword alone must not be treated as issue title'
+    );
+    assert.deepStrictEqual(result.unaddressed, []);
+  });
+
+  it('does not treat bold IMPORTANT keyword in body as an issue title', () => {
+    const report = [
+      '### 🟡 IMPORTANT ISSUES',
+      '**IMPORTANT** this is emphasized text, not an issue title.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, '');
+    assert.equal(
+      result.resolved,
+      true,
+      'IMPORTANT keyword alone must not be treated as issue title'
+    );
+    assert.deepStrictEqual(result.unaddressed, []);
+  });
+
+  it('does not treat short bold words (<=3 chars) as issue titles', () => {
+    const report = [
+      '### 🔴 CRITICAL ISSUES',
+      '**No** issues found here. **Yes** confirmed.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, '');
+    assert.equal(result.resolved, true, 'Short bold words must not be treated as issue titles');
+    assert.deepStrictEqual(result.unaddressed, []);
+  });
+
+  it('does not treat field labels like Decision/Status/Reason as issue titles', () => {
+    const report = [
+      '### 🔴 CRITICAL ISSUES',
+      '**Decision** was made to defer. **Status** is pending. **Reason** is unclear.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, '');
+    assert.equal(result.resolved, true, 'Field labels must not be treated as issue titles');
+    assert.deepStrictEqual(result.unaddressed, []);
+  });
+
+  it('does not treat NICE-TO-HAVE or SUGGESTIONS as issue titles', () => {
+    const report = [
+      '### 🔴 CRITICAL ISSUES',
+      '**NICE-TO-HAVE** improvements listed below. **SUGGESTIONS** for improvement.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, '');
+    assert.equal(result.resolved, true, 'Category keywords must not be treated as issue titles');
+    assert.deepStrictEqual(result.unaddressed, []);
+  });
+
+  it('still extracts real issue titles that are descriptive', () => {
+    const report = [
+      '### 🔴 CRITICAL ISSUES',
+      '**Memory leak in event handler**',
+      'Details about the leak.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const reply = [
+      '## Issue: Memory leak in event handler',
+      '**Decision:** FIXED',
+      '**Reason:** Fixed the leak.',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, reply);
+    assert.equal(result.resolved, true);
+    assert.deepStrictEqual(result.unaddressed, []);
+  });
+
+  it('still flags real issues as unaddressed even with spurious titles filtered', () => {
+    const report = [
+      '### 🔴 CRITICAL ISSUES',
+      '**CRITICAL** emphasis in text.',
+      '**SQL injection vulnerability**',
+      'Details about the vulnerability.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, '');
+    assert.equal(result.resolved, false);
+    assert.equal(result.unaddressed.length, 1);
+    assert.ok(result.unaddressed[0].includes('SQL injection vulnerability'));
   });
 });

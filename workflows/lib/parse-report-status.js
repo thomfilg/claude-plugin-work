@@ -110,9 +110,7 @@ function checkFailMarkers(content, type) {
  * @returns {string|null}
  */
 function checkStatusLine(content) {
-  const match = content.match(
-    /\*{0,2}Status:?\*{0,2}\s*\*{0,2}\s*([A-Z_]+)\s*\*{0,2}/i
-  );
+  const match = content.match(/\*{0,2}Status:?\*{0,2}\s*\*{0,2}\s*([A-Z_]+)\s*\*{0,2}/i);
   if (!match) return null;
   const raw = match[1].toUpperCase();
   return STATUS_ALIASES[raw] || null;
@@ -125,9 +123,7 @@ function checkStatusLine(content) {
  * @returns {string|null}
  */
 function checkSummaryTable(content) {
-  const match = content.match(
-    /\|\s*Status\s*\|\s*\*{0,2}([A-Z_]+)\*{0,2}\s*\|/i
-  );
+  const match = content.match(/\|\s*Status\s*\|\s*\*{0,2}([A-Z_]+)\*{0,2}\s*\|/i);
   if (!match) return null;
   const raw = match[1].toUpperCase();
   return STATUS_ALIASES[raw] || null;
@@ -244,8 +240,7 @@ function parseReplyDecisions(replyContent) {
 
   for (let i = 0; i < sectionStarts.length; i++) {
     const start = sectionStarts[i].index;
-    const end =
-      i + 1 < sectionStarts.length ? sectionStarts[i + 1].index : replyContent.length;
+    const end = i + 1 < sectionStarts.length ? sectionStarts[i + 1].index : replyContent.length;
     const sectionBody = replyContent.slice(start, end);
 
     // Extract Decision field
@@ -291,6 +286,13 @@ const ISSUE_TITLE_PATTERNS = [
   /\d+\.\s*\*\*([^*:]+)\*\*\s*:/g,
 ];
 
+// Guard filter: reject spurious bold words that are not real issue titles.
+// Mirrors the guard in work-suggestion-replies.js (lines 109-115).
+const SPURIOUS_TITLE_RE =
+  /^(none|n\/a|no\s+|issues?\s*found|CRITICAL|IMPORTANT|NICE-TO-HAVE|SUGGESTIONS)/i;
+const FIELD_LABEL_RE =
+  /^(File|Description|Impact|Recommendation|Decision|Reason|Status|Summary|Details|Category|Severity|Priority)$/i;
+
 /**
  * Extract issue titles from a section of the code-review report.
  * @param {string} sectionContent
@@ -310,7 +312,13 @@ function extractIssueTitles(sectionContent) {
     let m;
     while ((m = re.exec(sectionContent)) !== null) {
       const title = m[1].trim();
-      if (title && !titles.includes(title)) {
+      if (
+        title &&
+        title.length > 3 &&
+        !SPURIOUS_TITLE_RE.test(title) &&
+        !FIELD_LABEL_RE.test(title) &&
+        !titles.includes(title)
+      ) {
         titles.push(title);
       }
     }
@@ -358,13 +366,21 @@ function isCodeReviewResolved(reportContent, replyContent) {
   // Build a lookup of reply decisions by normalized title
   const decisionByTitle = Object.create(null);
   for (const d of decisions) {
-    decisionByTitle[d.title.toLowerCase().replace(/[^\w\s]/g, '').trim()] = d;
+    decisionByTitle[
+      d.title
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .trim()
+    ] = d;
   }
 
   // Check each blocking issue
   const unaddressed = [];
   for (const title of allBlockingTitles) {
-    const normalized = title.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    const normalized = title
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .trim();
     const reply = decisionByTitle[normalized];
 
     if (!reply) {

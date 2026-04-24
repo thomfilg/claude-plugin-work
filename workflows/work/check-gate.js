@@ -14,7 +14,9 @@ const path = require('path');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
 const config = require(path.join(__dirname, '..', 'lib', 'config'));
-const { parseReportStatus, isCodeReviewResolved } = require(path.join(__dirname, '..', 'lib', 'parse-report-status'));
+const { parseReportStatus, isCodeReviewResolved } = require(
+  path.join(__dirname, '..', 'lib', 'parse-report-status')
+);
 
 // ─── Helpers (local, no external deps) ──────────────────────────────────────
 
@@ -122,7 +124,7 @@ const CHECK_GATE_RULES = [
         }
 
         if (status !== 'APPROVED') {
-          reasons.push(`Report ${req.file} does not contain the required Status: line`);
+          reasons.push(`Report ${req.file} status is ${status} (expected APPROVED)`);
         }
       }
       return reasons;
