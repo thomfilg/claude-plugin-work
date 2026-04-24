@@ -44,14 +44,15 @@ const BASH_WRITE_OPS = /(?:>{1,2}|\btee\b|\bcp\b|\bmv\b|\bdd\b.*\bof=)/;
  */
 function extractBashTargetPath(cmd, basename) {
   const tokens = cmd.split(/\s+/);
+  let lastMatch = null;
   for (const token of tokens) {
     // Strip shell redirects and quotes
     const cleaned = token.replace(/^[>]+/, '').replace(/['"]/g, '');
     if (cleaned.includes(basename) && cleaned.includes('/')) {
-      return cleaned;
+      lastMatch = cleaned;
     }
   }
-  return null;
+  return lastMatch;
 }
 
 /** Node.js fs write calls executed via Bash */
@@ -261,8 +262,8 @@ function createArtifactProtector(opts) {
               };
             } else if (isWithinTicketDir) {
               // File is in a subdirectory — validate it's the correct task folder
-              const expectedPrefix = 'task' + taskNum + path.sep;
-              if (!relPath.startsWith(expectedPrefix) && relPath !== 'task' + taskNum) {
+              const expectedPath = 'task' + taskNum + path.sep + bn;
+              if (relPath !== expectedPath) {
                 return {
                   blocked: true,
                   file: bn,

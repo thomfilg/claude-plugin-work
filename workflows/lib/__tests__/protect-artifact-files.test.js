@@ -927,6 +927,41 @@ describe('per-task path enforcement for .check.md', () => {
     assert.ok(result.message.includes('wrong task folder'));
   });
 
+  it('blocks .check.md nested inside a subdirectory of the correct task folder', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(path.join(ticketDir, 'task2', 'notes'), { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 1 } })
+    );
+
+    const p = makeProtector();
+    // task2/notes/tests.check.md — nested inside task2, should be blocked
+    const filePath = path.join(ticketDir, 'task2', 'notes', 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('wrong task folder'));
+  });
+
+  it('Bash cp extracts destination (last) path, not source', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 0 } })
+    );
+
+    const p = makeProtector();
+    // cp source dest — destination is at ticket root, should be blocked
+    const result = p.check('Bash', {
+      command: `cp /tmp/tests.check.md ${path.join(ticketDir, 'tests.check.md')}`,
+    });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('task1'));
+  });
+
   it('does not treat ..foo.check.md as escaping the ticket dir', () => {
     const ticketDir = path.join(tmpDir, TICKET);
     fs.mkdirSync(ticketDir, { recursive: true });
