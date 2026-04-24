@@ -30,6 +30,10 @@ const EXPORT_PATTERNS = [
   /export\s+let\b/,
   /export\s+var\b/,
   /export\s+class\b/,
+  /export\s+type\b/,
+  /export\s+interface\b/,
+  /export\s+enum\b/,
+  /export\s+abstract\s+class\b/,
   /export\s*\{/,
   /export\s*\*\s*from\b/,
 ];
