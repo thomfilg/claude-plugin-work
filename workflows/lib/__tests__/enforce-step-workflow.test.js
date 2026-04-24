@@ -2752,8 +2752,8 @@ describe('enforce-step-workflow', () => {
 
       if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
       const accountability = [
-        { disposition: 'resolved', reason: 'Fixed in latest commit' },
-        { disposition: 'resolved', reason: 'Updated per feedback' },
+        { disposition: 'addressed', reason: 'Fixed in latest commit' },
+        { disposition: 'addressed', reason: 'Updated per feedback' },
       ];
       fs.writeFileSync(
         path.join(TASKS_DIR, 'review-accountability.json'),
@@ -2783,7 +2783,7 @@ describe('enforce-step-workflow', () => {
       writeFakeGh(buildGhResponses({ inlineComments }));
 
       if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
-      const accountability = [{ disposition: 'resolved', reason: 'Fixed' }];
+      const accountability = [{ disposition: 'addressed', reason: 'Fixed' }];
       fs.writeFileSync(
         path.join(TASKS_DIR, 'review-accountability.json'),
         JSON.stringify(accountability, null, 2)
@@ -2819,7 +2819,7 @@ describe('enforce-step-workflow', () => {
       writeFakeGh(buildGhResponses({ inlineComments }));
 
       if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
-      const accountability = [{ disposition: 'resolved' }]; // missing reason
+      const accountability = [{ disposition: 'addressed' }]; // missing reason
       fs.writeFileSync(
         path.join(TASKS_DIR, 'review-accountability.json'),
         JSON.stringify(accountability, null, 2)
