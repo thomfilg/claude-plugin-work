@@ -549,7 +549,10 @@ describe('check-gate (unit)', () => {
       delete require.cache[configPath];
       delete require.cache[gatePath];
       const { CHECK_GATE_RULES: freshRules } = require('../check-gate');
-      writeReport('qa-feature.check.md', 'QA skipped because no WEB_APPS configured\n\nStatus: NOT_APPLICABLE');
+      writeReport(
+        'qa-feature.check.md',
+        'QA skipped because no WEB_APPS configured\n\nStatus: NOT_APPLICABLE'
+      );
       const rule = freshRules.find((r) => r.name === 'qa-reports');
       const reasons = rule.check(path.join(TEMP, testTicket));
       assert.deepStrictEqual(reasons, [], 'NOT_APPLICABLE QA report should pass');
@@ -570,7 +573,11 @@ describe('check-gate (unit)', () => {
     const result = validateCheckGate(TEMP, testTicket);
     // Result must have rules array
     assert.ok(Array.isArray(result.rules), 'result must have rules array');
-    assert.equal(result.rules.length, CHECK_GATE_RULES.length, 'rules array must have one entry per gate rule');
+    assert.equal(
+      result.rules.length,
+      CHECK_GATE_RULES.length,
+      'rules array must have one entry per gate rule'
+    );
     for (const rule of result.rules) {
       assert.ok(typeof rule.name === 'string', 'each rule must have a name');
       assert.ok(typeof rule.passed === 'boolean', 'each rule must have a passed boolean');
@@ -635,9 +642,7 @@ describe('check-gate (unit)', () => {
       );
       const result = freshValidate(TEMP, testTicket);
       // No QA-related failures
-      const qaReasons = result.reasons.filter(
-        (r) => r.toLowerCase().includes('qa')
-      );
+      const qaReasons = result.reasons.filter((r) => r.toLowerCase().includes('qa'));
       assert.deepStrictEqual(
         qaReasons,
         [],
@@ -659,7 +664,10 @@ describe('check-gate (unit)', () => {
     // Scenario: tests.check.md has ONLY a summary table format
     // "| Status | APPROVED |" with no explicit "Status: APPROVED" line.
     // The full validateCheckGate() must pass the required-reports rule.
-    writeReport('tests.check.md', '# Test Results\n\n| Field | Value |\n|-------|-------|\n| Status | APPROVED |\n| Tests | 42 |');
+    writeReport(
+      'tests.check.md',
+      '# Test Results\n\n| Field | Value |\n|-------|-------|\n| Status | APPROVED |\n| Tests | 42 |'
+    );
     writeReport('code-review.check.md', 'Status: APPROVED');
     writeReport('completion.check.md', 'Status: COMPLETE');
     const result = validateCheckGate(TEMP, testTicket);
@@ -704,7 +712,11 @@ describe('check-gate (unit)', () => {
     const result = validateCheckGate(TEMP, testTicket);
     const requiredRule = result.rules.find((r) => r.name === 'required-reports');
     assert.ok(requiredRule, 'required-reports rule must be in results');
-    assert.equal(requiredRule.passed, true, 'required-reports must pass when code-review is APPROVED with CRITICAL section headers');
+    assert.equal(
+      requiredRule.passed,
+      true,
+      'required-reports must pass when code-review is APPROVED with CRITICAL section headers'
+    );
     assert.deepStrictEqual(requiredRule.reasons, []);
   });
 
@@ -723,14 +735,24 @@ describe('check-gate (unit)', () => {
       'rules array must have one entry per CHECK_GATE_RULE'
     );
     for (const rule of result.rules) {
-      assert.ok(typeof rule.name === 'string' && rule.name.length > 0, `rule must have a non-empty name`);
+      assert.ok(
+        typeof rule.name === 'string' && rule.name.length > 0,
+        `rule must have a non-empty name`
+      );
       assert.ok(typeof rule.passed === 'boolean', `rule "${rule.name}" must have a passed boolean`);
       assert.ok(Array.isArray(rule.reasons), `rule "${rule.name}" must have a reasons array`);
       // passed must be consistent with reasons
       if (rule.passed) {
-        assert.equal(rule.reasons.length, 0, `rule "${rule.name}" marked passed must have empty reasons`);
+        assert.equal(
+          rule.reasons.length,
+          0,
+          `rule "${rule.name}" marked passed must have empty reasons`
+        );
       } else {
-        assert.ok(rule.reasons.length > 0, `rule "${rule.name}" marked failed must have non-empty reasons`);
+        assert.ok(
+          rule.reasons.length > 0,
+          `rule "${rule.name}" marked failed must have non-empty reasons`
+        );
       }
     }
     // required-reports specifically should fail (missing code-review and completion)
