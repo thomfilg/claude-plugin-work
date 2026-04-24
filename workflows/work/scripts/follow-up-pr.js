@@ -1597,6 +1597,7 @@ function buildAccountabilityEntries(blocking, nonBlocking) {
   return allComments.map((item) => ({
     id: item.id || null,
     author: item.author || 'unknown',
+    path: item.path || null,
     comment: (item.body || '').slice(0, 120),
     disposition: item.deduplicated
       ? 'addressed'

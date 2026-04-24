@@ -97,7 +97,7 @@ describe('follow_up verify gate: acknowledged entries without userApproval', () 
     const accountabilityFile = path.join(tmpDir, ticketId, 'review-accountability.json');
     const entries = [
       { disposition: 'acknowledged', reason: 'Comment noted, no code change needed' },
-      { disposition: 'resolved', reason: 'Fixed in latest commit' },
+      { disposition: 'addressed', reason: 'Fixed in latest commit' },
     ];
     fs.writeFileSync(accountabilityFile, JSON.stringify(entries));
 
@@ -109,7 +109,7 @@ describe('follow_up verify gate: acknowledged entries without userApproval', () 
     const accountabilityFile = path.join(tmpDir, ticketId, 'review-accountability.json');
     const entries = [
       { disposition: 'acknowledged', reason: 'Will address in follow-up', userApproval: false },
-      { disposition: 'resolved', reason: 'Fixed' },
+      { disposition: 'addressed', reason: 'Fixed' },
     ];
     fs.writeFileSync(accountabilityFile, JSON.stringify(entries));
 
@@ -121,7 +121,7 @@ describe('follow_up verify gate: acknowledged entries without userApproval', () 
     const accountabilityFile = path.join(tmpDir, ticketId, 'review-accountability.json');
     const entries = [
       { disposition: 'acknowledged', reason: 'Approved by user', userApproval: true },
-      { disposition: 'resolved', reason: 'Fixed' },
+      { disposition: 'addressed', reason: 'Fixed' },
     ];
     fs.writeFileSync(accountabilityFile, JSON.stringify(entries));
 
@@ -133,7 +133,7 @@ describe('follow_up verify gate: acknowledged entries without userApproval', () 
     const accountabilityFile = path.join(tmpDir, ticketId, 'review-accountability.json');
     const entries = [
       { disposition: 'acknowledged' }, // missing reason
-      { disposition: 'resolved', reason: 'Fixed' },
+      { disposition: 'addressed', reason: 'Fixed' },
     ];
     fs.writeFileSync(accountabilityFile, JSON.stringify(entries));
 
@@ -144,7 +144,7 @@ describe('follow_up verify gate: acknowledged entries without userApproval', () 
   it('still rejects when entry count < strictCommentCount', () => {
     const accountabilityFile = path.join(tmpDir, ticketId, 'review-accountability.json');
     const entries = [
-      { disposition: 'resolved', reason: 'Fixed' },
+      { disposition: 'addressed', reason: 'Fixed' },
       // Only 1 entry but strictCommentCount is 2
     ];
     fs.writeFileSync(accountabilityFile, JSON.stringify(entries));
