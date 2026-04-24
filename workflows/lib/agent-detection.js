@@ -111,11 +111,12 @@ function isSubagentFromTranscript(transcriptPath, agentAliases) {
  * Check if running inside a specific agent by examining context.
  *
  * Detection methods (in priority order):
- * 1. Environment variable CLAUDE_CURRENT_AGENT (most reliable)
- * 2. hookData.tool_input.subagent_type (available when parent invokes Task/Agent)
- * 3. Initial prompt scanning for agent type in subagent transcript
- * 4. Transcript scanning for active Task tool invocations
- * 5. Frontmatter parsing for legacy transcripts
+ * 1.  CLAUDE_CURRENT_AGENT env var (Primary — most reliable)
+ * 1b. hookData.agent_type (Primary-B — set by Claude Code when hook fires inside a subagent)
+ * 2.  hookData.tool_input.subagent_type (Secondary — available when parent invokes Task/Agent)
+ * 3.  Initial prompt scanning for agent type in subagent transcript
+ * 4.  Transcript scanning for active Task tool invocations
+ * 5.  Frontmatter parsing for legacy transcripts
  *
  * All comparisons use normalizeAgentName() for prefix-stripping and case-insensitive matching.
  *

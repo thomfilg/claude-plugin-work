@@ -175,14 +175,23 @@ function createArtifactProtector(opts) {
           const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
           if (state.tasksMeta && state.tasksMeta.totalTasks > 0) {
             // Per-task mode active — check file path is under task${N}/
-            const ticketDir = path.join(tasksBase, ticketId);
-            const relPath = filePath.startsWith(ticketDir)
-              ? filePath.slice(ticketDir.length + 1)
-              : '';
-            if (relPath && !relPath.includes('/')) {
+            // Use path.resolve to prevent bypass via relative path components
+            // (e.g., ../../ticketId/file.check.md). path.relative then gives a
+            // canonical relative path; we verify it doesn't escape with '..'
+            // and doesn't contain path.sep (i.e., it's a direct child, not nested).
+            const resolvedTicketDir = path.resolve(path.join(tasksBase, ticketId));
+            const resolvedFilePath = path.resolve(filePath);
+            const relPath = path.relative(resolvedTicketDir, resolvedFilePath);
+            const isWithinTicketDir =
+              relPath !== '' && !relPath.startsWith('..') && !path.isAbsolute(relPath);
+
+            if (isWithinTicketDir && !relPath.includes(path.sep)) {
               // File is at ticket root (e.g., tasks/GH-258/tests.check.md) — block
-              const currentIdx = state.tasksMeta.currentTaskIndex || 0;
-              const taskNum = currentIdx + 1;
+              const totalTasks = state.tasksMeta.totalTasks;
+              const rawCurrentIdx = state.tasksMeta.currentTaskIndex;
+              const currentIdx = Number.isInteger(rawCurrentIdx) ? rawCurrentIdx : 0;
+              const normalizedIdx = Math.min(Math.max(currentIdx, 0), totalTasks - 1);
+              const taskNum = normalizedIdx + 1;
               return {
                 blocked: true,
                 file: bn,
@@ -190,7 +199,7 @@ function createArtifactProtector(opts) {
                 message:
                   `BLOCKED: Cannot write ${bn} at ticket root.\n` +
                   `You are in per-task mode (tasks.md exists). Write your report to the task folder instead:\n` +
-                  `  ${path.join(ticketDir, 'task' + taskNum, bn)}\n`,
+                  `  ${path.join(resolvedTicketDir, 'task' + taskNum, bn)}\n`,
               };
             }
           }

@@ -526,8 +526,7 @@ describe('contentGuard with Edit tool (file-read simulation)', () => {
   it('contentGuard falls back to new_string when file does not exist', () => {
     // Guard that blocks content with "resolved: true"
     const guard = (content) => {
-      if (content.includes('resolved: true'))
-        return { blocked: true, message: 'Blocked resolved' };
+      if (content.includes('resolved: true')) return { blocked: true, message: 'Blocked resolved' };
       return { blocked: false };
     };
 
@@ -547,8 +546,7 @@ describe('contentGuard with Edit tool (file-read simulation)', () => {
   it('contentGuard falls back to new_string when file does not exist (allowed case)', () => {
     // Guard that only blocks full resolved content
     const guard = (content) => {
-      if (content.includes('resolved: false'))
-        return { blocked: true, message: 'Unresolved' };
+      if (content.includes('resolved: false')) return { blocked: true, message: 'Unresolved' };
       return { blocked: false };
     };
 
@@ -564,8 +562,7 @@ describe('contentGuard with Edit tool (file-read simulation)', () => {
 
   it('Write tool contentGuard still works unchanged', () => {
     const guard = (content) => {
-      if (content.includes('resolved: false'))
-        return { blocked: true, message: 'Has unresolved' };
+      if (content.includes('resolved: false')) return { blocked: true, message: 'Has unresolved' };
       return { blocked: false };
     };
 
@@ -593,9 +590,7 @@ describe('per-task path enforcement for .check.md', () => {
 
   function makeProtector(overrides = {}) {
     return createArtifactProtector({
-      artifacts: [
-        { pattern: /\.check\.md$/, step: 'check', agents: ['code-checker'] },
-      ],
+      artifacts: [{ pattern: /\.check\.md$/, step: 'check', agents: ['code-checker'] }],
       getStepInProgress: () => overrides.currentStep || 'check',
       isRunningInAgent: overrides.isRunningInAgent || (() => true),
       getTicketId: () => overrides.ticketId || TICKET,
@@ -708,5 +703,120 @@ describe('per-task path enforcement for .check.md', () => {
     // Bash writes are checked for step/agent but per-task path enforcement
     // only applies to Write/Edit/MultiEdit (line 168 condition)
     assert.equal(result.blocked, false);
+  });
+
+  it('blocks relative path input that resolves to ticket root', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 1 } })
+    );
+
+    const p = makeProtector();
+    // Use a relative path that resolves to the ticket root via ../
+    const filePath = path.join(ticketDir, 'task2', '..', 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+  });
+
+  it('path.resolve prevents bypass via ../ relative path traversal', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(path.join(ticketDir, 'task2'), { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 1 } })
+    );
+
+    const p = makeProtector();
+    // Path with ../ that still lands in a task subfolder after resolution
+    const filePath = path.join(ticketDir, 'task3', '..', 'task2', 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    // After path.resolve, this is ticketDir/task2/tests.check.md — allowed
+    assert.equal(result.blocked, false);
+  });
+
+  it('defaults currentTaskIndex to 0 when NaN', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 'not-a-number' } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    // NaN defaults to 0, so taskNum = 1
+    assert.ok(result.message.includes('task1'));
+  });
+
+  it('defaults currentTaskIndex to 0 when undefined', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3 } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('task1'));
+  });
+
+  it('clamps negative currentTaskIndex to 0', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: -5 } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    assert.ok(result.message.includes('task1'));
+  });
+
+  it('clamps currentTaskIndex exceeding totalTasks to last task', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 99 } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    // Clamped to totalTasks-1=2, so taskNum=3
+    assert.ok(result.message.includes('task3'));
+  });
+
+  it('handles non-integer float currentTaskIndex by defaulting to 0', () => {
+    const ticketDir = path.join(tmpDir, TICKET);
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, '.work-state.json'),
+      JSON.stringify({ tasksMeta: { totalTasks: 3, currentTaskIndex: 1.7 } })
+    );
+
+    const p = makeProtector();
+    const filePath = path.join(ticketDir, 'tests.check.md');
+    const result = p.check('Write', { file_path: filePath });
+    assert.equal(result.blocked, true);
+    assert.equal(result.rule, 'per-task-path');
+    // 1.7 is not an integer, defaults to 0, taskNum=1
+    assert.ok(result.message.includes('task1'));
   });
 });
