@@ -57,6 +57,10 @@ function loadSafeTicketId() {
   } catch {
     // Fallback: use raw ticket ID if config.safeTicketId is unavailable
     _safeTicketId = getCurrentTaskId();
+    if (!_safeTicketId) {
+      console.error('Error: Could not determine ticket ID from cwd or branch.');
+      process.exit(2);
+    }
   }
   return _safeTicketId;
 }
