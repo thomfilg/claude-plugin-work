@@ -445,6 +445,42 @@ function stripComments(src) {
         out += src[i]; // closing quote
         i++;
       }
+    // Regex literal — a / after certain tokens starts a regex, not a comment.
+    // Heuristic: / preceded by =, (, [, !, &, |, ?, :, ,, ;, {, }, newline, or line start.
+    } else if (ch === '/' && src[i + 1] !== '/' && src[i + 1] !== '*' && isRegexContext(out)) {
+      out += ch;
+      i++;
+      while (i < src.length && src[i] !== '/' && src[i] !== '\n') {
+        if (src[i] === '\\') {
+          out += src[i] + (src[i + 1] || '');
+          i += 2;
+        } else if (src[i] === '[') {
+          // Character class — skip to ]
+          out += src[i];
+          i++;
+          while (i < src.length && src[i] !== ']' && src[i] !== '\n') {
+            if (src[i] === '\\') {
+              out += src[i] + (src[i + 1] || '');
+              i += 2;
+            } else {
+              out += src[i];
+              i++;
+            }
+          }
+        } else {
+          out += src[i];
+          i++;
+        }
+      }
+      if (i < src.length && src[i] === '/') {
+        out += src[i]; // closing /
+        i++;
+        // Skip regex flags
+        while (i < src.length && /[gimsuy]/.test(src[i])) {
+          out += src[i];
+          i++;
+        }
+      }
     // Single-line comment — skip to end of line
     } else if (ch === '/' && src[i + 1] === '/') {
       while (i < src.length && src[i] !== '\n') i++;
@@ -462,6 +498,20 @@ function stripComments(src) {
     }
   }
   return out;
+}
+
+/**
+ * Check if the last non-whitespace character in output suggests a regex follows.
+ * A / is a regex start after: = ( [ ! & | ? : , ; { } ~ ^ + - * % < > newline or start of string.
+ * A / is division after: ) ] identifier digit.
+ * @param {string} output - text emitted so far
+ * @returns {boolean}
+ */
+function isRegexContext(output) {
+  const trimmed = output.replace(/\s+$/, '');
+  if (trimmed.length === 0) return true;
+  const last = trimmed[trimmed.length - 1];
+  return '=([!&|?:,;{}~^+-*%<>\n'.includes(last);
 }
 
 function escapeRegex(str) {
