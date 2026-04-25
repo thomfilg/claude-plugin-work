@@ -67,7 +67,7 @@ TYPE_CHECKS['tests'].fail = [
 TYPE_CHECKS['tests'].pass = ['✅ PASS', '\\bAPPROVED\\b', '\\bAll\\b.*\\bpass'];
 
 TYPE_CHECKS['codeReview'] = Object.create(null);
-TYPE_CHECKS['codeReview'].fail = ['(?<!No )CRITICAL(?!\\s*ISSUES?)\\b', 'NEEDS_WORK'];
+TYPE_CHECKS['codeReview'].fail = ['(?<!No )CRITICAL(?!\\s*ISSUES\\b)', 'NEEDS_WORK'];
 TYPE_CHECKS['codeReview'].pass = [
   '\\bAPPROVED\\b',
   '\\bNo critical issues\\b',
@@ -85,6 +85,7 @@ TYPE_CHECKS['qa'].fail = [
 TYPE_CHECKS['qa'].pass = [
   '✅ PASS',
   '\\bAll tests passed\\b',
+  '(?:^|\\n)\\s*SUCCESS\\s*(?:\\n|$)',
   'Status:\\s*SUCCESS',
   'Status:\\s*APPROVED',
 ];
@@ -394,13 +395,13 @@ function extractIssueTitles(sectionContent) {
  *
  * @param {string|null|undefined} reportContent - code-review.check.md content
  * @param {string|null|undefined} replyContent  - code-review-reply.check.md content
- * @returns {{ resolved: boolean, unaddressed: string[] }}
+ * @returns {{ resolved: boolean, unaddressed: string[], blockingCount: number }}
  */
 function isCodeReviewResolved(reportContent, replyContent) {
   // Empty/missing report cannot be considered resolved — callers should not
   // bypass the gate on an empty code-review.check.md just because a reply exists.
   if (!reportContent || !reportContent.trim()) {
-    return { resolved: false, unaddressed: ['(empty report content)'] };
+    return { resolved: false, unaddressed: ['(empty report content)'], blockingCount: 0 };
   }
 
   // Extract CRITICAL and IMPORTANT issue titles from the report.
@@ -430,7 +431,7 @@ function isCodeReviewResolved(reportContent, replyContent) {
 
   // No blocking issues -> resolved
   if (allBlockingTitles.length === 0) {
-    return { resolved: true, unaddressed: [] };
+    return { resolved: true, unaddressed: [], blockingCount: 0 };
   }
 
   // Parse reply decisions
@@ -476,6 +477,7 @@ function isCodeReviewResolved(reportContent, replyContent) {
   return {
     resolved: unaddressed.length === 0,
     unaddressed,
+    blockingCount: allBlockingTitles.length,
   };
 }
 

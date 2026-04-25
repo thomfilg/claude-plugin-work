@@ -182,6 +182,31 @@ describe('parseReportStatus — infrastructure failures', () => {
     assert.deepStrictEqual(result, { status: 'ACCESS_FAILED', icon: '🔒' });
   });
 
+  it('honors explicit Status: NOT_APPLICABLE over PLAYWRIGHT_UNAVAILABLE in prose', () => {
+    const content = [
+      'Status: NOT_APPLICABLE',
+      '',
+      'QA was skipped because PLAYWRIGHT_UNAVAILABLE in this environment.',
+    ].join('\n');
+    const result = parseReportStatus(content, 'qa');
+    assert.deepStrictEqual(result, { status: 'NOT_APPLICABLE', icon: '➖' });
+  });
+
+  it('honors explicit Status: APPROVED over INFRASTRUCTURE_FAILURE in prose', () => {
+    const content = [
+      'Status: APPROVED',
+      '',
+      'Previously saw INFRASTRUCTURE_FAILURE but retried successfully.',
+    ].join('\n');
+    const result = parseReportStatus(content, 'qa');
+    assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
+  });
+
+  it('still detects INFRASTRUCTURE_FAILURE when no explicit Status line', () => {
+    const result = parseReportStatus('PLAYWRIGHT_UNAVAILABLE — cannot run tests', 'qa');
+    assert.deepStrictEqual(result, { status: 'INFRASTRUCTURE_FAILURE', icon: '🛑' });
+  });
+
   it('does NOT detect INFRASTRUCTURE_FAILURE for non-QA types', () => {
     const result = parseReportStatus('INFRASTRUCTURE_FAILURE mentioned somewhere', 'tests');
     // For tests type, INFRASTRUCTURE_FAILURE is not a recognized fail pattern
@@ -208,8 +233,13 @@ describe('parseReportStatus — pass markers', () => {
     assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 
-  it('recognizes "No critical" for codeReview type', () => {
+  it('recognizes "No critical issues" for codeReview type', () => {
     const result = parseReportStatus('No critical issues found', 'codeReview');
+    assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
+  });
+
+  it('recognizes "No issues found" for codeReview type', () => {
+    const result = parseReportStatus('No issues found in this review', 'codeReview');
     assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 });
@@ -267,6 +297,25 @@ describe('parseReportStatus — anchored markers prevent false positives', () =>
     const content = 'Status: APPROVED\n\nTest description: should fail 3 times before succeeding';
     const result = parseReportStatus(content, 'tests');
     assert.equal(result.status, 'APPROVED', 'inline prose "fail 3" must not override Status line');
+  });
+
+  it('does not treat "No issues were fixed yet" as pass for codeReview', () => {
+    const result = parseReportStatus('No issues were fixed yet', 'codeReview');
+    assert.notEqual(
+      result.status,
+      'APPROVED',
+      '"No issues were fixed yet" must not match pass marker'
+    );
+  });
+
+  it('does not treat "no success was achieved" as pass for QA', () => {
+    const result = parseReportStatus('no success was achieved in testing', 'qa');
+    assert.notEqual(result.status, 'APPROVED', '"no success" must not match SUCCESS pass marker');
+  });
+
+  it('recognizes "Status: SUCCESS" for QA type', () => {
+    const result = parseReportStatus('Status: SUCCESS', 'qa');
+    assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 
   it('Status: APPROVED at top overrides later Status: FAIL in embedded output', () => {

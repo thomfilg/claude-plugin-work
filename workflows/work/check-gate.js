@@ -123,13 +123,18 @@ const CHECK_GATE_RULES = [
           if (fileExists(replyPath)) {
             const replyContent = readFile(replyPath);
             const resolution = isCodeReviewResolved(content, replyContent);
-            if (resolution.resolved) {
-              continue; // all CRITICAL/IMPORTANT issues addressed via reply
+            if (resolution.blockingCount > 0) {
+              // Report has CRITICAL/IMPORTANT issues — reply reconciliation decides
+              if (resolution.resolved) {
+                continue; // all blocking issues addressed via reply
+              }
+              reasons.push(
+                `Report ${req.file} has unresolved issues: ${resolution.unaddressed.join(', ')}`
+              );
+              continue;
             }
-            reasons.push(
-              `Report ${req.file} has unresolved issues: ${resolution.unaddressed.join(', ')}`
-            );
-            continue;
+            // No blocking issues extracted — reply file cannot bypass a non-APPROVED
+            // status; fall through to the standard status check below.
           }
           // No reply file — fall through to status check
         }
@@ -152,15 +157,16 @@ const CHECK_GATE_RULES = [
       }
       const qaFiles = listFiles(dir, /^qa-.*\.check\.md$/);
       if (qaFiles.length === 0) return ['No QA reports found (need at least one qa-*.check.md)'];
-      return qaFiles
-        .filter((f) => {
-          const { status } = parseReportStatus(readFile(f), 'qa');
-          return status !== 'APPROVED' && status !== 'NOT_APPLICABLE';
-        })
-        .map((f) => {
-          const { status } = parseReportStatus(readFile(f), 'qa');
-          return `QA report ${path.basename(f)} has status ${status} (expected APPROVED or NOT_APPLICABLE)`;
-        });
+      const reasons = [];
+      for (const f of qaFiles) {
+        const { status } = parseReportStatus(readFile(f), 'qa');
+        if (status !== 'APPROVED' && status !== 'NOT_APPLICABLE') {
+          reasons.push(
+            `QA report ${path.basename(f)} has status ${status} (expected APPROVED or NOT_APPLICABLE)`
+          );
+        }
+      }
+      return reasons;
     },
   },
   {
