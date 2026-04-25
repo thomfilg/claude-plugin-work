@@ -246,6 +246,9 @@ function createArtifactProtector(opts) {
               // This guard runs unconditionally — including during the 'check' step —
               // so that writes like "/<ticket>/../outside/file.check.md" are always blocked.
               if (isEscapingTicketDir) {
+                const suggestedPath = currentStep === 'check'
+                  ? path.join(resolvedTicketDir, bn)
+                  : path.join(resolvedTicketDir, 'task' + taskNum, bn);
                 return {
                   blocked: true,
                   file: bn,
@@ -253,7 +256,7 @@ function createArtifactProtector(opts) {
                   message:
                     `BLOCKED: Cannot write ${bn} outside ticket directory.\n` +
                     `The resolved path escapes the ticket folder. Write your report to:\n` +
-                    `  ${path.join(resolvedTicketDir, 'task' + taskNum, bn)}\n`,
+                    `  ${suggestedPath}\n`,
                 };
               }
 
