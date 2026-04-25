@@ -7,7 +7,7 @@ const AppAccessStatus = require('../check/lib/app-access-status');
 // ---------------------------------------------------------------------------
 const ICONS = Object.create(null);
 ICONS['APPROVED'] = '✅';
-ICONS['NEEDS_WORK'] = '⚠️';
+ICONS['NEEDS_WORK'] = '❌';
 ICONS['MISSING'] = '❓';
 ICONS['NOT_APPLICABLE'] = '➖';
 ICONS['UNKNOWN'] = '❓';

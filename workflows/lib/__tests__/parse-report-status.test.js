@@ -92,7 +92,7 @@ describe('parseReportStatus — Status: line format', () => {
 
   it('recognizes Status: NEEDS_WORK', () => {
     const result = parseReportStatus('Status: NEEDS_WORK', 'codeReview');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '❌' });
   });
 
   it('recognizes Status: NOT_APPLICABLE', () => {
@@ -102,7 +102,7 @@ describe('parseReportStatus — Status: line format', () => {
 
   it('recognizes Status: FAIL as NEEDS_WORK', () => {
     const result = parseReportStatus('Status: FAIL', 'tests');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '❌' });
   });
 });
 
@@ -145,7 +145,7 @@ describe('parseReportStatus — summary table format', () => {
   it('recognizes | Status | NEEDS_WORK | in a table', () => {
     const content = '| Status | NEEDS_WORK |';
     const result = parseReportStatus(content, 'codeReview');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '❌' });
   });
 });
 
@@ -169,13 +169,13 @@ describe('parseReportStatus — Status line priority', () => {
       '\n'
     );
     const result = parseReportStatus(content, 'codeReview');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '❌' });
   });
 
   it('fail markers win when no explicit Status line exists', () => {
     const content = ['✅ PASS: 10 tests', '❌ FAIL: 2 tests'].join('\n');
     const result = parseReportStatus(content, 'tests');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '❌' });
   });
 
   it('Status: APPROVED overrides fail patterns in raw test output', () => {
@@ -297,7 +297,7 @@ describe('parseReportStatus — CRITICAL section header false-negative (GH-232)'
   it('CRITICAL in prose triggers NEEDS_WORK when no explicit Status line', () => {
     const content = 'Found a CRITICAL bug in the parser.';
     const result = parseReportStatus(content, 'codeReview');
-    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
+    assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '❌' });
   });
 });
 
