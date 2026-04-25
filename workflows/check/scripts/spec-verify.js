@@ -417,13 +417,8 @@ function checkReuses(args, root) {
 }
 
 /**
- * Escape special regex characters in a string.
- * @param {string} str
- * @returns {string}
- */
-/**
- * Strip JS comments while respecting string literals.
- * Tracks quote state so // and /* inside strings are preserved.
+ * Strip JS comments while respecting string and regex literals.
+ * Tracks quote/regex state so // and /* inside strings/regex are preserved.
  * Block comments are replaced with equivalent newlines to prevent line concatenation.
  * @param {string} src
  * @returns {string}
@@ -490,13 +485,19 @@ function stripComments(src) {
     // Single-line comment — skip to end of line
     } else if (ch === '/' && src[i + 1] === '/') {
       while (i < src.length && src[i] !== '\n') i++;
-    // Block comment — replace with newlines to preserve line structure
+    // Block comment — replace with newlines to preserve line structure.
+    // If no newline was emitted, insert a space to prevent token concatenation.
     } else if (ch === '/' && src[i + 1] === '*') {
+      let emittedNewline = false;
       i += 2;
       while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
-        if (src[i] === '\n') out += '\n';
+        if (src[i] === '\n') {
+          out += '\n';
+          emittedNewline = true;
+        }
         i++;
       }
+      if (!emittedNewline) out += ' ';
       if (i < src.length) i += 2; // skip */
     } else {
       out += ch;
@@ -507,13 +508,6 @@ function stripComments(src) {
 }
 
 /**
- * Check if the last non-whitespace character in output suggests a regex follows.
- * A / is a regex start after: = ( [ ! & | ? : , ; { } ~ ^ + - * % < > newline or start of string.
- * A / is division after: ) ] identifier digit.
- * @param {string} output - text emitted so far
- * @returns {boolean}
- */
-/**
  * Check if a position in source text is inside a string literal.
  * Walks from the start tracking quote state.
  * @param {string} src - source text (already comment-stripped)
@@ -523,29 +517,68 @@ function stripComments(src) {
 function isInsideString(src, pos) {
   let inString = false;
   let quote = '';
+  let braceDepth = 0; // tracks ${...} nesting in template literals
   for (let i = 0; i < pos && i < src.length; i++) {
     const ch = src[i];
-    if (inString) {
+    if (inString && quote === '`' && braceDepth > 0) {
+      // Inside ${...} interpolation — treat as code
+      if (ch === '{') {
+        braceDepth++;
+      } else if (ch === '}') {
+        braceDepth--;
+      } else if (ch === "'" || ch === '"') {
+        // Skip strings inside interpolation
+        const q = ch;
+        i++;
+        while (i < src.length && src[i] !== q) {
+          if (src[i] === '\\') i++;
+          i++;
+        }
+      }
+    } else if (inString) {
       if (ch === '\\') {
         i++; // skip escaped char
+      } else if (quote === '`' && ch === '$' && src[i + 1] === '{') {
+        braceDepth = 1;
+        i++; // skip {
       } else if (ch === quote) {
         inString = false;
       }
     } else if (ch === "'" || ch === '"' || ch === '`') {
       inString = true;
       quote = ch;
+    } else if (ch === '/' && isRegexContext(src.slice(0, i))) {
+      // Skip regex literal to avoid treating quotes inside regex as string starts
+      i++;
+      while (i < src.length && src[i] !== '/' && src[i] !== '\n') {
+        if (src[i] === '\\') i++;
+        i++;
+      }
     }
   }
-  return inString;
+  return inString && !(quote === '`' && braceDepth > 0);
 }
 
+/**
+ * Check if the last non-whitespace character in output suggests a regex follows.
+ * A / is a regex start after: = ( [ ! & | ? : , ; { } ~ ^ + - * % < > newline or start of string.
+ * A / is division after: ) ] identifier digit.
+ * @param {string} output - text emitted so far
+ * @returns {boolean}
+ */
 function isRegexContext(output) {
   const trimmed = output.replace(/\s+$/, '');
   if (trimmed.length === 0) return true;
   const last = trimmed[trimmed.length - 1];
-  return '=([!&|?:,;{}~^+-*%<>\n'.includes(last);
+  // Include ) for keyword contexts like if(x)/regex/ and return(x)/regex/
+  return '=([)!&|?:,;{}~^+-*%<>\n'.includes(last);
 }
 
+/**
+ * Escape special regex characters in a string.
+ * @param {string} str
+ * @returns {string}
+ */
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

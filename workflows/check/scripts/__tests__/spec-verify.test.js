@@ -286,6 +286,24 @@ describe('spec-verify.js', () => {
     assert.equal(json.checks[0].passed, false);
   });
 
+  it('REUSES handles regex with quote char before require on same line', () => {
+    writeFile('src/app.js', "const re = /\\'/; const { useAuth } = require('./hooks');");
+    const specPath = writeSpec(['- REUSES src/app.js hooks']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 0);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, true);
+  });
+
+  it('REUSES detects require() inside template literal interpolation', () => {
+    writeFile('src/app.js', "const x = `${require('./hooks')}`;");
+    const specPath = writeSpec(['- REUSES src/app.js hooks']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 0);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, true);
+  });
+
   it('REUSES ignores require() inside regular string literals', () => {
     writeFile('src/app.js', 'const s = "require(\'./hooks\')";');
     const specPath = writeSpec(['- REUSES src/app.js hooks']);
