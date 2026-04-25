@@ -189,7 +189,7 @@ Then check how many blocking comments exist:
 node "$COMMENTS_SCRIPT" --status
 ```
 
-This shows a brief summary like: `Blocking: 8, Non-blocking: 5, Solved: 0, Skipped: 0`
+This shows a JSON summary like: `{"total":13,"solved":0,"skipped":0,"remaining":13,"strictCommentCount":8}`
 
 ### 5.1 Sequential Comment Loop
 
@@ -211,7 +211,7 @@ WHILE there are unsolved blocking comments:
   7. OR skip the comment if it conflicts with user intent:
      node "$COMMENTS_SCRIPT" --skip-comment <ID> "<reason why skipped>"
 
-  REPEAT until --next-comment returns no more blocking comments
+  REPEAT until --next-comment returns {"done": true}
 ```
 
 ### 5.2 Commit and Push After All Comments
@@ -220,7 +220,7 @@ After ALL blocking comments are solved/skipped:
 
 ```bash
 git add -A
-# Use commit-writer agent
+# → Invoke commit-writer agent here to create the commit
 git push
 ```
 
@@ -241,7 +241,7 @@ When an AI reviewer suggests reverting or undoing changes the user explicitly re
 - **Never dismiss or resolve review threads on GitHub** — let the reviewer verify
 - **Process ONE comment at a time** — fix, verify, mark solved, then get next
 
-### 5.4 Skip AI Comments That Conflict With User Intent
+### 5.5 Skip AI Comments — Detailed Template
 
 Sometimes AI reviewers (Cursor, Copilot) suggest reverting or undoing changes that the user explicitly requested. When you identify such comments:
 

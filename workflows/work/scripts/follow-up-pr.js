@@ -1365,8 +1365,8 @@ async function main() {
       state.finalStatus = decision.finalStatus;
       saveState(state);
 
-      // GH-248: Show full comment bodies for ALL comments on exit so the agent
-      // has complete context. Non-blocking comments must be evaluated too.
+      // GH-248: Show brief comment previews (80 chars) for ALL comments on exit
+      // so the agent has context. Non-blocking comments must be evaluated too.
       const allExitComments = [
         ...(reviews.blocking || []).map((item) => ({ ...item, _section: 'BLOCKING' })),
         ...(reviews.nonBlocking || []).map((item) => ({ ...item, _section: 'NON-BLOCKING' })),
