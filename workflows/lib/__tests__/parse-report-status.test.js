@@ -68,6 +68,14 @@ describe('parseReportStatus — Status: line format', () => {
     assert.notEqual(result.status, 'APPROVED');
   });
 
+  it('does NOT fall through to heuristics when Status line has unrecognized value', () => {
+    // Status: COMPLETE is invalid for tests type. Even though ✅ PASS marker
+    // exists in the body, the explicit Status: line should prevent heuristic fallback.
+    const content = 'Status: COMPLETE\n\n✅ PASS\nAll tests passed';
+    const result = parseReportStatus(content, 'tests');
+    assert.equal(result.status, 'UNKNOWN', 'unrecognized Status line must block heuristic fallback');
+  });
+
   it('recognizes Status: NEEDS_WORK', () => {
     const result = parseReportStatus('Status: NEEDS_WORK', 'codeReview');
     assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });

@@ -152,11 +152,18 @@ function checkStatusLine(content, type) {
   // later Status: tokens in embedded output should not override it.
   const re = /^\s*\*{0,2}Status:\*{0,2}\s*\*{0,2}\s*([A-Z_]+)\s*\*{0,2}/gim;
   let match;
+  let hasStatusLine = false;
   while ((match = re.exec(content)) !== null) {
+    hasStatusLine = true;
     const raw = match[1].toUpperCase();
     const resolved = resolveAlias(raw, type);
     if (resolved) return resolved;
   }
+  // If a Status: line exists but its value is not recognized for this type,
+  // return UNKNOWN to prevent heuristic fallback from overriding an explicit
+  // (but type-invalid) declaration. E.g., Status: COMPLETE in tests.check.md
+  // should NOT fall through to pass markers like ✅ PASS.
+  if (hasStatusLine) return 'UNKNOWN';
   return null;
 }
 
