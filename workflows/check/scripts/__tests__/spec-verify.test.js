@@ -276,4 +276,22 @@ describe('spec-verify.js', () => {
     const json = JSON.parse(result.stdout);
     assert.equal(json.checks[0].passed, true);
   });
+
+  it('REUSES ignores require() inside template literals', () => {
+    writeFile('src/app.js', "const example = `require(\n  './hooks'\n)`;");
+    const specPath = writeSpec(['- REUSES src/app.js hooks']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 1);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, false);
+  });
+
+  it('REUSES ignores require() inside regular string literals', () => {
+    writeFile('src/app.js', 'const s = "require(\'./hooks\')";');
+    const specPath = writeSpec(['- REUSES src/app.js hooks']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 1);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, false);
+  });
 });

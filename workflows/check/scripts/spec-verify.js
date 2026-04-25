@@ -394,13 +394,19 @@ function checkReuses(args, root) {
   // machine avoids false stripping of // inside strings (e.g. URLs).
   const stripped = stripComments(content);
   const lines = stripped.split(/\r?\n/);
-  if (lines.some((line) => importRegex.test(line))) {
+  if (lines.some((line) => {
+    const m = importRegex.exec(line);
+    return m && !isInsideString(line, m.index);
+  })) {
     return { type: 'REUSES', args, passed: true };
   }
   // Fallback: check full content for require('...pattern...') split across lines by formatters.
-  const multilineRegex = new RegExp(`require\\s*\\(\\s*['"][^'"]*${escaped}[^'"]*['"]`, 's');
-  if (multilineRegex.test(stripped)) {
-    return { type: 'REUSES', args, passed: true };
+  const multilineRegex = new RegExp(`require\\s*\\(\\s*['"][^'"]*${escaped}[^'"]*['"]`, 'sg');
+  let match;
+  while ((match = multilineRegex.exec(stripped)) !== null) {
+    if (!isInsideString(stripped, match.index)) {
+      return { type: 'REUSES', args, passed: true };
+    }
   }
   return {
     type: 'REUSES',
@@ -427,7 +433,7 @@ function stripComments(src) {
   let i = 0;
   while (i < src.length) {
     const ch = src[i];
-    // String literals — skip to closing quote, respecting escapes
+    // String literals — preserve content (needed for require() arguments)
     if (ch === "'" || ch === '"' || ch === '`') {
       const quote = ch;
       out += ch;
@@ -507,6 +513,32 @@ function stripComments(src) {
  * @param {string} output - text emitted so far
  * @returns {boolean}
  */
+/**
+ * Check if a position in source text is inside a string literal.
+ * Walks from the start tracking quote state.
+ * @param {string} src - source text (already comment-stripped)
+ * @param {number} pos - character index to check
+ * @returns {boolean}
+ */
+function isInsideString(src, pos) {
+  let inString = false;
+  let quote = '';
+  for (let i = 0; i < pos && i < src.length; i++) {
+    const ch = src[i];
+    if (inString) {
+      if (ch === '\\') {
+        i++; // skip escaped char
+      } else if (ch === quote) {
+        inString = false;
+      }
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      inString = true;
+      quote = ch;
+    }
+  }
+  return inString;
+}
+
 function isRegexContext(output) {
   const trimmed = output.replace(/\s+$/, '');
   if (trimmed.length === 0) return true;
