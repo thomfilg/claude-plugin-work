@@ -126,13 +126,13 @@ const CHECK_GATE_RULES = [
             if (resolution.blockingCount > 0) {
               // Report has CRITICAL/IMPORTANT issues — reply reconciliation decides
               if (resolution.resolved) {
-                continue; // all blocking issues addressed via reply
+                continue; // blockingCount > 0 but all addressed — skip this report
               }
               reasons.push(
                 `Report ${req.file} has unresolved issues: ${resolution.unaddressed.join(', ')}`
               );
               continue;
-            }
+            } // blockingCount === 0: no CRITICAL/IMPORTANT issues found in report
             // No blocking issues extracted — reply file cannot bypass a non-APPROVED
             // status; fall through to the standard status check below.
           }
@@ -140,6 +140,7 @@ const CHECK_GATE_RULES = [
         }
 
         if (status !== 'APPROVED') {
+          // Status line is the authoritative gate when no blocking issues exist
           reasons.push(`Report ${req.file} status is ${status} (expected APPROVED)`);
         }
       }

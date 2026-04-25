@@ -1353,7 +1353,7 @@ async function main() {
       ];
       if (allExitComments.length > 0) {
         console.log('');
-        console.log(c.bold('--- Full Comment Bodies (All Reviews) ---'));
+        console.log(c.bold('--- Brief Comment Bodies (All Reviews) ---'));
         let currentSection = '';
         allExitComments.forEach((item, i) => {
           if (item._section !== currentSection) {
