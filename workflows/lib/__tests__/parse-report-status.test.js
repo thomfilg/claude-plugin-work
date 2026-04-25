@@ -350,6 +350,16 @@ describe('parseReportStatus — anchored markers prevent false positives', () =>
     assert.equal(result.status, 'UNKNOWN', 'SUCCESS is only valid for QA type');
   });
 
+  it('recognizes "Status: INFRASTRUCTURE_FAILURE" for QA type', () => {
+    const result = parseReportStatus('Status: INFRASTRUCTURE_FAILURE', 'qa');
+    assert.deepStrictEqual(result, { status: 'INFRASTRUCTURE_FAILURE', icon: '🛑' });
+  });
+
+  it('recognizes "Status: ACCESS_FAILED" for QA type', () => {
+    const result = parseReportStatus('Status: ACCESS_FAILED', 'qa');
+    assert.deepStrictEqual(result, { status: 'ACCESS_FAILED', icon: '🔒' });
+  });
+
   it('Status: APPROVED at top overrides later Status: FAIL in embedded output', () => {
     const content = [
       'Status: APPROVED',

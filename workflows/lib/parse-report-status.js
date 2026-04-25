@@ -36,9 +36,12 @@ TYPE_ALIASES['completion'] = Object.assign(Object.create(null), BASE_ALIASES, {
   COMPLETE: 'APPROVED',
   DELIVERED: 'APPROVED',
 });
-// QA accepts SUCCESS as APPROVED (used by QA report generators).
+// QA accepts SUCCESS as APPROVED (used by QA report generators),
+// and recognizes infrastructure/access failure statuses from write-qa-report.js.
 TYPE_ALIASES['qa'] = Object.assign(Object.create(null), BASE_ALIASES, {
   SUCCESS: 'APPROVED',
+  INFRASTRUCTURE_FAILURE: 'INFRASTRUCTURE_FAILURE',
+  ACCESS_FAILED: 'ACCESS_FAILED',
 });
 // Fallback for types without overrides
 const STATUS_ALIASES = BASE_ALIASES;
