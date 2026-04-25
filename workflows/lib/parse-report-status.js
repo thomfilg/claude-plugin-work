@@ -22,7 +22,6 @@ const BASE_ALIASES = Object.create(null);
 BASE_ALIASES['APPROVED'] = 'APPROVED';
 BASE_ALIASES['PASS'] = 'APPROVED';
 BASE_ALIASES['PASSED'] = 'APPROVED';
-BASE_ALIASES['SUCCESS'] = 'APPROVED';
 BASE_ALIASES['NEEDS_WORK'] = 'NEEDS_WORK';
 BASE_ALIASES['FAIL'] = 'NEEDS_WORK';
 BASE_ALIASES['FAILED'] = 'NEEDS_WORK';
@@ -30,12 +29,16 @@ BASE_ALIASES['INCOMPLETE'] = 'NEEDS_WORK';
 BASE_ALIASES['PENDING'] = 'NEEDS_WORK';
 BASE_ALIASES['NOT_APPLICABLE'] = 'NOT_APPLICABLE';
 
-// Per-type alias maps — only 'completion' accepts COMPLETE/DELIVERED as APPROVED.
-// tests and codeReview must use explicit APPROVED.
+// Per-type alias maps extend BASE_ALIASES with type-specific keywords.
+// tests and codeReview must use explicit APPROVED/PASS/PASSED.
 const TYPE_ALIASES = Object.create(null);
 TYPE_ALIASES['completion'] = Object.assign(Object.create(null), BASE_ALIASES, {
   COMPLETE: 'APPROVED',
   DELIVERED: 'APPROVED',
+});
+// QA accepts SUCCESS as APPROVED (used by QA report generators).
+TYPE_ALIASES['qa'] = Object.assign(Object.create(null), BASE_ALIASES, {
+  SUCCESS: 'APPROVED',
 });
 // Fallback for types without overrides
 const STATUS_ALIASES = BASE_ALIASES;
@@ -67,7 +70,7 @@ TYPE_CHECKS['tests'].fail = [
 TYPE_CHECKS['tests'].pass = ['✅ PASS', '\\bAPPROVED\\b', '\\bAll\\b.*\\bpass'];
 
 TYPE_CHECKS['codeReview'] = Object.create(null);
-TYPE_CHECKS['codeReview'].fail = ['(?<!No )CRITICAL(?!\\s*ISSUES\\b)', 'NEEDS_WORK'];
+TYPE_CHECKS['codeReview'].fail = ['(?<!No )CRITICAL(?!\\s*ISSUES?\\b)', 'NEEDS_WORK'];
 TYPE_CHECKS['codeReview'].pass = [
   '\\bAPPROVED\\b',
   '\\bNo critical issues\\b',

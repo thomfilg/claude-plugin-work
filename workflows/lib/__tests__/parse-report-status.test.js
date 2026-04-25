@@ -340,6 +340,16 @@ describe('parseReportStatus — anchored markers prevent false positives', () =>
     assert.deepStrictEqual(result, { status: 'APPROVED', icon: '✅' });
   });
 
+  it('does NOT accept "Status: SUCCESS" for tests type', () => {
+    const result = parseReportStatus('Status: SUCCESS', 'tests');
+    assert.equal(result.status, 'UNKNOWN', 'SUCCESS is only valid for QA type');
+  });
+
+  it('does NOT accept "Status: SUCCESS" for codeReview type', () => {
+    const result = parseReportStatus('Status: SUCCESS', 'codeReview');
+    assert.equal(result.status, 'UNKNOWN', 'SUCCESS is only valid for QA type');
+  });
+
   it('Status: APPROVED at top overrides later Status: FAIL in embedded output', () => {
     const content = [
       'Status: APPROVED',
