@@ -991,6 +991,26 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
           '  → Use follow-up-pr-comments.js --snapshot --pr <N> then --next-comment to process each comment ONE AT A TIME'
         )
       );
+      lines.push(
+        c.yellow(
+          '  → SOLVE ALL COMMENTS BEFORE PUSHING. Do NOT push after each comment. Do NOT use gh api to read'
+        )
+      );
+      lines.push(
+        c.yellow(
+          '    comments directly. The --next-comment loop is the ONLY way to process comments — it tracks'
+        )
+      );
+      lines.push(
+        c.yellow(
+          '    state so nothing is missed or duplicated. Pushing mid-loop causes snapshot invalidation,'
+        )
+      );
+      lines.push(
+        c.yellow(
+          '    line-number drift, and dedup confusion.'
+        )
+      );
       if (reviews.nonBlocking.length > 0) {
         lines.push(
           `  + ${reviews.nonBlocking.length} non-blocking (nitpick/low — assess whether to address):`
