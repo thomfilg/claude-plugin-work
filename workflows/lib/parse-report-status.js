@@ -146,25 +146,17 @@ function checkFailMarkers(content, type) {
  * @returns {string|null}
  */
 function checkStatusLine(content, type) {
-  // Match Status: at start of line (^ with multiline) to avoid matching
-  // Status: mentions inside prose or bullet points. Return the FIRST
-  // recognized match — the top-level declaration is authoritative, and
-  // later Status: tokens in embedded output should not override it.
-  const re = /^\s*\*{0,2}Status:\*{0,2}\s*\*{0,2}\s*([A-Z_]+)\s*\*{0,2}/gim;
-  let match;
-  let hasStatusLine = false;
-  while ((match = re.exec(content)) !== null) {
-    hasStatusLine = true;
-    const raw = match[1].toUpperCase();
-    const resolved = resolveAlias(raw, type);
-    if (resolved) return resolved;
-  }
-  // If a Status: line exists but its value is not recognized for this type,
-  // return UNKNOWN to prevent heuristic fallback from overriding an explicit
-  // (but type-invalid) declaration. E.g., Status: COMPLETE in tests.check.md
-  // should NOT fall through to pass markers like ✅ PASS.
-  if (hasStatusLine) return 'UNKNOWN';
-  return null;
+  // Match the FIRST Status: at start of line (^ with multiline). The top-level
+  // declaration is authoritative — later Status: tokens in embedded output must
+  // not override it. If the first Status: line's value is not recognized for this
+  // type, return UNKNOWN to prevent heuristic fallback from overriding an explicit
+  // (but type-invalid) declaration.
+  const re = /^\s*\*{0,2}Status:\*{0,2}\s*\*{0,2}\s*([A-Z_]+)\s*\*{0,2}/im;
+  const match = content.match(re);
+  if (!match) return null;
+  const raw = match[1].toUpperCase();
+  const resolved = resolveAlias(raw, type);
+  return resolved || 'UNKNOWN';
 }
 
 /**
@@ -178,7 +170,8 @@ function checkSummaryTable(content, type) {
   const match = content.match(/\|\s*Status\s*\|\s*\*{0,2}([A-Z_]+)\*{0,2}\s*\|/i);
   if (!match) return null;
   const raw = match[1].toUpperCase();
-  return resolveAlias(raw, type) || null;
+  // Return UNKNOWN for type-invalid values to prevent heuristic fallback.
+  return resolveAlias(raw, type) || 'UNKNOWN';
 }
 
 /**
@@ -378,7 +371,7 @@ function extractIssueTitles(sectionContent) {
       if (
         title &&
         title.length > 2 &&
-        !SPURIOUS_TITLE_RE.test(title) &&
+        !SPURIOUS_TITLE_RE.test(normalizedTitle) &&
         !FIELD_LABEL_RE.test(normalizedTitle) &&
         !titles.includes(title)
       ) {

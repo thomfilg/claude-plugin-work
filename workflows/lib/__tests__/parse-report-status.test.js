@@ -76,6 +76,20 @@ describe('parseReportStatus — Status: line format', () => {
     assert.equal(result.status, 'UNKNOWN', 'unrecognized Status line must block heuristic fallback');
   });
 
+  it('stops at first Status line even when later Status lines are valid', () => {
+    // Status: COMPLETE (invalid for tests) followed by Status: APPROVED
+    // The first Status: line is authoritative — don't scan further.
+    const content = 'Status: COMPLETE\n\nStatus: APPROVED';
+    const result = parseReportStatus(content, 'tests');
+    assert.equal(result.status, 'UNKNOWN', 'first invalid Status line must be authoritative');
+  });
+
+  it('returns UNKNOWN for summary table with type-invalid status', () => {
+    const content = '| Status | COMPLETE |\n\n✅ PASS';
+    const result = parseReportStatus(content, 'tests');
+    assert.equal(result.status, 'UNKNOWN', 'type-invalid table status must block heuristic fallback');
+  });
+
   it('recognizes Status: NEEDS_WORK', () => {
     const result = parseReportStatus('Status: NEEDS_WORK', 'codeReview');
     assert.deepStrictEqual(result, { status: 'NEEDS_WORK', icon: '⚠️' });
@@ -749,6 +763,18 @@ describe('isCodeReviewResolved — spurious title filtering (GH-232)', () => {
       true,
       'CRITICAL keyword alone must not be treated as issue title'
     );
+    assert.deepStrictEqual(result.unaddressed, []);
+  });
+
+  it('does not treat "**CRITICAL:**" (with trailing colon) as an issue title', () => {
+    const report = [
+      '### 🔴 CRITICAL ISSUES',
+      '**CRITICAL:** this describes the section, not an issue.',
+      '### 🟢 NICE-TO-HAVE',
+    ].join('\n');
+
+    const result = isCodeReviewResolved(report, '');
+    assert.equal(result.resolved, true, 'CRITICAL: with colon must be filtered by SPURIOUS_TITLE_RE');
     assert.deepStrictEqual(result.unaddressed, []);
   });
 
