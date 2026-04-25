@@ -231,4 +231,31 @@ describe('spec-verify.js', () => {
     const json = JSON.parse(result.stdout);
     assert.equal(json.checks[0].passed, true);
   });
+
+  it('REUSES detects multiline require() split across lines', () => {
+    writeFile('src/app.js', "const { useAuth } = require(\n  './hooks'\n);");
+    const specPath = writeSpec(['- REUSES src/app.js hooks']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 0);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, true);
+  });
+
+  it('REUSES ignores require() inside single-line comments', () => {
+    writeFile('src/app.js', "// const { useAuth } = require('./hooks');");
+    const specPath = writeSpec(['- REUSES src/app.js hooks']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 1);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, false);
+  });
+
+  it('REUSES ignores require() inside block comments', () => {
+    writeFile('src/app.js', "/* require('./hooks') */\nconst x = 1;");
+    const specPath = writeSpec(['- REUSES src/app.js hooks']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 1);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, false);
+  });
 });
