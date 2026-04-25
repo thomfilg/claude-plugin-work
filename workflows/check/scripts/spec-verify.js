@@ -392,9 +392,10 @@ function checkReuses(args, root) {
   );
   // Strip single-line (//) and block (/* */) comments before matching to avoid
   // false positives from commented-out import/require statements.
+  // Block comments preserve newlines to prevent line concatenation.
   const stripped = content
     .replace(/\/\/[^\n]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ''));
   const lines = stripped.split(/\r?\n/);
   if (lines.some((line) => importRegex.test(line))) {
     return { type: 'REUSES', args, passed: true };
