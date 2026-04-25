@@ -390,7 +390,8 @@ function checkReuses(args, root) {
   const importRegex = new RegExp(
     `(import\\s.*${escaped}|${escaped}.*require\\s*\\(|require\\s*\\(.*${escaped})`
   );
-  // Strip comments to avoid false positives from commented-out imports/requires.
+  // Strip single-line (//) and block (/* */) comments before matching to avoid
+  // false positives from commented-out import/require statements.
   const stripped = content
     .replace(/\/\/[^\n]*/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '');
