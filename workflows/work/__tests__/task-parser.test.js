@@ -391,7 +391,6 @@ describe('buildTaskPrompt', () => {
     const prompt = buildTaskPrompt(task, tmpDir, allTasks, taskState);
     // Task 4 has no entry in taskState → should be labeled pending, not throw
     assert.ok(prompt.includes('pending — do NOT implement yet'));
-    assert.ok(!prompt.throws);
   });
 
   it('labels a claimed (in-flight) task as in progress, not pending', () => {
