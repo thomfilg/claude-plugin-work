@@ -51,7 +51,11 @@ function _readClaimOwner(tasksDir, taskNum) {
     const lockPath = path.join(tasksDir, '.claims', `task-${taskNum}.lock`);
     const raw = fs.readFileSync(lockPath, 'utf8');
     const parsed = JSON.parse(raw);
-    return parsed?.ownerId ?? null;
+    const ownerId = parsed?.ownerId;
+    if (typeof ownerId === 'string' && /^PR[1-9]\d*$/.test(ownerId)) {
+      return ownerId;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -65,7 +69,7 @@ function _readClaimOwner(tasksDir, taskNum) {
  * @returns {string}
  */
 function _normalizeScope(line) {
-  return line.replace(/^[-*+]\s+/, '').trim();
+  return line.trim().replace(/^[-*+]\s+/, '').trim();
 }
 
 // ─── Task Parsing ────────────────────────────────────────────────────────────
@@ -156,7 +160,7 @@ function buildTaskPrompt(task, tasksDir, allTasks, taskState) {
 
   // ── Task Context: show scope of all tasks to prevent agent drift ─────────
   if (allTasks && allTasks.length > 1) {
-    const persistedTasks = taskState?.tasks ?? [];
+    const persistedTasks = Array.isArray(taskState?.tasks) ? taskState.tasks : [];
     lines.push('### Task Context');
     lines.push(
       `This is Task ${task.num} of ${allTasks.length}. Scope boundaries are listed below to prevent drift:`

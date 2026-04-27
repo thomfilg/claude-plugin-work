@@ -372,6 +372,26 @@ describe('buildTaskPrompt', () => {
     assert.ok(!prompt.includes('+ src/c.ts'));
   });
 
+  it('normalizes indented list markers in suggestedScope reserved files', () => {
+    const task = { num: 1, title: 'Current', rawContent: 'content', suggestedScope: '' };
+    const allTasks = [
+      task,
+      {
+        num: 2,
+        title: 'Indented markers',
+        suggestedScope: '  - src/a.ts\n   * src/b.ts\n\t+ src/c.ts',
+      },
+    ];
+    const prompt = buildTaskPrompt(task, tmpDir, allTasks);
+    // Leading whitespace + marker must be stripped
+    assert.ok(prompt.includes('src/a.ts'));
+    assert.ok(prompt.includes('src/b.ts'));
+    assert.ok(prompt.includes('src/c.ts'));
+    assert.ok(!prompt.includes('- src/a.ts'));
+    assert.ok(!prompt.includes('* src/b.ts'));
+    assert.ok(!prompt.includes('+ src/c.ts'));
+  });
+
   it('treats task with no matching taskState entry as pending', () => {
     // task.num is 3 but taskState only has task_1 and task_2 — no task_3 entry
     const task = { num: 3, title: 'Current', rawContent: 'content', suggestedScope: '' };
@@ -390,6 +410,17 @@ describe('buildTaskPrompt', () => {
     };
     const prompt = buildTaskPrompt(task, tmpDir, allTasks, taskState);
     // Task 4 has no entry in taskState → should be labeled pending, not throw
+    assert.ok(prompt.includes('pending — do NOT implement yet'));
+  });
+
+  it('falls back gracefully when taskState.tasks is not an array', () => {
+    const task = { num: 1, title: 'Current', rawContent: 'content', suggestedScope: '' };
+    const allTasks = [task, { num: 2, title: 'Other', suggestedScope: '' }];
+    // Corrupted taskState — tasks is a non-array value
+    const taskState = { tasks: 'corrupted' };
+    // Must not throw; non-current tasks should fall back to pending
+    assert.doesNotThrow(() => buildTaskPrompt(task, tmpDir, allTasks, taskState));
+    const prompt = buildTaskPrompt(task, tmpDir, allTasks, taskState);
     assert.ok(prompt.includes('pending — do NOT implement yet'));
   });
 

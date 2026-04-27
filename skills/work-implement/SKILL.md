@@ -99,8 +99,8 @@ Branch: <branch-name>
    - Look for `${TASKS_BASE}/${TICKET_ID}/tasks.md`
    - If it exists and your prompt specifies a task (e.g., "Task 3 — ..."), use it as the implementation roadmap
    - Implement ONLY the deliverables listed in the specified task
-   - Read the `### Task Context` section in your prompt — it shows all tasks with completed/pending status and their reserved files
-   - Do NOT implement changes belonging to tasks marked as `pending` — they will be handled separately
+   - Read the `### Task Context` section in your prompt — it shows all tasks with completed/pending/in-progress status and their reserved files
+   - Do NOT implement changes belonging to tasks marked as `pending` or `in progress by {owner}` — they will be handled separately
    - Do NOT re-implement changes already covered by tasks marked as `✓ completed`
    - Reference the `_Requirements:_` annotations to ensure nothing is missed
    - After completing each deliverable, verify its `Test:` acceptance criterion is met
