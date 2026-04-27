@@ -40,6 +40,34 @@ function readFile(p) {
   }
 }
 
+/**
+ * Return the claim owner ID from a task's lock file, or null if unclaimed.
+ * @param {string} tasksDir
+ * @param {number} taskNum
+ * @returns {string|null}
+ */
+function _readClaimOwner(tasksDir, taskNum) {
+  try {
+    const lockPath = path.join(tasksDir, '.claims', `task-${taskNum}.lock`);
+    const raw = fs.readFileSync(lockPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed?.ownerId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Normalise a single suggestedScope line by stripping leading list markers
+ * (`- `, `* `, `+ `) so the reserved-files list is clean regardless of how
+ * tasks.md was formatted.
+ * @param {string} line
+ * @returns {string}
+ */
+function _normalizeScope(line) {
+  return line.replace(/^[-*+]\s+/, '').trim();
+}
+
 // ─── Task Parsing ────────────────────────────────────────────────────────────
 
 function parseTasks(tasksDir) {
@@ -143,15 +171,16 @@ function buildTaskPrompt(task, tasksDir, allTasks, taskState) {
       } else if (isCompleted) {
         lines.push(`- Task ${t.num} — ${t.title} [✓ completed — do NOT re-implement]`);
       } else {
-        lines.push(`- Task ${t.num} — ${t.title} [pending — do NOT implement yet]`);
+        const claimOwner = _readClaimOwner(tasksDir, t.num);
+        const label = claimOwner
+          ? `in progress by ${claimOwner} — do NOT duplicate work`
+          : 'pending — do NOT implement yet';
+        lines.push(`- Task ${t.num} — ${t.title} [${label}]`);
         if (t.suggestedScope) {
-          // Cap at 5 lines to keep the prompt concise — a long list is still
-          // listed in full inside the task's own section in tasks.md
           const scopeLines = t.suggestedScope
             .split('\n')
-            .map((l) => l.trim())
-            .filter(Boolean)
-            .slice(0, 5);
+            .map((l) => _normalizeScope(l))
+            .filter(Boolean);
           if (scopeLines.length > 0) {
             lines.push(`  Reserved files: ${scopeLines.join(', ')}`);
           }
