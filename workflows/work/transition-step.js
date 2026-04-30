@@ -186,8 +186,15 @@ function transitionStep(ticket, targetStep, deps) {
         step: currentStep,
         what: 'check re-triggered: new commits detected',
       });
-      // Redirect transition to check (backward)
+      // Redirect transition to check (backward) and re-validate the redirected edge
       targetStep = STEPS.check;
+      if (!workflowCanTransition(currentStep, targetStep)) {
+        return {
+          error: true,
+          message: `BLOCKED: cannot transition from ${currentStep} to ${targetStep}`,
+          allowed: STEP_TRANSITIONS[currentStep] || [],
+        };
+      }
       checkDriftDetected = true;
     }
   }
