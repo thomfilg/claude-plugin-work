@@ -15,6 +15,11 @@ const fs = require('fs');
 const path = require('path');
 const { taskSegment } = require(path.join(__dirname, '..', 'lib', 'allocate-output-folder'));
 
+const SHA_REGEX = /^[0-9a-f]{40}$/i;
+
+/** Steps that come after `check` — used by the check-drift gate (GH-299). */
+const POST_CHECK_STEPS = new Set(['pr', 'ready', 'follow_up', 'ci', 'cleanup', 'reports']);
+
 /**
  * @param {string} ticket
  * @param {string} targetStep
@@ -167,15 +172,12 @@ function transitionStep(ticket, targetStep, deps) {
   // GH-299: Check-drift gate — detect HEAD drift on forward transitions from post-check steps.
   // If new commits landed since check passed, redirect back to check.
   let checkDriftDetected = false;
-  const POST_CHECK_STEPS = [
-    STEPS.pr,
-    STEPS.ready,
-    STEPS.follow_up,
-    STEPS.ci,
-    STEPS.cleanup,
-    STEPS.reports,
-  ];
-  if (isForward && POST_CHECK_STEPS.includes(currentStep) && ws?.checkPassedSha) {
+  if (
+    isForward &&
+    POST_CHECK_STEPS.has(currentStep) &&
+    ws?.checkPassedSha &&
+    SHA_REGEX.test(ws.checkPassedSha)
+  ) {
     const headSha = getHeadSha();
     if (headSha != null && headSha !== ws.checkPassedSha) {
       ws.checkInterruptedStep = currentStep;
@@ -184,7 +186,6 @@ function transitionStep(ticket, targetStep, deps) {
         step: currentStep,
         what: 'check re-triggered: new commits detected',
       });
-      saveWorkState(safeTicket, ws);
       // Redirect transition to check (backward)
       targetStep = STEPS.check;
       checkDriftDetected = true;
