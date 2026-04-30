@@ -45,14 +45,14 @@ function resolveGitHead(cwd) {
  * Uses `git rev-parse HEAD` to retrieve the 40-char hex SHA.
  * Returns null on any failure (fail-open).
  *
+ * @param {string} [cwd] - Optional working directory (defaults to process.cwd())
  * @returns {string|null} 40-char hex SHA, or null on error
  */
-function getHeadSha() {
+function getHeadSha(cwd) {
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    const opts = { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] };
+    if (cwd) opts.cwd = cwd;
+    return execFileSync('git', ['rev-parse', 'HEAD'], opts).trim();
   } catch {
     return null;
   }
