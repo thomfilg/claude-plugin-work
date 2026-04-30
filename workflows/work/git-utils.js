@@ -52,7 +52,8 @@ function getHeadSha(cwd) {
   try {
     const opts = { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 };
     if (cwd) opts.cwd = cwd;
-    return execFileSync('git', ['rev-parse', 'HEAD'], opts).trim();
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], opts).trim();
+    return /^[0-9a-f]{40}$/i.test(sha) ? sha : null;
   } catch {
     return null;
   }

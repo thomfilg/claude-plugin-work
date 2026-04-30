@@ -149,21 +149,22 @@ function transitionStep(ticket, targetStep, deps) {
   ) {
     const headSha = getHeadSha();
     if (headSha != null && headSha !== ws.checkPassedSha) {
+      // Validate redirected edge before mutating state
+      if (!workflowCanTransition(currentStep, STEPS.check)) {
+        return {
+          error: true,
+          message: `BLOCKED: cannot transition from ${currentStep} to ${STEPS.check}`,
+          allowed: STEP_TRANSITIONS[currentStep] || [],
+        };
+      }
+      // Edge validated — now mutate state and redirect
       ws.checkInterruptedStep = currentStep;
       ws.checkPassedSha = null;
       appendAction(safeTicket, {
         step: currentStep,
         what: 'check re-triggered: new commits detected',
       });
-      // Redirect transition to check (backward) and re-validate the redirected edge
       targetStep = STEPS.check;
-      if (!workflowCanTransition(currentStep, targetStep)) {
-        return {
-          error: true,
-          message: `BLOCKED: cannot transition from ${currentStep} to ${targetStep}`,
-          allowed: STEP_TRANSITIONS[currentStep] || [],
-        };
-      }
       checkDriftDetected = true;
     }
   }
