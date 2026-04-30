@@ -50,7 +50,7 @@ function resolveGitHead(cwd) {
  */
 function getHeadSha(cwd) {
   try {
-    const opts = { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] };
+    const opts = { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 };
     if (cwd) opts.cwd = cwd;
     return execFileSync('git', ['rev-parse', 'HEAD'], opts).trim();
   } catch {

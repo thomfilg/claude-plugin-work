@@ -136,41 +136,10 @@ function transitionStep(ticket, targetStep, deps) {
     ws.checkInterruptedStep = null;
   }
 
-  // GH-260: Generic step-verify gate — run the step's verify() function before
-  // allowing forward transitions out of non-soft steps. This catches bypasses
-  // for follow_up, ci, and any other step with a verify() in workflow-definition.js.
-  // The TDD and check-to-PR gates above remain as explicit fast-path checks with
-  // better error messages; this gate acts as a universal catch-all.
-  if (isForward && !softSteps.has(currentStep) && !TDD_GATED_STEPS.includes(currentStep)) {
-    const entry = commandMap.find((c) => c.step === currentStep && typeof c.verify === 'function');
-    if (entry) {
-      let verified;
-      try {
-        verified = entry.verify(safeTicket);
-      } catch (err) {
-        const detail = err && typeof err.message === 'string' ? err.message : String(err);
-        return {
-          error: true,
-          message: `BLOCKED: ${currentStep} verify threw — cannot transition to ${targetStep}: ${detail}`,
-          gate: 'step-verify',
-          step: currentStep,
-          hint: `The ${currentStep} step verification encountered an error: ${detail}. Resolve the issue before transitioning.`,
-        };
-      }
-      if (!verified) {
-        return {
-          error: true,
-          message: `BLOCKED: ${currentStep} not verified — cannot transition to ${targetStep}`,
-          gate: 'step-verify',
-          step: currentStep,
-          hint: `The ${currentStep} step has not passed its verification check. Complete the step requirements before transitioning.`,
-        };
-      }
-    }
-  }
-
   // GH-299: Check-drift gate — detect HEAD drift on forward transitions from post-check steps.
   // If new commits landed since check passed, redirect back to check.
+  // Runs BEFORE step-verify so that drift detection fires even when the current step's
+  // verify() would fail (e.g., follow_up verify returns false but HEAD drifted).
   let checkDriftDetected = false;
   if (
     isForward &&
@@ -196,6 +165,45 @@ function transitionStep(ticket, targetStep, deps) {
         };
       }
       checkDriftDetected = true;
+    }
+  }
+
+  // GH-260: Generic step-verify gate — run the step's verify() function before
+  // allowing forward transitions out of non-soft steps. This catches bypasses
+  // for follow_up, ci, and any other step with a verify() in workflow-definition.js.
+  // The TDD and check-to-PR gates above remain as explicit fast-path checks with
+  // better error messages; this gate acts as a universal catch-all.
+  // Skipped when check-drift redirected targetStep (backward transition to check).
+  if (
+    isForward &&
+    !checkDriftDetected &&
+    !softSteps.has(currentStep) &&
+    !TDD_GATED_STEPS.includes(currentStep)
+  ) {
+    const entry = commandMap.find((c) => c.step === currentStep && typeof c.verify === 'function');
+    if (entry) {
+      let verified;
+      try {
+        verified = entry.verify(safeTicket);
+      } catch (err) {
+        const detail = err && typeof err.message === 'string' ? err.message : String(err);
+        return {
+          error: true,
+          message: `BLOCKED: ${currentStep} verify threw — cannot transition to ${targetStep}: ${detail}`,
+          gate: 'step-verify',
+          step: currentStep,
+          hint: `The ${currentStep} step verification encountered an error: ${detail}. Resolve the issue before transitioning.`,
+        };
+      }
+      if (!verified) {
+        return {
+          error: true,
+          message: `BLOCKED: ${currentStep} not verified — cannot transition to ${targetStep}`,
+          gate: 'step-verify',
+          step: currentStep,
+          hint: `The ${currentStep} step has not passed its verification check. Complete the step requirements before transitioning.`,
+        };
+      }
     }
   }
 
