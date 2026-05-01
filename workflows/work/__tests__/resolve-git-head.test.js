@@ -82,23 +82,34 @@ describe('resolveGitHead (GH-260 Issue 1)', () => {
 });
 
 describe('getHeadSha (GH-299 Task 1)', () => {
-  it('should return a 40-char hex string in a real git repo', () => {
-    const sha = getHeadSha();
-    assert.notEqual(sha, null, 'Should not be null in a git repo');
-    assert.match(sha, /^[0-9a-f]{40}$/, 'Should be a 40-char hex SHA');
+  const { execFileSync } = require('child_process');
+
+  it('should return a 40-char hex string in a self-contained temp git repo', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh299-git-'));
+    try {
+      // Create a self-contained git repo so test doesn't depend on outer checkout
+      execFileSync('git', ['init'], { cwd: tmpDir, stdio: 'ignore' });
+      execFileSync('git', ['-C', tmpDir, 'config', 'user.email', 'test@test.com'], {
+        stdio: 'ignore',
+      });
+      execFileSync('git', ['-C', tmpDir, 'config', 'user.name', 'Test'], { stdio: 'ignore' });
+      fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'test');
+      execFileSync('git', ['add', '.'], { cwd: tmpDir, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: tmpDir, stdio: 'ignore' });
+
+      const sha = getHeadSha(tmpDir);
+      assert.notEqual(sha, null, 'Should not be null in a git repo');
+      assert.match(sha, /^[0-9a-f]{40}$/, 'Should be a 40-char hex SHA');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('should return null when git fails (non-git directory)', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh299-'));
     try {
-      const origCwd = process.cwd();
-      process.chdir(tmpDir);
-      try {
-        const sha = getHeadSha();
-        assert.equal(sha, null, 'Should return null in a non-git directory');
-      } finally {
-        process.chdir(origCwd);
-      }
+      const sha = getHeadSha(tmpDir);
+      assert.equal(sha, null, 'Should return null in a non-git directory');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

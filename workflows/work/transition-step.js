@@ -17,8 +17,23 @@ const { taskSegment } = require(path.join(__dirname, '..', 'lib', 'allocate-outp
 
 const SHA_REGEX = /^[0-9a-f]{40}$/i;
 
-/** Steps that come after `check` — used by the check-drift gate (GH-299). */
-const POST_CHECK_STEPS = new Set(['pr', 'ready', 'follow_up', 'ci', 'cleanup', 'reports']);
+/**
+ * Derive the set of steps that come after `check` in the workflow.
+ * Computed from the step registry rather than hardcoded, so it stays
+ * in sync if steps are renamed or added (GH-299).
+ * @param {string[]} allSteps - ALL_STEPS from the step registry
+ * @param {object} STEPS - STEPS constants from the step registry
+ * @returns {Set<string>}
+ */
+let _postCheckSteps = null;
+function getPostCheckSteps(allSteps, STEPS) {
+  if (!_postCheckSteps) {
+    const checkIdx = allSteps.indexOf(STEPS.check);
+    // Steps after check, excluding 'complete' (terminal step)
+    _postCheckSteps = new Set(allSteps.slice(checkIdx + 1).filter((s) => s !== STEPS.complete));
+  }
+  return _postCheckSteps;
+}
 
 /**
  * @param {string} ticket
@@ -132,7 +147,7 @@ function transitionStep(ticket, targetStep, deps) {
 
   // GH-299: Record checkPassedSha on successful check → pr forward transition
   if (isCheckToPr && isForward) {
-    ws.checkPassedSha = getHeadSha();
+    ws.checkPassedSha = getHeadSha(process.cwd());
     ws.checkInterruptedStep = null;
   }
 
@@ -143,11 +158,11 @@ function transitionStep(ticket, targetStep, deps) {
   let checkDriftDetected = false;
   if (
     isForward &&
-    POST_CHECK_STEPS.has(currentStep) &&
+    getPostCheckSteps(ALL_STEPS, STEPS).has(currentStep) &&
     ws?.checkPassedSha &&
     SHA_REGEX.test(ws.checkPassedSha)
   ) {
-    const headSha = getHeadSha();
+    const headSha = getHeadSha(process.cwd());
     if (headSha != null && headSha !== ws.checkPassedSha) {
       // Validate redirected edge before mutating state
       if (!workflowCanTransition(currentStep, STEPS.check)) {

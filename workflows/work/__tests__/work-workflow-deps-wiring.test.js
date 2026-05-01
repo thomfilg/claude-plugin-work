@@ -47,9 +47,10 @@ describe('work.workflow.js dependency wiring', () => {
       }
 
       const fnBody = source.slice(fnBodyStart, fnBodyEnd + 1);
+      // Match getHeadSha as a property in the return object (not just a comment reference)
       assert.ok(
-        /\bgetHeadSha\b/.test(fnBody),
-        `buildTransitionDeps should include getHeadSha in its return object.\nFunction body: ${fnBody}`
+        /\bgetHeadSha[,\s}]/.test(fnBody),
+        `buildTransitionDeps should include getHeadSha as a property in its return object.\nFunction body: ${fnBody}`
       );
     });
   });
