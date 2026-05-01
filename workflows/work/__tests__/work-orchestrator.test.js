@@ -821,14 +821,12 @@ describe('work-orchestrator.js', () => {
       assert.ok(result.transitions['check'].includes('pr'));
     });
 
-    it('should NOT include pr → ci (no skip edges)', async () => {
+    it('should have exactly [ready, check] transitions for pr', async () => {
       const { result } = await runOrchestrator(['graph']);
-      assert.ok(!result.transitions['pr'].includes('ci'), 'pr should NOT skip to ci');
-      assert.ok(result.transitions['pr'].includes('ready'), 'pr should include ready');
-      // GH-299: pr can also retry back to check via RETRY_EDGES
-      assert.ok(
-        result.transitions['pr'].includes('check'),
-        'pr should include check (GH-299 retry edge)'
+      assert.deepEqual(
+        result.transitions['pr'].slice().sort(),
+        ['check', 'ready'],
+        'pr should transition to ready (forward) and check (GH-299 retry edge) only'
       );
     });
 
