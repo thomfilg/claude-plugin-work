@@ -9,6 +9,9 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+/** Validates a 40-char hex SHA. Shared across workflow modules. */
+const SHA_REGEX = /^[0-9a-f]{40}$/i;
+
 /**
  * Resolve the HEAD ref for a git repository or worktree.
  *
@@ -53,10 +56,10 @@ function getHeadSha(cwd) {
     const opts = { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 };
     if (cwd) opts.cwd = cwd;
     const sha = execFileSync('git', ['rev-parse', 'HEAD'], opts).trim();
-    return /^[0-9a-f]{40}$/i.test(sha) ? sha : null;
+    return SHA_REGEX.test(sha) ? sha : null;
   } catch {
     return null;
   }
 }
 
-module.exports = { resolveGitHead, getHeadSha };
+module.exports = { resolveGitHead, getHeadSha, SHA_REGEX };

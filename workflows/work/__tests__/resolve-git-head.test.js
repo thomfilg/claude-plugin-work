@@ -88,14 +88,13 @@ describe('getHeadSha (GH-299 Task 1)', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh299-git-'));
     try {
       // Create a self-contained git repo so test doesn't depend on outer checkout
-      execFileSync('git', ['init'], { cwd: tmpDir, stdio: 'ignore' });
-      execFileSync('git', ['-C', tmpDir, 'config', 'user.email', 'test@test.com'], {
-        stdio: 'ignore',
-      });
-      execFileSync('git', ['-C', tmpDir, 'config', 'user.name', 'Test'], { stdio: 'ignore' });
+      const gitOpts = { cwd: tmpDir, stdio: 'ignore', timeout: 5000 };
+      execFileSync('git', ['init'], gitOpts);
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], gitOpts);
+      execFileSync('git', ['config', 'user.name', 'Test'], gitOpts);
       fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'test');
-      execFileSync('git', ['add', '.'], { cwd: tmpDir, stdio: 'ignore' });
-      execFileSync('git', ['commit', '-m', 'init'], { cwd: tmpDir, stdio: 'ignore' });
+      execFileSync('git', ['add', '.'], gitOpts);
+      execFileSync('git', ['commit', '-m', 'init'], gitOpts);
 
       const sha = getHeadSha(tmpDir);
       assert.notEqual(sha, null, 'Should not be null in a git repo');

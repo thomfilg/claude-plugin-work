@@ -14,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { taskSegment } = require(path.join(__dirname, '..', 'lib', 'allocate-output-folder'));
-const { SHA_REGEX } = require(path.join(__dirname, 'task-review-gate'));
+const { SHA_REGEX } = require(path.join(__dirname, 'git-utils'));
 
 /**
  * Derive the set of steps that come after `check` in the workflow.
