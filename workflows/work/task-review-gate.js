@@ -165,4 +165,4 @@ function executeTaskReview(tasksDir, ticketId, deps) {
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-module.exports = { computeTaskDiff, executeTaskReview };
+module.exports = { computeTaskDiff, executeTaskReview, SHA_REGEX };
