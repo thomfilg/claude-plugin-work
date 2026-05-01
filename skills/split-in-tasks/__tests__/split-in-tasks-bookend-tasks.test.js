@@ -13,8 +13,11 @@ describe('split-in-tasks SKILL.md — bookend task enforcement (Rule 12)', () =>
     assert.ok(rule11Idx > -1, 'SKILL.md must contain Rule 11');
     assert.ok(rule12Idx > -1, 'SKILL.md must contain Rule 12');
     assert.ok(rule11Idx < rule12Idx, 'Rule 12 must appear after Rule 11');
-    assert.match(content.slice(rule12Idx), /first task/i, 'Rule 12 must reference "first task"');
-    assert.match(content.slice(rule12Idx), /last task/i, 'Rule 12 must reference "last task"');
+    const rule12Section = content.match(/\*\*Rule 12[\s\S]*?(?=\*\*(?:Rule|Anti-patterns))/);
+    assert.ok(rule12Section, 'Rule 12 section must exist');
+    const section = rule12Section[0];
+    assert.match(section, /first task/i, 'Rule 12 must reference "first task"');
+    assert.match(section, /last task/i, 'Rule 12 must reference "last task"');
   });
 
   it('Rule 12 requires first task to be type test with Gherkin reference', () => {
@@ -23,7 +26,7 @@ describe('split-in-tasks SKILL.md — bookend task enforcement (Rule 12)', () =>
     const section = rule12Section[0];
     assert.match(
       section,
-      /first task[\s\S]*?type.*test|type.*test[\s\S]*?first task/i,
+      /first task[\s\S]*?\btype\s+`test`|type\s+`test`[\s\S]*?first task/i,
       'Rule 12 must specify the first task is type "test"'
     );
     assert.match(
@@ -39,7 +42,7 @@ describe('split-in-tasks SKILL.md — bookend task enforcement (Rule 12)', () =>
     const section = rule12Section[0];
     assert.match(
       section,
-      /last task[\s\S]*?checkpoint|checkpoint[\s\S]*?last task/i,
+      /last task[\s\S]*?type[\s\S]*?[`"]?checkpoint[`"]?|type[\s\S]*?[`"]?checkpoint[`"]?[\s\S]*?last task/i,
       'Rule 12 must specify the last task is type "checkpoint"'
     );
     assert.match(
@@ -81,9 +84,10 @@ describe('split-in-tasks SKILL.md — bookend task enforcement (Rule 12)', () =>
     );
     assert.match(
       section,
-      /Rule 12|bookend/i,
-      'Step 5 bookend check must reference Rule 12 or the bookend requirement'
+      /first task[\s\S]*?last task|last task[\s\S]*?first task/i,
+      'Step 5 must explicitly include checks for both first-task and last-task constraints'
     );
+    assert.match(section, /Rule 12/i, 'Step 5 first/last task check must reference Rule 12');
   });
 
   it('Rule 11 specifies second-to-last instead of last', () => {
