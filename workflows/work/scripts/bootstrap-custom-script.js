@@ -67,6 +67,8 @@ function executeCustomScript(worktreePath, ticketId) {
 
   const timeoutMs = getTimeoutMs();
 
+  console.log(`Running: ${resolved} ${worktreePath} ${ticketId}`);
+
   try {
     const result = spawnSync(resolved, [worktreePath, ticketId], {
       encoding: 'utf-8',
