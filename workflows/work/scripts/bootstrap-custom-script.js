@@ -13,7 +13,7 @@
  *   node bootstrap-custom-script.js <worktree-path> <ticket-id>
  */
 
-const { execFileSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const getConfig = require('../../lib/get-config');
@@ -68,26 +68,35 @@ function executeCustomScript(worktreePath, ticketId) {
   const timeoutMs = getTimeoutMs();
 
   try {
-    const stdout = execFileSync(resolved, [worktreePath, ticketId], {
+    const result = spawnSync(resolved, [worktreePath, ticketId], {
       encoding: 'utf-8',
       timeout: timeoutMs,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    if (stdout) console.log(stdout);
-    return { ok: true, stdout };
-  } catch (err) {
-    const isTimeout = err.killed || err.code === 'ETIMEDOUT' || err.signal === 'SIGTERM';
+    if (result.stdout) console.log(result.stdout);
+    if (result.stderr) console.log(`STDERR: ${result.stderr}`);
 
-    if (isTimeout) {
-      console.log(`WARNING: bootstrap script timed out after ${timeoutMs / 1000}s, skipping`);
-    } else {
-      const stderr = err.stderr || '';
-      console.log(
-        `WARNING: bootstrap script failed (exit ${err.status}): ${stderr.trim() || err.message}`
-      );
+    if (result.error || result.status !== 0) {
+      const isTimeout =
+        result.signal === 'SIGTERM' ||
+        (result.error && (result.error.code === 'ETIMEDOUT' || result.error.killed));
+
+      if (isTimeout) {
+        console.log(`WARNING: bootstrap script timed out after ${timeoutMs / 1000}s, skipping`);
+      } else {
+        const stderr = result.stderr || '';
+        const msg = stderr.trim() || (result.error ? result.error.message : 'unknown error');
+        console.log(`WARNING: bootstrap script failed (exit ${result.status}): ${msg}`);
+      }
+
+      logHookError(__filename, result.error || new Error(`exit ${result.status}`));
+      return { ok: false, error: result.error ? result.error.message : `exit ${result.status}` };
     }
 
+    return { ok: true, stdout: result.stdout, stderr: result.stderr };
+  } catch (err) {
+    console.log(`WARNING: bootstrap script execution error: ${err.message}`);
     logHookError(__filename, err);
     return { ok: false, error: err.message };
   }
@@ -106,4 +115,5 @@ if (require.main === module) {
   }
 
   executeCustomScript(worktreePath, ticketId);
+  process.exit(0);
 }

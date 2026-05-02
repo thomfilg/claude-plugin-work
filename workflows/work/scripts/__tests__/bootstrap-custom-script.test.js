@@ -126,4 +126,58 @@ describe('bootstrap-custom-script.js', () => {
       assert.match(output, /RELATIVE_OK/);
     });
   });
+
+  describe('stderr capture on success', () => {
+    it('captures stderr output even when script exits 0', () => {
+      const scriptPath = makeScript(
+        'stderr-ok.sh',
+        '#!/bin/sh\necho "stdout-line"\necho "stderr-warning" >&2\nexit 0\n'
+      );
+      const output = run(['/tmp/worktree', 'TICKET-1'], {
+        BOOTSTRAP_SCRIPT: scriptPath,
+      });
+      assert.match(output, /stderr-warning/);
+    });
+  });
+
+  describe('getTimeoutMs edge cases', () => {
+    it('falls back to 120s for timeout value 0', () => {
+      const scriptPath = makeScript('echo-ok.sh', '#!/bin/sh\necho "OK"\n');
+      const result = runResult(['/tmp/worktree', 'TICKET-1'], {
+        BOOTSTRAP_SCRIPT: scriptPath,
+        BOOTSTRAP_SCRIPT_TIMEOUT: '0',
+      });
+      assert.equal(result.status, 0);
+    });
+
+    it('falls back to 120s for negative timeout value', () => {
+      const scriptPath = makeScript('echo-ok2.sh', '#!/bin/sh\necho "OK"\n');
+      const result = runResult(['/tmp/worktree', 'TICKET-1'], {
+        BOOTSTRAP_SCRIPT: scriptPath,
+        BOOTSTRAP_SCRIPT_TIMEOUT: '-5',
+      });
+      assert.equal(result.status, 0);
+    });
+
+    it('falls back to 120s for non-numeric timeout value', () => {
+      const scriptPath = makeScript('echo-ok3.sh', '#!/bin/sh\necho "OK"\n');
+      const result = runResult(['/tmp/worktree', 'TICKET-1'], {
+        BOOTSTRAP_SCRIPT: scriptPath,
+        BOOTSTRAP_SCRIPT_TIMEOUT: 'abc',
+      });
+      assert.equal(result.status, 0);
+    });
+  });
+
+  describe('non-executable file (EACCES)', () => {
+    it('exits 0 and warns when file exists but is not executable', () => {
+      const scriptPath = path.join(tmpDir, 'no-exec.sh');
+      fs.writeFileSync(scriptPath, '#!/bin/sh\necho "should not run"\n', { mode: 0o644 });
+      const result = runResult(['/tmp/worktree', 'TICKET-1'], {
+        BOOTSTRAP_SCRIPT: scriptPath,
+      });
+      assert.equal(result.status, 0);
+      assert.match(result.stdout, /warning/i);
+    });
+  });
 });
