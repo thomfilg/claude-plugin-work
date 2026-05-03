@@ -49,6 +49,7 @@ Extract:
 $REPO_NAME="look your current directory, then look if there are worktrees (folders in a directory above with same prefix). Eg: worktrees/my-repository-ticket-A, worktrees/my-repository-ticket-B, worktrees/my-repository << this is the main directory"
 
 cd ~/${my_repository} # eg: cd ~/worktrees/my-repository
+# BASE_BRANCH must be an unprefixed branch name (e.g., "main", "dev") — not "origin/main"
 git fetch origin "${BASE_BRANCH:-main}"
 
 # Generate branch name from ticket
@@ -58,7 +59,7 @@ BRANCH_NAME="${TICKET_ID}-${SHORT_DESC}"
 WORKTREE_PATH="../{$REPO_NAME}-${TICKET_ID}"
 
 # Create worktree
-git worktree add "$WORKTREE_PATH" -b "$BRANCH_NAME" origin/${BASE_BRANCH:-main}
+git worktree add "$WORKTREE_PATH" -b "$BRANCH_NAME" "origin/${BASE_BRANCH:-main}"
 ```
 
 ### Step 5: Run custom bootstrap script (if configured)
