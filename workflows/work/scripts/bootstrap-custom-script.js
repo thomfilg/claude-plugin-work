@@ -75,6 +75,7 @@ function executeCustomScript(worktreePath, ticketId) {
       encoding: 'utf-8',
       timeout: timeoutMs,
       killSignal: 'SIGKILL',
+      maxBuffer: 50 * 1024 * 1024, // 50 MB — bootstrap scripts may run verbose installs
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
