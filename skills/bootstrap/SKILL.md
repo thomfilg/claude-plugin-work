@@ -68,7 +68,7 @@ cd "$WORKTREE_PATH"
 node "${CLAUDE_PLUGIN_ROOT}/workflows/work/scripts/bootstrap-custom-script.js" "$WORKTREE_PATH" "$TICKET_ID"
 ```
 
-Runs the script specified by `BOOTSTRAP_SCRIPT` env var. The script receives the worktree path and ticket ID as arguments. If `BOOTSTRAP_SCRIPT` is not set, this step is skipped silently. Script failures are non-fatal (warning only).
+Runs the script specified by `BOOTSTRAP_SCRIPT` env var. The script receives the worktree path and ticket ID as arguments. If `BOOTSTRAP_SCRIPT` is not set, this step is skipped (logs "skipping" and exits 0). Script failures are non-fatal (warning only).
 
 Configure in your `.envrc`:
 ```bash

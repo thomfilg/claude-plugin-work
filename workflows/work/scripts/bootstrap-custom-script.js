@@ -74,6 +74,7 @@ function executeCustomScript(worktreePath, ticketId) {
     const result = spawnSync(resolved, [worktreePath, ticketId], {
       encoding: 'utf-8',
       timeout: timeoutMs,
+      killSignal: 'SIGKILL',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -82,15 +83,15 @@ function executeCustomScript(worktreePath, ticketId) {
 
     if (result.error || result.status !== 0) {
       const isTimeout =
-        result.signal === 'SIGTERM' ||
-        (result.error && (result.error.code === 'ETIMEDOUT' || result.error.killed));
+        result.signal === 'SIGKILL' || (result.error && result.error.code === 'ETIMEDOUT');
 
       if (isTimeout) {
         console.log(`WARNING: bootstrap script timed out after ${timeoutMs / 1000}s, skipping`);
       } else {
         const stderr = result.stderr || '';
         const msg = stderr.trim() || (result.error ? result.error.message : 'unknown error');
-        console.log(`WARNING: bootstrap script failed (exit ${result.status}): ${msg}`);
+        const exitInfo = result.status != null ? `exit ${result.status}` : 'spawn failed';
+        console.log(`WARNING: bootstrap script failed (${exitInfo}): ${msg}`);
       }
 
       logHookError(__filename, result.error || new Error(`exit ${result.status}`));
