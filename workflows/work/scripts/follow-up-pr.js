@@ -100,31 +100,7 @@ Options:
 
 // ── gh CLI Wrapper ──────────────────────────────────────────────────────────
 
-function ghExec(ghArgs, { json = true, allowNonZero = false } = {}) {
-  const args = typeof ghArgs === 'string' ? ghArgs.split(/\s+/) : ghArgs;
-  try {
-    const result = execFileSync('gh', args, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 30000,
-    });
-    return json ? JSON.parse(result) : result.trim();
-  } catch (err) {
-    if (allowNonZero && err.stdout) {
-      const stdout = err.stdout.toString().trim();
-      if (json && stdout) {
-        try {
-          return JSON.parse(stdout);
-        } catch {
-          /* fall through */
-        }
-      }
-      if (!json && stdout) return stdout;
-    }
-    const stderr = err.stderr ? err.stderr.toString().trim() : '';
-    throw new Error(`gh command failed: gh ${args.join(' ')}\n${stderr}`);
-  }
-}
+const { ghExec } = require('./gh-exec.js');
 
 // ── PR Info ─────────────────────────────────────────────────────────────────
 

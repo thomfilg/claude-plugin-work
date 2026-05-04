@@ -867,3 +867,10 @@ describe('formatReport', () => {
     assert.match(output, /FAILING/, 'should show FAILING status');
   });
 });
+
+describe('ghExec shared module', () => {
+  it('is importable from shared gh-exec module', () => {
+    const { ghExec } = require('../gh-exec.js');
+    assert.equal(typeof ghExec, 'function');
+  });
+});
