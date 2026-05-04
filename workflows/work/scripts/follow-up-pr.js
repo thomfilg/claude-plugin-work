@@ -1192,6 +1192,22 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
     return { action: 'exit-fail', finalStatus: 'reviews-blocking' };
   }
 
+  // BLOCKED by unresolved conversations — non-blocking comments that still block merge via branch protection
+  if (
+    isBlockedByApproval &&
+    ciAcceptable &&
+    !noReviews &&
+    reviews.nonBlocking &&
+    reviews.nonBlocking.length > 0
+  ) {
+    const count = reviews.nonBlocking.length;
+    return {
+      action: 'exit-fail',
+      finalStatus: 'unresolved-conversations',
+      message: `Merge blocked by ${count} unresolved comment thread(s) — address them to unblock merge.`,
+    };
+  }
+
   // Success — CI acceptable (passing or no-checks), reviews clear, merge ready
   if (ciAcceptable && reviewsClear && (isMergeReady || isBlockedByApproval)) {
     return {

@@ -602,6 +602,35 @@ describe('decideNextAction', () => {
     assert.equal(result.action, 'exit-success');
     assert.equal(result.finalStatus, 'blocked-by-approval');
   });
+
+  // ── BLOCKED + unresolved conversations (non-blocking comments) ──────────
+  it('returns exit-fail with unresolved-conversations when BLOCKED, CI passing, non-blocking comments exist', () => {
+    const nonBlockingComments = {
+      hasBlocking: false,
+      pendingBots: [],
+      nonBlocking: [{ author: 'copilot', body: '[low] suggestion' }],
+    };
+    const result = decideNextAction('passing', blockedByApproval, nonBlockingComments, false);
+    assert.equal(result.action, 'exit-fail');
+    assert.equal(result.finalStatus, 'unresolved-conversations');
+  });
+
+  it('returns exit-success when BLOCKED, CI passing, truly no comments at all', () => {
+    const result = decideNextAction('passing', blockedByApproval, noReviews, false);
+    assert.equal(result.action, 'exit-success');
+    assert.equal(result.finalStatus, 'blocked-by-approval');
+  });
+
+  it('includes unresolved thread count in message when BLOCKED by conversations', () => {
+    const twoComments = {
+      hasBlocking: false,
+      pendingBots: [],
+      nonBlocking: [{ author: 'a' }, { author: 'b' }],
+    };
+    const result = decideNextAction('passing', blockedByApproval, twoComments, false);
+    assert.ok(result.message);
+    assert.match(result.message, /2.*unresolved/i);
+  });
 });
 
 describe('getAdaptiveInterval', () => {
