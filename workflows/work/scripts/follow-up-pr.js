@@ -1023,12 +1023,18 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts, decision)
     lines.push('');
     lines.push(c.red('CONFLICTS: Merge conflicts detected — rebase required'));
   } else if (!isMergeReady) {
+    const isBlockedByApprovalStatus =
+      prInfo.mergeable === 'MERGEABLE' && prInfo.mergeStateStatus === 'BLOCKED';
     lines.push('');
-    lines.push(
-      c.yellow(
-        `MERGE STATUS: ${prInfo.mergeable || 'UNKNOWN'} (${prInfo.mergeStateStatus || 'UNKNOWN'}) — not yet mergeable`
-      )
-    );
+    if (isBlockedByApprovalStatus) {
+      lines.push(c.yellow('MERGE STATUS: BLOCKED (awaiting required approvals)'));
+    } else {
+      lines.push(
+        c.yellow(
+          `MERGE STATUS: ${prInfo.mergeable || 'UNKNOWN'} (${prInfo.mergeStateStatus || 'UNKNOWN'}) — not yet mergeable`
+        )
+      );
+    }
   }
 
   // Reviews

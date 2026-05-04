@@ -586,6 +586,22 @@ describe('decideNextAction', () => {
     assert.ok(result.message, 'should include a message');
     assert.match(result.message, /blocked.*approval/i);
   });
+
+  // checkCI returns 'passing' when only optional (non-required) checks fail.
+  // These tests verify that decideNextAction correctly exits success in that
+  // scenario, confirming the full checkCI → decideNextAction pipeline handles
+  // optional-only failures as non-blocking.
+  it('returns exit-success when ciStatus is passing (optional-only failures) and merge ready', () => {
+    const result = decideNextAction('passing', mergeReady, noReviews, false);
+    assert.equal(result.action, 'exit-success');
+    assert.equal(result.finalStatus, 'ready');
+  });
+
+  it('returns exit-success when ciStatus is passing (optional-only failures) and blocked-by-approval', () => {
+    const result = decideNextAction('passing', blockedByApproval, noReviews, false);
+    assert.equal(result.action, 'exit-success');
+    assert.equal(result.finalStatus, 'blocked-by-approval');
+  });
 });
 
 describe('getAdaptiveInterval', () => {
@@ -797,6 +813,24 @@ describe('formatReport', () => {
       output,
       /merge blocked by required approvals only/i,
       'should show blocked-by-approval message'
+    );
+  });
+
+  it('shows "awaiting required approvals" (not "not yet mergeable") when blocked by approval', () => {
+    const ci = makeCi({ status: 'passing' });
+    const blockedPrInfo = {
+      ...basePrInfo,
+      mergeStateStatus: 'BLOCKED',
+    };
+    const output = formatReport(blockedPrInfo, ci, baseReviews, 1, 10, baseOpts);
+    assert.match(
+      output,
+      /BLOCKED \(awaiting required approvals\)/,
+      'should show blocked awaiting approvals message'
+    );
+    assert.ok(
+      !output.includes('not yet mergeable'),
+      'should not show generic "not yet mergeable" for blocked-by-approval'
     );
   });
 
