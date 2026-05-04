@@ -29,35 +29,39 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '.
 
 /**
  * Patterns that match intercepted pnpm commands.
- * Each regex matches the command as a standalone invocation or after && / ; / |
- * but NOT as a substring of another word (e.g. "echo linting" should not match).
+ * Each regex is tested against individual segments after splitting on separators
+ * (&&, ;, |, \n), so they only need to match from the start of a segment.
  */
 const BLOCKED_PATTERNS = [
   // pnpm lint / pnpm run lint
-  /(?:^|&&|;|\|)\s*pnpm\s+(?:run\s+)?lint(?:\s|$)/,
+  /^\s*pnpm\s+(?:run\s+)?lint(?:\s|$)/,
   // pnpm test / pnpm run test
-  /(?:^|&&|;|\|)\s*pnpm\s+(?:run\s+)?test(?:\s|$)/,
+  /^\s*pnpm\s+(?:run\s+)?test(?:\s|$)/,
   // pnpm typecheck / pnpm run typecheck
-  /(?:^|&&|;|\|)\s*pnpm\s+(?:run\s+)?typecheck(?:\s|$)/,
+  /^\s*pnpm\s+(?:run\s+)?typecheck(?:\s|$)/,
   // pnpm dev:lint
-  /(?:^|&&|;|\|)\s*pnpm\s+(?:run\s+)?dev:lint(?:\s|$)/,
+  /^\s*pnpm\s+(?:run\s+)?dev:lint(?:\s|$)/,
   // pnpm dev:typecheck
-  /(?:^|&&|;|\|)\s*pnpm\s+(?:run\s+)?dev:typecheck(?:\s|$)/,
+  /^\s*pnpm\s+(?:run\s+)?dev:typecheck(?:\s|$)/,
   // pnpm dev:test
-  /(?:^|&&|;|\|)\s*pnpm\s+(?:run\s+)?dev:test(?:\s|$)/,
+  /^\s*pnpm\s+(?:run\s+)?dev:test(?:\s|$)/,
 ];
 
-/** Commands that are explicitly allowed (not blocked even if they match patterns) */
+/**
+ * Defense-in-depth: commands explicitly allowed even if they partially match
+ * a blocked pattern. This safety override ensures future BLOCKED_PATTERNS
+ * additions cannot accidentally block legitimate commands.
+ */
 const ALLOWED_PATTERNS = [
   // pnpm dev:check is the correct command
-  /(?:^|&&|;|\|)\s*pnpm\s+(?:run\s+)?dev:check(?:\s|$)/,
+  /^\s*pnpm\s+(?:run\s+)?dev:check(?:\s|$)/,
 ];
 
 function isBlocked(command) {
   // Split on chain operators and check each segment independently.
   // A command is blocked if ANY segment matches a blocked pattern
   // and that same segment is not covered by the allow-list.
-  const segments = command.split(/\s*(?:&&|;|\|)\s*/);
+  const segments = command.split(/\s*(?:&&|;|\||\n)\s*/);
   for (const segment of segments) {
     const segBlocked = BLOCKED_PATTERNS.some((p) => p.test(segment));
     if (!segBlocked) continue;

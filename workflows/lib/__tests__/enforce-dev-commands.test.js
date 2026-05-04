@@ -125,6 +125,13 @@ describe('enforce-dev-commands — BLOCK intercepted commands', () => {
     assert.strictEqual(code, 2);
   });
 
+  it('should BLOCK when intercepted command follows a newline separator', async () => {
+    const { code } = await runHook({
+      tool_input: { command: 'pnpm dev:check\npnpm lint' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
   it('should BLOCK when intercepted command has trailing arguments', async () => {
     const { code, stderr } = await runHook({
       tool_input: { command: 'pnpm test --watch' },
