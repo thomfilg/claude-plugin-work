@@ -923,7 +923,7 @@ function formatNonBlockingItems(items, lines) {
   }
 }
 
-function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
+function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts, decision) {
   const lines = [];
 
   lines.push(c.bold('=== Follow-up PR Monitor ==='));
@@ -998,6 +998,17 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
     }
   } else {
     lines.push(c.dim('CI: No checks found'));
+  }
+
+  // Optional (non-required) CI failures — shown as warnings, not errors
+  if (ci.optionalFailed && ci.optionalFailed.length > 0 && ci.hasRequiredInfo) {
+    lines.push('');
+    lines.push(c.yellow('\u26A0 Optional CI failures (non-blocking):'));
+    for (const ck of ci.optionalFailed) {
+      lines.push(
+        `  ${c.yellow('\u26A0')} ${ck.name} ${c.dim(`[${ck.category || 'unknown'}]`)} — failed (optional)`
+      );
+    }
   }
 
   // Merge status
@@ -1083,6 +1094,8 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
   // Action hint — order matches fail-fast exit priority
   lines.push('');
   const ciAcceptable = ci.status === 'passing' || ci.status === 'no-checks';
+  const isBlockedByApproval =
+    prInfo.mergeable === 'MERGEABLE' && prInfo.mergeStateStatus === 'BLOCKED' && !isConflicting;
   if (ci.status === 'failing') {
     lines.push(`→ Fix the failure, push, then re-run: ${c.dim('node scripts/follow-up-pr.js')}`);
   } else if (isConflicting) {
@@ -1104,7 +1117,7 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
     ciAcceptable &&
     (!reviews.hasBlocking || opts.noReviews) &&
     reviews.pendingBots.length === 0 &&
-    isMergeReady
+    (isMergeReady || isBlockedByApproval)
   ) {
     // Non-blocking comments report (before the banner)
     if (reviews.nonBlocking && reviews.nonBlocking.length > 0) {
@@ -1128,6 +1141,9 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts) {
     lines.push(
       c.green(`CI: ${ciLabel} | Reviews: ${opts.noReviews ? 'SKIPPED' : 'CLEAR'} | Conflicts: NONE`)
     );
+    if (decision && decision.finalStatus === 'blocked-by-approval') {
+      lines.push(c.yellow('PR ready \u2014 merge blocked by required approvals only'));
+    }
     lines.push(c.green(`PR #${prInfo.number} is ready for review/merge!`));
   } else if (ci.status === 'pending') {
     lines.push(`→ Waiting ${opts.interval}s for checks... (attempt ${attempt}/${maxAttempts})`);
@@ -1737,6 +1753,7 @@ module.exports = {
   initState,
   getCodeContext,
   buildAccountabilityEntries,
+  formatReport,
   partitionByRequired,
   // Gate-check exports: used by workflow-definition.js verify()
   isPRGateReady,

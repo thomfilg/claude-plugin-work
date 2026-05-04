@@ -10,6 +10,7 @@ const {
   getAdaptiveInterval,
   getCodeContext,
   partitionByRequired,
+  formatReport,
 } = require('../follow-up-pr.js');
 
 describe('classifyCommentPriority', () => {
@@ -735,5 +736,100 @@ describe('getCodeContext', () => {
     assert.ok(result.includes('>>>'), 'should have marker');
     // Should not have negative line numbers
     assert.ok(!result.includes('-1:'), 'no negative line numbers');
+  });
+});
+
+// ── formatReport ──────────────────────────────────────────────────────────────
+describe('formatReport', () => {
+  // Minimal fixtures for formatReport parameters
+  const basePrInfo = {
+    number: 42,
+    title: 'Test PR',
+    branch: 'feature-branch',
+    mergeable: 'MERGEABLE',
+    mergeStateStatus: 'CLEAN',
+  };
+  const baseReviews = { hasBlocking: false, pendingBots: [], nonBlocking: [], blocking: [] };
+  const baseOpts = { noReviews: false, interval: 30 };
+
+  function makeCi(overrides) {
+    return {
+      status: 'passing',
+      total: 2,
+      passed: [{ name: 'build' }, { name: 'test' }],
+      running: [],
+      failed: [],
+      neutral: [],
+      cancelled: [],
+      optionalFailed: [],
+      requiredFailed: [],
+      hasRequiredInfo: false,
+      ...overrides,
+    };
+  }
+
+  it('displays optional CI failures as warnings (not errors) when optionalFailed has items', () => {
+    const ci = makeCi({
+      status: 'failing',
+      failed: [{ name: 'lint', category: 'lint' }],
+      optionalFailed: [{ name: 'lint', category: 'lint' }],
+      requiredFailed: [],
+      hasRequiredInfo: true,
+    });
+    const output = formatReport(basePrInfo, ci, baseReviews, 1, 10, baseOpts);
+    assert.match(
+      output,
+      /Optional CI failures \(non-blocking\)/,
+      'should show optional failures warning section'
+    );
+    assert.match(output, /lint/, 'should list the optional failure name');
+  });
+
+  it('includes blocked-by-approval message when decision has that status', () => {
+    const ci = makeCi({ status: 'passing' });
+    const blockedPrInfo = {
+      ...basePrInfo,
+      mergeStateStatus: 'BLOCKED',
+    };
+    const decision = { action: 'exit-success', finalStatus: 'blocked-by-approval' };
+    const output = formatReport(blockedPrInfo, ci, baseReviews, 1, 10, baseOpts, decision);
+    assert.match(
+      output,
+      /merge blocked by required approvals only/i,
+      'should show blocked-by-approval message'
+    );
+  });
+
+  it('does not show optional failures section when optionalFailed is empty', () => {
+    const ci = makeCi({ status: 'passing', optionalFailed: [] });
+    const output = formatReport(basePrInfo, ci, baseReviews, 1, 10, baseOpts);
+    assert.ok(
+      !output.includes('Optional CI failures'),
+      'should not show optional failures section'
+    );
+  });
+
+  it('does not show optional failures section when optionalFailed is undefined', () => {
+    const ci = makeCi({ status: 'passing' });
+    delete ci.optionalFailed;
+    const output = formatReport(basePrInfo, ci, baseReviews, 1, 10, baseOpts);
+    assert.ok(
+      !output.includes('Optional CI failures'),
+      'should not show optional failures section'
+    );
+  });
+
+  it('backward compat: still shows failed checks normally when no optionalFailed info', () => {
+    const ci = makeCi({
+      status: 'failing',
+      failed: [{ name: 'build', category: 'build' }],
+      hasRequiredInfo: false,
+    });
+    delete ci.optionalFailed;
+    delete ci.requiredFailed;
+    const output = formatReport(basePrInfo, ci, baseReviews, 1, 10, baseOpts);
+    // Should still show the failure with the standard format
+    assert.match(output, /build/, 'should display failed check name');
+    assert.match(output, /FAILING/, 'should show FAILING status');
   });
 });
