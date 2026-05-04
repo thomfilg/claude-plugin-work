@@ -815,7 +815,7 @@ describe('formatReport', () => {
 
   it('displays optional CI failures as warnings (not errors) when optionalFailed has items', () => {
     const ci = makeCi({
-      status: 'failing',
+      status: 'passing',
       failed: [{ name: 'lint', category: 'lint' }],
       optionalFailed: [{ name: 'lint', category: 'lint' }],
       requiredFailed: [],
@@ -961,7 +961,7 @@ describe('formatReport — review output clarity (GH-324)', () => {
     );
   });
 
-  it('shows "Merge BLOCKED by N unresolved comment threads" when BLOCKED + unresolved comments', () => {
+  it('shows "Merge BLOCKED by N unresolved review comments" when BLOCKED + unresolved comments', () => {
     const ci = makeCi({ status: 'passing' });
     const blockedPrInfo = {
       ...basePrInfo,
@@ -979,7 +979,7 @@ describe('formatReport — review output clarity (GH-324)', () => {
     const output = formatReport(blockedPrInfo, ci, reviews, 1, 10, baseOpts);
     assert.match(
       output,
-      /Merge BLOCKED by 2 unresolved comment/,
+      /Merge BLOCKED by 2 unresolved review comment/,
       'should link BLOCKED merge status to unresolved comments count'
     );
   });

@@ -977,7 +977,13 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts, decision)
   }
 
   // Optional (non-required) CI failures — shown as warnings, not errors
-  if (ci.optionalFailed && ci.optionalFailed.length > 0 && ci.hasRequiredInfo) {
+  // Only show when CI is not already failing (avoids duplicating checks shown in CI FAILING section)
+  if (
+    ci.optionalFailed &&
+    ci.optionalFailed.length > 0 &&
+    ci.hasRequiredInfo &&
+    ci.status !== 'failing'
+  ) {
     lines.push('');
     lines.push(c.yellow('\u26A0 Optional CI failures (non-blocking):'));
     for (const ck of ci.optionalFailed) {
@@ -1002,13 +1008,11 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts, decision)
     const isBlockedByApprovalStatus =
       prInfo.mergeable === 'MERGEABLE' && prInfo.mergeStateStatus === 'BLOCKED';
     lines.push('');
-    const unresolvedCount =
-      (reviews.nonBlocking ? reviews.nonBlocking.length : 0) +
-      (reviews.blocking ? reviews.blocking.length : 0);
+    const unresolvedCount = reviews.nonBlocking ? reviews.nonBlocking.length : 0;
     if (isBlockedByApprovalStatus && unresolvedCount > 0) {
       lines.push(
         c.yellow(
-          `MERGE STATUS: Merge BLOCKED by ${unresolvedCount} unresolved comment thread${unresolvedCount !== 1 ? 's' : ''}`
+          `MERGE STATUS: Merge BLOCKED by ${unresolvedCount} unresolved review comment${unresolvedCount !== 1 ? 's' : ''}`
         )
       );
     } else if (isBlockedByApprovalStatus) {
@@ -1108,7 +1112,8 @@ function formatReport(prInfo, ci, reviews, attempt, maxAttempts, opts, decision)
     ciAcceptable &&
     (!reviews.hasBlocking || opts.noReviews) &&
     reviews.pendingBots.length === 0 &&
-    (isMergeReady || isBlockedByApproval)
+    (isMergeReady ||
+      (isBlockedByApproval && !(reviews.nonBlocking && reviews.nonBlocking.length > 0)))
   ) {
     // Non-blocking comments report (before the banner)
     if (reviews.nonBlocking && reviews.nonBlocking.length > 0) {
@@ -1193,10 +1198,12 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
   }
 
   // BLOCKED by unresolved conversations — non-blocking comments that still block merge via branch protection
+  // Wait for bot reviews to finish first (consistent with blocking-review guard above)
   if (
     isBlockedByApproval &&
     ciAcceptable &&
     !noReviews &&
+    reviews.pendingBots.length === 0 &&
     reviews.nonBlocking &&
     reviews.nonBlocking.length > 0
   ) {
@@ -1204,7 +1211,7 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
     return {
       action: 'exit-fail',
       finalStatus: 'unresolved-conversations',
-      message: `Merge blocked by ${count} unresolved comment thread(s) — address them to unblock merge.`,
+      message: `Merge blocked by ${count} unresolved review comment(s) — analyse each comment, address those that make sense. Do NOT blindly solve comments that conflict with user/ticket intent or request large out-of-scope refactors (minor improvements are ok). Skip with reason when appropriate, e.g. Skipped "<title>" — conflicts with user intent: <reason>, or Skipped "<title>" — out of scope: <reason>.`,
     };
   }
 
