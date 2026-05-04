@@ -171,8 +171,7 @@ describe('work-implement SKILL.md — orchestrator completion (GH-231)', () => {
     });
   });
 
-  // Scenario 5 is an @e2e scenario (runtime orchestrator behavior) — not testable as a file-content check
-  describe('Scenario 6: Notes section orchestrator-mode bullet', () => {
+  describe('Scenario 5: Notes section orchestrator-mode bullet', () => {
     it('the Notes section has an orchestrator-mode bullet', () => {
       const section = getNotesSection();
       assert.ok(section, 'Notes section must exist');
