@@ -35,7 +35,8 @@ function getValidStatusValues(reportType) {
  */
 function validateCheckReportStatus(content, reportType) {
   try {
-    if (!content || typeof content !== 'string') return { valid: true }; // fail-open
+    if (content === null || content === undefined || typeof content !== 'string') return { valid: true }; // fail-open for null/undefined/non-string
+    // Empty string is treated as missing Status (not fail-open) — check-gate blocks empty reports
 
     const match = content.match(STATUS_LINE_RE);
     if (!match) {
