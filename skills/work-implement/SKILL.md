@@ -262,12 +262,6 @@ Fix any issues before completing.
    (where `<N>` is the subtask index from the init-subtask output)
 3. Report completion briefly and return control to the parent workflow
 
-<!-- GH-231: The orchestrator-mode section is deliberately terse. The /work orchestrator
-     handles all subsequent steps (commit, check, PR) automatically after Skill() returns.
-     Outputting a structured block here caused agents to halt and display it to the user
-     instead of returning control. Keep this section free of fenced code blocks or signal
-     formats that could be mistaken for a stopping point. -->
-
 **When called from `/work` orchestrator (orchestrator plan exists with subsequent steps):**
 
 Still update `$HOME/worktrees/tasks/${TICKET_ID}/implement.md` with results (same as normal mode).
