@@ -83,14 +83,10 @@ describe('work-implement SKILL.md — orchestrator completion (GH-231)', () => {
     it('the orchestrator section does NOT contain a fenced code block with a signal format', () => {
       const section = getOrchestratorSection();
       assert.ok(section, 'orchestrator section must exist');
-      const fencedBlocks = section.match(/```[\s\S]*?```/g) || [];
-      for (const block of fencedBlocks) {
-        assert.doesNotMatch(
-          block,
-          /IMPLEMENT_COMPLETE|Agent used:|Changes:|Files modified:|Quality:/,
-          'Orchestrator section must NOT contain a fenced code block with structured signal fields'
-        );
-      }
+      assert.ok(
+        !section.includes('```'),
+        'Orchestrator section must NOT contain any fenced code blocks (triple backticks)'
+      );
     });
   });
 
