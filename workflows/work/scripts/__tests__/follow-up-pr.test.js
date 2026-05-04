@@ -438,6 +438,7 @@ describe('decideNextAction', () => {
   const notReady = { mergeable: 'UNKNOWN', mergeStateStatus: 'BEHIND' };
   const noReviews = { hasBlocking: false, pendingBots: [], nonBlocking: [] };
   const blockingReviews = { hasBlocking: true, pendingBots: [], blocking: [{ author: 'user' }] };
+  const blockedByApproval = { mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED' };
   const pendingBots = { hasBlocking: false, pendingBots: ['copilot-pull-request-reviewer'] };
 
   it('returns exit-fail with ci-failing when CI fails', () => {
@@ -527,6 +528,61 @@ describe('decideNextAction', () => {
     const result = decideNextAction('passing', notReady, noReviews, false);
     assert.equal(result.action, 'poll');
     assert.match(result.waitReason, /merge status: BEHIND/);
+  });
+
+  // ── BLOCKED merge status tests ──────────────────────────────────────────────
+  it('returns exit-success with blocked-by-approval when BLOCKED, CI passing, reviews clear', () => {
+    const result = decideNextAction('passing', blockedByApproval, noReviews, false);
+    assert.equal(result.action, 'exit-success');
+    assert.equal(result.finalStatus, 'blocked-by-approval');
+  });
+
+  it('returns exit-fail with ci-failing when BLOCKED and CI fails', () => {
+    const result = decideNextAction('failing', blockedByApproval, noReviews, false);
+    assert.equal(result.action, 'exit-fail');
+    assert.equal(result.finalStatus, 'ci-failing');
+  });
+
+  it('returns exit-fail with conflicting when BLOCKED but has conflicts', () => {
+    const blockedConflicting = { mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' };
+    const result = decideNextAction('passing', blockedConflicting, noReviews, false);
+    assert.equal(result.action, 'exit-fail');
+    assert.equal(result.finalStatus, 'conflicting');
+  });
+
+  it('returns poll when BLOCKED and CI is pending', () => {
+    const result = decideNextAction('pending', blockedByApproval, noReviews, false);
+    assert.equal(result.action, 'poll');
+  });
+
+  it('returns exit-success with blocked-by-approval when BLOCKED, no-checks CI, reviews clear', () => {
+    const result = decideNextAction('no-checks', blockedByApproval, noReviews, false);
+    assert.equal(result.action, 'exit-success');
+    assert.equal(result.finalStatus, 'blocked-by-approval');
+  });
+
+  it('returns exit-fail with reviews-blocking when BLOCKED and reviews are blocking', () => {
+    const result = decideNextAction('passing', blockedByApproval, blockingReviews, false);
+    assert.equal(result.action, 'exit-fail');
+    assert.equal(result.finalStatus, 'reviews-blocking');
+  });
+
+  it('returns exit-success when BLOCKED, CI passing, noReviews is true', () => {
+    const result = decideNextAction('passing', blockedByApproval, blockingReviews, true);
+    assert.equal(result.action, 'exit-success');
+    assert.equal(result.finalStatus, 'blocked-by-approval');
+  });
+
+  it('returns exit-fail with ci-cancelled when BLOCKED and CI is cancelled', () => {
+    const result = decideNextAction('cancelled', blockedByApproval, noReviews, false);
+    assert.equal(result.action, 'exit-fail');
+    assert.equal(result.finalStatus, 'ci-cancelled');
+  });
+
+  it('includes human-readable message when exiting success due to blocked-by-approval', () => {
+    const result = decideNextAction('passing', blockedByApproval, noReviews, false);
+    assert.ok(result.message, 'should include a message');
+    assert.match(result.message, /blocked.*approval/i);
   });
 });
 
