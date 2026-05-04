@@ -182,6 +182,20 @@ describe('enforce-dev-commands — BLOCK intercepted commands', () => {
     assert.strictEqual(code, 2);
   });
 
+  it('should BLOCK "pnpm run --filter pkg lint" (flags after run)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: 'pnpm run --filter pkg lint' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
+  it('should BLOCK "pnpm run -r test" (short flag after run)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: 'pnpm run -r test' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
   it('should include correct script path in stderr message', async () => {
     const { stderr } = await runHook({
       tool_input: { command: 'pnpm lint' },

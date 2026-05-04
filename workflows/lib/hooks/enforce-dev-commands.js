@@ -43,18 +43,20 @@ const ENV_PREFIX = '(?:\\w+=\\S+\\s+)*(?:env\\s+(?:\\w+=\\S+\\s+)*)?';
 const PNPM_FLAGS = '(?:(?:-[-\\w]+(?:[=\\s]\\S+)?)\\s+)*';
 
 const BLOCKED_PATTERNS = [
-  // pnpm lint / pnpm run lint (with optional env prefixes and pnpm flags)
-  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+)?lint(?:\\s|$)`),
+  // pnpm lint / pnpm run lint (with optional env prefixes and pnpm flags before and after run)
+  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+${PNPM_FLAGS})?lint(?:\\s|$)`),
   // pnpm test / pnpm run test
-  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+)?test(?:\\s|$)`),
+  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+${PNPM_FLAGS})?test(?:\\s|$)`),
   // pnpm typecheck / pnpm run typecheck
-  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+)?typecheck(?:\\s|$)`),
+  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+${PNPM_FLAGS})?typecheck(?:\\s|$)`),
   // pnpm dev:lint
-  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+)?dev:lint(?:\\s|$)`),
+  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+${PNPM_FLAGS})?dev:lint(?:\\s|$)`),
   // pnpm dev:typecheck
-  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+)?dev:typecheck(?:\\s|$)`),
+  new RegExp(
+    `^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+${PNPM_FLAGS})?dev:typecheck(?:\\s|$)`
+  ),
   // pnpm dev:test
-  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+)?dev:test(?:\\s|$)`),
+  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+${PNPM_FLAGS})?dev:test(?:\\s|$)`),
 ];
 
 /**
@@ -64,7 +66,7 @@ const BLOCKED_PATTERNS = [
  */
 const ALLOWED_PATTERNS = [
   // pnpm dev:check is the correct command (with optional env prefixes and pnpm flags)
-  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+)?dev:check(?:\\s|$)`),
+  new RegExp(`^\\s*${ENV_PREFIX}pnpm\\s+${PNPM_FLAGS}(?:run\\s+${PNPM_FLAGS})?dev:check(?:\\s|$)`),
 ];
 
 function isBlocked(command) {
