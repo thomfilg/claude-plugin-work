@@ -1103,6 +1103,8 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
       prInfo.mergeStateStatus === 'CLEAN' ||
       prInfo.mergeStateStatus === 'HAS_HOOKS' ||
       prInfo.mergeStateStatus === 'UNSTABLE');
+  const isBlockedByApproval =
+    prInfo.mergeable === 'MERGEABLE' && prInfo.mergeStateStatus === 'BLOCKED' && !isConflicting;
   const ciAcceptable = ciStatus === 'passing' || ciStatus === 'no-checks';
   const ciFinished = ciAcceptable || ciStatus === 'cancelled';
   const reviewsClear = noReviews || (!reviews.hasBlocking && reviews.pendingBots.length === 0);
@@ -1128,8 +1130,14 @@ function decideNextAction(ciStatus, prInfo, reviews, noReviews) {
   }
 
   // Success — CI acceptable (passing or no-checks), reviews clear, merge ready
-  if (ciAcceptable && reviewsClear && isMergeReady) {
-    return { action: 'exit-success', finalStatus: 'ready' };
+  if (ciAcceptable && reviewsClear && (isMergeReady || isBlockedByApproval)) {
+    return {
+      action: 'exit-success',
+      finalStatus: isBlockedByApproval ? 'blocked-by-approval' : 'ready',
+      message: isBlockedByApproval
+        ? 'PR ready — merge blocked by required approvals only'
+        : undefined,
+    };
   }
 
   // Still polling — build list of reasons (tested in follow-up-pr.test.js)
