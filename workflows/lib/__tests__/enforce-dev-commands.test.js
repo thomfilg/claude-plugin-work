@@ -210,6 +210,27 @@ describe('enforce-dev-commands — BLOCK intercepted commands', () => {
     assert.strictEqual(code, 2);
   });
 
+  it('should BLOCK "command pnpm test" (command builtin)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: 'command pnpm test' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
+  it('should BLOCK "time pnpm lint" (time wrapper)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: 'time pnpm lint' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
+  it('should BLOCK "/usr/bin/env pnpm test" (env path)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: '/usr/bin/env pnpm test' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
   it('should BLOCK "cd /project & pnpm lint" (background operator)', async () => {
     const { code } = await runHook({
       tool_input: { command: 'cd /project & pnpm lint' },

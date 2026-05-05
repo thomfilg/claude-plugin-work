@@ -75,11 +75,13 @@ function isBlocked(command) {
   // and that same segment is not covered by the allow-list.
   const segments = command.split(/\s*(?:&&|&|;|\||\n)\s*/);
   for (const seg of segments) {
-    // Strip leading shell syntax: subshell parens, quotes, bash -c wrappers
+    // Strip leading shell syntax: subshell parens, quotes, shell wrappers
     const segment = seg
       .replace(/^\s*\(+\s*/, '') // leading ( or ((
-      .replace(/^\s*(?:bash|sh)\s+(?:-\w+\s+)*["']?/, '') // bash -lc "..."
+      .replace(/^\s*(?:bash|sh|command|time|exec|nice|nohup)\s+(?:-\w+\s+)*["']?/, '') // shell builtins/wrappers
+      .replace(/^\s*(?:\/usr\/bin\/)?env\s+(?:\w+=\S+\s+)*/, '') // env with vars
       .replace(/^["']+\s*/, '') // leading quotes
+      .replace(/\$\(([^)]+)\)/, '$1') // command substitution $(...)
       .replace(/["')\s]+$/, ''); // trailing quotes/parens/whitespace
     const segBlocked = BLOCKED_PATTERNS.some((p) => p.test(segment));
     if (!segBlocked) continue;
