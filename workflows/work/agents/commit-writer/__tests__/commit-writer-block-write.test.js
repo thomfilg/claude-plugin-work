@@ -514,6 +514,24 @@ describe('commit-writer-block-write — tag mutation exit 2', () => {
     assert.strictEqual(code, 2);
     assert.match(stderr, /COMMIT-WRITER GUARD/);
   });
+
+  it('blocks git tag -l -d v1.0.0 (mutation after list flag)', async () => {
+    const { code, stderr } = await runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'git tag -l -d v1.0.0' },
+    });
+    assert.strictEqual(code, 2);
+    assert.match(stderr, /COMMIT-WRITER GUARD/);
+  });
+
+  it('blocks git tag --list --delete v1.0.0 (mutation after list flag)', async () => {
+    const { code, stderr } = await runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'git tag --list --delete v1.0.0' },
+    });
+    assert.strictEqual(code, 2);
+    assert.match(stderr, /COMMIT-WRITER GUARD/);
+  });
 });
 
 // ---------------------------------------------------------------------------
