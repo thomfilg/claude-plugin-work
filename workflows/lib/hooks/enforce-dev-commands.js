@@ -70,11 +70,17 @@ const ALLOWED_PATTERNS = [
 ];
 
 function isBlocked(command) {
-  // Split on chain operators and check each segment independently.
+  // Split on chain/background operators and check each segment independently.
   // A command is blocked if ANY segment matches a blocked pattern
   // and that same segment is not covered by the allow-list.
-  const segments = command.split(/\s*(?:&&|;|\||\n)\s*/);
-  for (const segment of segments) {
+  const segments = command.split(/\s*(?:&&|&|;|\||\n)\s*/);
+  for (const seg of segments) {
+    // Strip leading shell syntax: subshell parens, quotes, bash -c wrappers
+    const segment = seg
+      .replace(/^\s*\(+\s*/, '') // leading ( or ((
+      .replace(/^\s*(?:bash|sh)\s+(?:-\w+\s+)*["']?/, '') // bash -lc "..."
+      .replace(/^["']+\s*/, '') // leading quotes
+      .replace(/["')\s]+$/, ''); // trailing quotes/parens/whitespace
     const segBlocked = BLOCKED_PATTERNS.some((p) => p.test(segment));
     if (!segBlocked) continue;
     const segAllowed = ALLOWED_PATTERNS.some((p) => p.test(segment));

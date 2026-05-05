@@ -196,6 +196,27 @@ describe('enforce-dev-commands — BLOCK intercepted commands', () => {
     assert.strictEqual(code, 2);
   });
 
+  it('should BLOCK "(pnpm test)" (subshell wrapper)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: '(pnpm test)' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
+  it('should BLOCK "bash -lc \"pnpm lint\"" (nested shell)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: 'bash -lc "pnpm lint"' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
+  it('should BLOCK "cd /project & pnpm lint" (background operator)', async () => {
+    const { code } = await runHook({
+      tool_input: { command: 'cd /project & pnpm lint' },
+    });
+    assert.strictEqual(code, 2);
+  });
+
   it('should include correct script path in stderr message', async () => {
     const { stderr } = await runHook({
       tool_input: { command: 'pnpm lint' },
