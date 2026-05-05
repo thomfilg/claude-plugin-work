@@ -194,8 +194,10 @@ function checkSegment(segment) {
       // Allow: bare "git tag", "git tag -l [pattern]", "git tag --list [pattern]"
       // Block: any positional tag name (creation), or mutation flags (-a, -d, -s, --delete, -m, etc.)
       const tagArgs = s.replace(/^git\s+tag\s*/, '').trim();
-      // Block mutation flags anywhere in args (even after -l)
-      if (/(-a|-d|-s|-f|-m|--delete|--annotate|--sign|--force|--message)\b/.test(tagArgs)) {
+      // Block mutation flags in unquoted portions of args (even after -l)
+      // Strip quoted strings before checking so patterns like "v1.0-d" don't false-positive
+      const unquotedTagArgs = tagArgs.replace(/"[^"]*"|'[^']*'/g, '""');
+      if (/(-a|-d|-s|-f|-m|--delete|--annotate|--sign|--force|--message)\b/.test(unquotedTagArgs)) {
         block(`'git tag' mutation flags are not allowed. Blocked: ${s.slice(0, 100)}`);
         return;
       }

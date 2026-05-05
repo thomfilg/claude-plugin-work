@@ -578,4 +578,12 @@ describe('commit-writer-block-write — tag listing exit 0', () => {
     });
     assert.strictEqual(code, 0);
   });
+
+  it('allows git tag -l "v1.0-d" (pattern containing flag-like substring)', async () => {
+    const { code } = await runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'git tag -l "v1.0-d"' },
+    });
+    assert.strictEqual(code, 0);
+  });
 });
