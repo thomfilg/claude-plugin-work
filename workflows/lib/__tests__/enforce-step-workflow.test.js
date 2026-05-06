@@ -4522,5 +4522,24 @@ describe('enforce-step-workflow', () => {
       assert.equal(code, 2, 'finish targeting wrong ticket should be blocked');
       assert.ok(stderr.includes('BLOCKED'), `expected BLOCKED in stderr, got: ${stderr}`);
     });
+
+    // ─── R10: Untrusted path does not get bypass ────────────────────────────
+
+    it('does not trigger bypass for session-guard.js from untrusted path (R10)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      // /tmp/session-guard.js is not in TRUSTED_SCRIPT_DIRS — the bypass must not fire.
+      // Rule 3b skips untrusted paths (Vector 3 handles those). Hook exits 0.
+      const { code } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: {
+            command: `node /tmp/session-guard.js finish ${TEST_TICKET}`,
+          },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 0, 'untrusted path not caught by Rule 3b (handled by Vector 3)');
+    });
   });
 });
