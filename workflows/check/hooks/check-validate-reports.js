@@ -116,9 +116,12 @@ function validateQAReport(filePath, appName) {
   // Check if marked as failed using only the FIRST Status: line (not full content).
   // Reports may contain "Previous Run" sections with stale statuses — scanning
   // the entire content would false-positive a current APPROVED run as failed.
+  // Fallback: if no Status: line exists (legacy reports), check for ❌ FAIL/NEEDS_WORK markers.
   const statusLineMatch = content.match(/^Status:\s*(\S+)/m);
   const firstStatus = statusLineMatch ? statusLineMatch[1] : '';
-  const failed = firstStatus === 'FAIL' || firstStatus === 'NEEDS_WORK';
+  const failed = statusLineMatch
+    ? firstStatus === 'FAIL' || firstStatus === 'NEEDS_WORK'
+    : content.includes('❌ FAIL') || content.includes('❌ NEEDS_WORK');
 
   return {
     exists: true,
