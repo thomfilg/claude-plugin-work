@@ -122,7 +122,9 @@ const writer = createReportWriter({
     const timestamp = new Date().toISOString();
 
     // Header with changes hash (required for cache validation)
-    // Status line for downstream gate compatibility (check-generate-summary.js)
+    // Map QA statuses to canonical gate statuses:
+    //   PASS → APPROVED
+    //   FAIL, INFRASTRUCTURE_FAILURE, ACCESS_FAILED, BLOCKED → NEEDS_WORK
     const gateStatus = input.status === 'PASS' ? 'APPROVED' : 'NEEDS_WORK';
     lines.push(`**Changes Hash:** ${input.changesHash}`);
     lines.push(`Status: ${gateStatus}`);
