@@ -174,10 +174,7 @@ function validateTaskDescriptions(content) {
 
         // Qualification check (R8): if the pattern is qualifiable and the
         // line has enough detail after the trigger phrase, skip it.
-        if (
-          entry.qualifiable &&
-          isQualified(line, new RegExp(entry.pattern.source, entry.pattern.flags))
-        ) {
+        if (entry.qualifiable && isQualified(line, entry.pattern)) {
           continue;
         }
 

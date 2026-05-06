@@ -380,3 +380,30 @@ describe('getBlockedPatterns', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// SKILL.md consolidation
+// ---------------------------------------------------------------------------
+
+describe('SKILL.md consolidation', () => {
+  it('references task-description-quality as canonical source', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const skillPath = path.resolve(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      'skills',
+      'split-in-tasks',
+      'SKILL.md'
+    );
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.ok(
+      content.includes('task-description-quality'),
+      'SKILL.md should reference task-description-quality policy'
+    );
+  });
+});
