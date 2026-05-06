@@ -96,13 +96,14 @@ function generateSummary() {
         overallQAStatus = { status: AppAccessStatus.ACCESS_FAILED, icon: '🔒' };
       }
     } else if (qaStatuses[app].status === 'NEEDS_WORK' && !hasInfraFailure) {
-      // GH-331: canonical NEEDS_WORK may mask ACCESS_FAILED — check content body
-      if (qaContent && qaContent.includes(AppAccessStatus.ACCESS_FAILED)) {
+      // GH-331: canonical NEEDS_WORK may mask infra statuses — check content body
+      if (qaContent && qaContent.includes('INFRASTRUCTURE_FAILURE')) {
+        hasInfraFailure = true;
+        overallQAStatus = { status: 'INFRASTRUCTURE_FAILURE', icon: '🛑' };
+      } else if (qaContent && qaContent.includes(AppAccessStatus.ACCESS_FAILED)) {
         hasAccessFailure = true;
         accessFailedApps.push(app);
-        if (!hasInfraFailure) {
-          overallQAStatus = { status: AppAccessStatus.ACCESS_FAILED, icon: '🔒' };
-        }
+        overallQAStatus = { status: AppAccessStatus.ACCESS_FAILED, icon: '🔒' };
       } else {
         testFailedApps.push(app);
         overallQAStatus = { status: 'NEEDS_WORK', icon: '❌' };
