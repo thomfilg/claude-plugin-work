@@ -291,11 +291,4 @@ function hasSkipOverride(markdown) {
   return { skip: false };
 }
 
-module.exports = {
-  parse,
-  parseRaw,
-  validate,
-  hasSkipOverride,
-  DEFAULT_MIN_SCENARIOS,
-  DEFAULT_REQUIRED_TAGS,
-};
+module.exports = { parse, parseRaw, validate, hasSkipOverride, DEFAULT_MIN_SCENARIOS, DEFAULT_REQUIRED_TAGS };

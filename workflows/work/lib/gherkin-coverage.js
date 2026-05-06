@@ -3,6 +3,7 @@
  *
  * Pure-logic coverage validation for Gherkin scenarios against tasks.md
  * content and test files. No I/O, no side effects, no external dependencies.
+ * Consumes scenarios from parse-gherkin.js (parseRaw/parse output).
  *
  * Public API:
  *   - validateTaskCoverage(scenarios, tasksContent): TaskCoverageResult
