@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * follow-up-pr.js — CI & Review Monitor
+ * follow-up-pr.js  — CI & Review Monitor
  *
  * Polls PR CI checks and reviews in a loop, reports failures fast,
  * and persists state across runs.
