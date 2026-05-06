@@ -140,6 +140,24 @@ describe('check-validate-reports.js — validateQAReport canonical status matchi
     assert.ok(result.reports.qa.myapp.failed, 'NEEDS_WORK should be detected as failed');
   });
 
+  it('does not false-positive when stale NEEDS_WORK appears in Previous Run section', () => {
+    const dir = setupDir('stale-previous-run');
+    fs.writeFileSync(path.join(dir, 'tests.check.md'), '**Changes Hash:** x\n✅ PASS');
+    fs.writeFileSync(path.join(dir, 'code-review.check.md'), '**Changes Hash:** x\nNo issues');
+    fs.writeFileSync(path.join(dir, 'completion.check.md'), '**Changes Hash:** x\nCOMPLETE');
+    fs.writeFileSync(path.join(dir, 'README.md'), 'readme');
+    // Current run is APPROVED, but Previous Run section has NEEDS_WORK
+    const report =
+      buildQAReport('APPROVED') + '\n---\n# Previous Run\n---\nStatus: NEEDS_WORK\n❌ NEEDS_WORK\n';
+    fs.writeFileSync(path.join(dir, 'qa-myapp.check.md'), report);
+
+    const { result } = runScript(dir, ['myapp']);
+    assert.ok(
+      !result.reports.qa.myapp.failed,
+      'stale NEEDS_WORK in Previous Run should not mark current run as failed'
+    );
+  });
+
   it('recognizes NEEDS_WORK in Status: line as a valid status (no missing-status issue)', () => {
     const dir = setupDir('canonical-needs-work-status');
     fs.writeFileSync(path.join(dir, 'tests.check.md'), '**Changes Hash:** x\n✅ PASS');
