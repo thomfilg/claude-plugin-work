@@ -96,8 +96,17 @@ function generateSummary() {
         overallQAStatus = { status: AppAccessStatus.ACCESS_FAILED, icon: '🔒' };
       }
     } else if (qaStatuses[app].status === 'NEEDS_WORK' && !hasInfraFailure) {
-      testFailedApps.push(app);
-      overallQAStatus = { status: 'NEEDS_WORK', icon: '❌' };
+      // GH-331: canonical NEEDS_WORK may mask ACCESS_FAILED — check content body
+      if (qaContent && qaContent.includes(AppAccessStatus.ACCESS_FAILED)) {
+        hasAccessFailure = true;
+        accessFailedApps.push(app);
+        if (!hasInfraFailure) {
+          overallQAStatus = { status: AppAccessStatus.ACCESS_FAILED, icon: '🔒' };
+        }
+      } else {
+        testFailedApps.push(app);
+        overallQAStatus = { status: 'NEEDS_WORK', icon: '❌' };
+      }
     } else if (qaStatuses[app].status === 'MISSING' && overallQAStatus.status === 'APPROVED') {
       overallQAStatus = { status: 'MISSING', icon: '❓' };
     }
