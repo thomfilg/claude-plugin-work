@@ -1187,11 +1187,10 @@ function getEffectivePendingBots(pendingBots, ci) {
 
   return pendingBots.filter((bot) => {
     const stripped = bot.replace(/\[bot\]$/, '').toLowerCase();
-    const match = ci.checks.find((check) => check.name.toLowerCase().includes(stripped));
-    if (match && match.bucket !== 'pending') {
-      return false;
-    }
-    return true;
+    const matches = ci.checks.filter((check) => check.name.toLowerCase().includes(stripped));
+    if (matches.length === 0) return true; // no matching CI check — keep as pending (fail-open)
+    // Only remove bot if ALL matching checks completed (none still pending)
+    return matches.some((check) => check.bucket === 'pending');
   });
 }
 

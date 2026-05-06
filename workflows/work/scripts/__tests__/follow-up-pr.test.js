@@ -1130,6 +1130,42 @@ describe('getEffectivePendingBots', () => {
     const result = getEffectivePendingBots(['cursor-ai[bot]'], ci);
     assert.deepStrictEqual(result, ['cursor-ai[bot]']);
   });
+
+  it('keeps bot when one matching check completed but another is still pending', () => {
+    // Scenario: cursor-ai-lint completed, but cursor-ai / review still running
+    // Bot should stay pending because not ALL matching checks are done
+    const ci = {
+      checks: [
+        { name: 'cursor-ai-lint', bucket: 'pass' },
+        { name: 'cursor-ai / review', bucket: 'pending' },
+      ],
+      running: 1,
+      passed: 1,
+      failed: 0,
+      neutral: 0,
+      cancelled: 0,
+      total: 2,
+    };
+    const result = getEffectivePendingBots(['cursor-ai[bot]'], ci);
+    assert.deepStrictEqual(result, ['cursor-ai[bot]']);
+  });
+
+  it('removes bot only when ALL matching checks completed', () => {
+    const ci = {
+      checks: [
+        { name: 'cursor-ai-lint', bucket: 'pass' },
+        { name: 'cursor-ai / review', bucket: 'pass' },
+      ],
+      running: 0,
+      passed: 2,
+      failed: 0,
+      neutral: 0,
+      cancelled: 0,
+      total: 2,
+    };
+    const result = getEffectivePendingBots(['cursor-ai[bot]'], ci);
+    assert.deepStrictEqual(result, []);
+  });
 });
 
 // ── decideNextAction with ci parameter (GH-349) ────────────────────────────
