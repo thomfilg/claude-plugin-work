@@ -34,6 +34,13 @@ const FILE_MODIFY_PATTERNS = [
   /[^|]>\s*[^&|]/,
 ];
 
+// Destructive git subcommand arguments
+const DESTRUCTIVE_GIT_PATTERNS = [
+  /^\s*git\s+branch\s+(-[dD]|--delete)\b/,
+  /^\s*git\s+push\s+.*--force\b/,
+  /^\s*git\s+push\s+.*--delete\b/,
+];
+
 // Commands that indicate attempting to fix code
 const FIX_ATTEMPT_PATTERNS = [
   /\bpnpm\s+(test|lint|typecheck|dev:lint|dev:typecheck|dev:test)\b/,
@@ -46,7 +53,7 @@ const FIX_ATTEMPT_PATTERNS = [
 ];
 
 // Allowed git subcommands — read-only + commit + push (no merge, rebase, reset, etc.)
-const ALLOWED_GIT_SUBCOMMANDS = /^\s*git\s+(diff|log|show|status|branch|rev-parse|ls-files|fetch|remote|describe|config|shortlog|name-rev|for-each-ref|cat-file|tag|commit|push)\b/;
+const ALLOWED_GIT_SUBCOMMANDS = /^\s*git\s+(diff|log|show|status|branch|rev-parse|ls-files|fetch|commit|push)\b/;
 
 // Explicitly allowed commands (quality gate + git/gh)
 const ALLOWED_COMMANDS = [
@@ -68,10 +75,20 @@ function isAllowedCommand(command) {
   if (/^\s*gh\b/.test(command)) {
     return true;
   }
+  // Allowed git subcommands with pipes (e.g., git log | head)
+  if (ALLOWED_GIT_SUBCOMMANDS.test(command)) {
+    return true;
+  }
   return false;
 }
 
 function isBlockedCommand(command) {
+  // Check for destructive git arguments
+  for (const pattern of DESTRUCTIVE_GIT_PATTERNS) {
+    if (pattern.test(command)) {
+      return `Destructive git command detected: ${pattern}`;
+    }
+  }
   // Check for file modification patterns
   for (const pattern of FILE_MODIFY_PATTERNS) {
     if (pattern.test(command)) {
