@@ -53,8 +53,8 @@ describe('cleanup-worktrees SKILL.md — fresh-data preamble (GH-90)', () => {
       assert.ok(preamble, 'preamble must exist');
       assert.match(
         preamble,
-        /discard|re-analy[sz]e|from scratch/i,
-        'Preamble must instruct to discard cached data or re-analyze from scratch'
+        /discard.*prior|re-analy[sz]e.*from scratch|from scratch.*re-analy[sz]e/i,
+        'Preamble must instruct to discard prior results or re-analyze from scratch'
       );
     });
 
@@ -93,8 +93,8 @@ describe('cleanup-worktrees SKILL.md — fresh-data preamble (GH-90)', () => {
       assert.ok(preamble, 'preamble must exist');
       assert.match(
         preamble,
-        /fresh analysis/i,
-        'Preamble must include a "Fresh analysis" instruction'
+        /fresh analysis.*discarded|fresh analysis.*started/i,
+        'Preamble must include a "Fresh analysis started" output instruction'
       );
     });
   });
