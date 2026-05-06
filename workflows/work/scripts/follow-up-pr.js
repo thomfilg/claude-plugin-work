@@ -1468,13 +1468,15 @@ async function main() {
     // Use explicit --interval if set, otherwise compute adaptive interval
     const interval = opts.interval !== null ? opts.interval : getAdaptiveInterval(attempt, ci);
 
+    // Decide next action using extracted pure function (before formatReport so decision is available)
+    const decision = decideNextAction(ci.status, prInfo, reviews, opts.noReviews, ci);
+
     // Print report
     console.log('');
-    console.log(formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval }));
+    console.log(
+      formatReport(prInfo, ci, reviews, attempt, maxAttempts, { ...opts, interval }, decision)
+    );
     console.log('');
-
-    // Decide next action using extracted pure function
-    const decision = decideNextAction(ci.status, prInfo, reviews, opts.noReviews, ci);
 
     // Compute changed paths once for both exit-fail and exit-success branches
     // changedPaths: null = error/no-data (record all), empty Set = no changes (record all).
