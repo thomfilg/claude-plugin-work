@@ -110,7 +110,7 @@ function validateQAReport(filePath, appName) {
     content.includes('APPROVED') ||
     content.includes('NEEDS_WORK');
   if (!hasStatus) {
-    issues.push('Missing PASS/FAIL status');
+    issues.push('Missing PASS/FAIL/APPROVED/NEEDS_WORK status');
   }
 
   // Check if marked as failed (canonical: NEEDS_WORK, legacy: FAIL)

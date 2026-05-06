@@ -458,9 +458,9 @@ The report `Status:` line uses a canonical vocabulary for downstream gate compat
 | Agent Input | Report Output |
 |-------------|---------------|
 | `PASS` | `APPROVED` |
-| `FAIL`, `BLOCKED` | `NEEDS_WORK` |
+| `FAIL`, `ACCESS_FAILED`, `BLOCKED` | `NEEDS_WORK` |
 
-You still use PASS, FAIL, and BLOCKED as your per-test verdicts. The `write-qa-report.js` script translates the overall result to APPROVED or NEEDS_WORK on the report `Status:` line.
+You still use PASS, FAIL, ACCESS_FAILED, and BLOCKED as your per-test verdicts. The `write-qa-report.js` script translates the overall result to APPROVED or NEEDS_WORK on the report `Status:` line.
 
 ## MANDATORY REPORT FILE - YOU MUST SAVE THIS
 
