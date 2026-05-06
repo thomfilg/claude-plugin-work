@@ -410,6 +410,18 @@ function checkReuses(args, root) {
       return { type: 'REUSES', args, passed: true };
     }
   }
+  // Check for local definitions: function SYMBOL(, const/let/var SYMBOL =
+  const defRegex = new RegExp(
+    `(?:function\\s+${escaped}(?![a-zA-Z0-9_$])\\s*\\(|(?:const|let|var)\\s+${escaped}(?![a-zA-Z0-9_$])\\s*[=,;)])`
+  );
+  if (
+    lines.some((line) => {
+      const m = defRegex.exec(line);
+      return m && !isInsideString(line, m.index);
+    })
+  ) {
+    return { type: 'REUSES', args, passed: true };
+  }
   return {
     type: 'REUSES',
     args,
