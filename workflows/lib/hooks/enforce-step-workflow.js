@@ -212,7 +212,7 @@ const SAFE_SUBCOMMANDS = {
     'task-get',
   ]),
   'workflow-state.js': new Set(['get', 'resume-info', 'add-error']), // init excluded: not idempotent (resets all steps). exemptPatterns (line ~327) aligned.
-  'session-guard.js': new Set(['init', 'status']),
+  'session-guard.js': new Set(['init', 'status']), // SAFE_SUBCOMMANDS session-guard (GH-338)
 };
 
 // Trusted directories where exempt scripts are allowed to live.

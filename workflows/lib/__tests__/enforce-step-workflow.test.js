@@ -4361,7 +4361,9 @@ describe('enforce-step-workflow', () => {
   describe('session-guard.js subcommand gating', () => {
     const SESSION_GUARD_PATH = path.join(__dirname, '..', 'hooks', 'session-guard.js');
 
-    // ─── R2/R4: Block finish/reveal/complete when NOT at complete step ──────
+    // ─── R2/R4: session-guard finish blocked when not at complete step ──────
+    // session-guard finish allowed at complete step (R3/R5)
+    // session-guard init allowed at any step (R1/R7)
 
     it('blocks session-guard.js finish when workflow is not at complete step (R2)', async () => {
       writeWorkState(makeStepStatus('implement', WORK_STEPS));
