@@ -196,8 +196,13 @@ async function main() {
       const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
       const tasksBase = getConfig.require('TASKS_BASE');
       if (cwd.startsWith(path.join(tasksBase, ticketId))) {
-        // GH-309: Only block if the relative path resolves to root-level tasks.md.
-        const resolvedTarget = path.join(cwd, 'tasks.md');
+        // GH-309: Extract the actual relative path referencing tasks.md from the command,
+        // then resolve it against cwd. This handles ../tasks.md, ./sub/tasks.md, etc.
+        const relRef =
+          cmd.match(/(?:>>?|>)\s*([^\s;|&]*tasks\.md)/)?.[1] ||
+          cmd.match(/\b([^\s;|&]*tasks\.md)\b/)?.[1] ||
+          'tasks.md';
+        const resolvedTarget = path.resolve(cwd, relRef);
         if (isRootLevelTasksMd(resolvedTarget, ticketId, tasksBase) === false) {
           process.exit(0);
         }
