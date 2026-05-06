@@ -2,6 +2,7 @@
  * Tests for protect-gherkin.js hook (PreToolUse)
  *
  * Blocks edits to gherkin.feature outside the `spec` step.
+ * GH-350 Task 6: Implementation hook tests.
  *
  * Run with: node --test workflows/work/hooks/__tests__/protect-gherkin.test.js
  */
