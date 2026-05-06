@@ -103,14 +103,22 @@ function validateQAReport(filePath, appName) {
     issues.push('No screenshots found - QA reports must include visual evidence');
   }
 
-  // Check for pass/fail status
-  const hasStatus = content.includes('PASS') || content.includes('FAIL');
+  // Check for pass/fail status (canonical: APPROVED/NEEDS_WORK, legacy: PASS/FAIL)
+  const hasStatus =
+    content.includes('PASS') ||
+    content.includes('FAIL') ||
+    content.includes('APPROVED') ||
+    content.includes('NEEDS_WORK');
   if (!hasStatus) {
     issues.push('Missing PASS/FAIL status');
   }
 
-  // Check if marked as failed
-  const failed = content.includes('❌ FAIL') || content.includes('Status: FAIL');
+  // Check if marked as failed (canonical: NEEDS_WORK, legacy: FAIL)
+  const failed =
+    content.includes('❌ FAIL') ||
+    content.includes('Status: FAIL') ||
+    content.includes('❌ NEEDS_WORK') ||
+    content.includes('Status: NEEDS_WORK');
 
   return {
     exists: true,
