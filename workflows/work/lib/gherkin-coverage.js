@@ -4,6 +4,7 @@
  * Pure-logic coverage validation for Gherkin scenarios against tasks.md
  * content and test files. No I/O, no side effects, no external dependencies.
  * Consumes scenarios from parse-gherkin.js (parseRaw/parse output).
+ * Re-exports parseRaw for caller convenience.
  *
  * Public API:
  *   - validateTaskCoverage(scenarios, tasksContent): TaskCoverageResult
@@ -25,6 +26,8 @@
  */
 
 'use strict';
+
+const { parseRaw } = require('./parse-gherkin');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -157,4 +160,5 @@ function validateTestCoverage(scenarios, testFiles) {
 module.exports = {
   validateTaskCoverage,
   validateTestCoverage,
+  parseRaw,
 };
