@@ -2558,7 +2558,10 @@ describe('enforce-step-workflow', () => {
       const { code } = await runHook(
         {
           tool_name: 'Write',
-          tool_input: { file_path: `${TASKS_DIR}/tests.check.md`, content: 'Status: APPROVED\n# Check report' },
+          tool_input: {
+            file_path: `${TASKS_DIR}/tests.check.md`,
+            content: 'Status: APPROVED\n# Check report',
+          },
         },
         'PreToolUse',
         { CLAUDE_CURRENT_AGENT: 'quality-checker' }
@@ -2572,7 +2575,10 @@ describe('enforce-step-workflow', () => {
       const { code } = await runHook(
         {
           tool_name: 'Write',
-          tool_input: { file_path: `${TASKS_DIR}/tests.check.md`, content: 'Status: APPROVED\n# Check report' },
+          tool_input: {
+            file_path: `${TASKS_DIR}/tests.check.md`,
+            content: 'Status: APPROVED\n# Check report',
+          },
         },
         'PreToolUse',
         { CLAUDE_CURRENT_AGENT: 'work-workflow:quality-checker' }

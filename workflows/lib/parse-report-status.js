@@ -249,9 +249,7 @@ function checkFreeformStatus(content, type) {
   }
 
   // 4. Standalone status at line start followed by dash
-  const dashMatch = content.match(
-    /^(COMPLETE|APPROVED|NEEDS_WORK|INCOMPLETE)\s*[—–-]/m
-  );
+  const dashMatch = content.match(/^(COMPLETE|APPROVED|NEEDS_WORK|INCOMPLETE)\s*[—–-]/m);
   if (dashMatch) {
     const resolved = resolveAlias(dashMatch[1].toUpperCase(), type);
     if (resolved) return resolved;
@@ -573,4 +571,10 @@ function isCodeReviewResolved(reportContent, replyContent) {
   };
 }
 
-module.exports = { parseReportStatus, parseReplyDecisions, isCodeReviewResolved, resolveAlias, STATUS_LINE_RE };
+module.exports = {
+  parseReportStatus,
+  parseReplyDecisions,
+  isCodeReviewResolved,
+  resolveAlias,
+  STATUS_LINE_RE,
+};

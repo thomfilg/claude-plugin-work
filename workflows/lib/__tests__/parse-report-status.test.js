@@ -1132,11 +1132,7 @@ describe('parseReportStatus — GH-331 QA alias unification', () => {
   it('resolves ACCESS_FAILED in summary table to NEEDS_WORK for QA type', () => {
     const content = '| Status | ACCESS_FAILED |';
     const result = parseReportStatus(content, 'qa');
-    assert.equal(
-      result.status,
-      'NEEDS_WORK',
-      'ACCESS_FAILED in table must resolve to NEEDS_WORK'
-    );
+    assert.equal(result.status, 'NEEDS_WORK', 'ACCESS_FAILED in table must resolve to NEEDS_WORK');
   });
 
   it('still resolves "Status: SUCCESS" to APPROVED for QA type (backward compat)', () => {

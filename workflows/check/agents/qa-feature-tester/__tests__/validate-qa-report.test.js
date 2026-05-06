@@ -17,8 +17,12 @@ function buildQAReport(statusToken, opts = {}) {
   const browserEvidence = opts.noBrowserEvidence
     ? ''
     : '`mcp__playwright__navigate` Result: SUCCESS\n';
-  const infraLine = opts.infraFailure ? 'INFRASTRUCTURE_FAILURE\n## MCP Diagnostics\nListMcpResourcesTool\n' : '';
-  const accessLine = opts.accessFailed ? 'ACCESS_FAILED\n## MCP Diagnostics\nListMcpResourcesTool\n' : '';
+  const infraLine = opts.infraFailure
+    ? 'INFRASTRUCTURE_FAILURE\n## MCP Diagnostics\nListMcpResourcesTool\n'
+    : '';
+  const accessLine = opts.accessFailed
+    ? 'ACCESS_FAILED\n## MCP Diagnostics\nListMcpResourcesTool\n'
+    : '';
 
   return [
     '# QA Report',
@@ -47,8 +51,12 @@ function runScript(reportPath) {
     let stderr = '';
     let stdout = '';
 
-    child.stderr.on('data', (d) => { stderr += d; });
-    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+    });
+    child.stdout.on('data', (d) => {
+      stdout += d;
+    });
 
     const stdinData = JSON.stringify({
       task_prompt: `REPORT_PATH: ${reportPath}`,

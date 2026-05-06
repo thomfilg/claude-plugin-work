@@ -84,7 +84,10 @@ describe('check-validate-reports.js — validateQAReport canonical status matchi
     assert.ok(result.reports.qa.myapp.exists, 'report should exist');
     assert.ok(!result.reports.qa.myapp.failed, 'PASS should not be marked failed');
     // hasStatus must have detected PASS
-    assert.deepEqual(result.reports.qa.myapp.issues.filter(i => i.includes('Missing PASS/FAIL')), []);
+    assert.deepEqual(
+      result.reports.qa.myapp.issues.filter((i) => i.includes('Missing PASS/FAIL')),
+      []
+    );
   });
 
   it('detects a QA report with legacy FAIL status as failed', () => {
@@ -115,7 +118,7 @@ describe('check-validate-reports.js — validateQAReport canonical status matchi
     const { result } = runScript(dir, ['myapp']);
     assert.ok(result.reports.qa.myapp.exists, 'report should exist');
     // The key assertion: APPROVED must be recognized as a valid status
-    const statusIssues = result.reports.qa.myapp.issues.filter(i => i.includes('Missing'));
+    const statusIssues = result.reports.qa.myapp.issues.filter((i) => i.includes('Missing'));
     assert.deepEqual(statusIssues, [], 'APPROVED should be recognized as a valid status');
     assert.ok(!result.reports.qa.myapp.failed, 'APPROVED should not be marked failed');
   });
@@ -146,7 +149,7 @@ describe('check-validate-reports.js — validateQAReport canonical status matchi
     fs.writeFileSync(path.join(dir, 'qa-myapp.check.md'), buildQAReport('NEEDS_WORK'));
 
     const { result } = runScript(dir, ['myapp']);
-    const statusIssues = result.reports.qa.myapp.issues.filter(i => i.includes('Missing'));
+    const statusIssues = result.reports.qa.myapp.issues.filter((i) => i.includes('Missing'));
     assert.deepEqual(statusIssues, [], 'NEEDS_WORK should be recognized as a valid status');
   });
 });

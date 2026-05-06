@@ -380,11 +380,7 @@ describe('write-report', () => {
       const content = fs.readFileSync('/tmp/qa-test-runner.check.md', 'utf8');
       const statusLine = content.match(/^Status:\s*(\S+)/m);
       assert.ok(statusLine, 'report must contain a Status: line');
-      assert.equal(
-        statusLine[1],
-        'APPROVED',
-        'PASS input must produce Status: APPROVED'
-      );
+      assert.equal(statusLine[1], 'APPROVED', 'PASS input must produce Status: APPROVED');
     });
 
     it('outputs "Status: NEEDS_WORK" when input status is FAIL', () => {
@@ -400,11 +396,7 @@ describe('write-report', () => {
       const content = fs.readFileSync('/tmp/qa-test-runner.check.md', 'utf8');
       const statusLine = content.match(/^Status:\s*(\S+)/m);
       assert.ok(statusLine, 'report must contain a Status: line');
-      assert.equal(
-        statusLine[1],
-        'NEEDS_WORK',
-        'FAIL input must produce Status: NEEDS_WORK'
-      );
+      assert.equal(statusLine[1], 'NEEDS_WORK', 'FAIL input must produce Status: NEEDS_WORK');
     });
 
     it('outputs "Status: NEEDS_WORK" when input status is INFRASTRUCTURE_FAILURE', () => {
@@ -462,11 +454,7 @@ describe('write-report', () => {
       const content = fs.readFileSync('/tmp/qa-test-runner.check.md', 'utf8');
       const statusLine = content.match(/^Status:\s*(\S+)/m);
       assert.ok(statusLine, 'report must contain a Status: line');
-      assert.equal(
-        statusLine[1],
-        'NEEDS_WORK',
-        'BLOCKED input must produce Status: NEEDS_WORK'
-      );
+      assert.equal(statusLine[1], 'NEEDS_WORK', 'BLOCKED input must produce Status: NEEDS_WORK');
     });
   });
 
