@@ -4347,4 +4347,168 @@ describe('enforce-step-workflow', () => {
       }
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GH-338: session-guard.js subcommand gating
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('session-guard.js subcommand gating', () => {
+    const SESSION_GUARD_PATH = path.join(__dirname, '..', 'hooks', 'session-guard.js');
+
+    // ─── R2/R4: Block finish/reveal/complete when NOT at complete step ──────
+
+    it('blocks session-guard.js finish when workflow is not at complete step (R2)', async () => {
+      writeWorkState(makeStepStatus('implement', WORK_STEPS));
+
+      const { code, stderr } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} finish ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 2, 'finish should be blocked at non-terminal step');
+      assert.ok(stderr.includes('BLOCKED'), `expected BLOCKED in stderr, got: ${stderr}`);
+    });
+
+    it('blocks session-guard.js reveal when workflow is not at complete step (R4)', async () => {
+      writeWorkState(makeStepStatus('implement', WORK_STEPS));
+
+      const { code, stderr } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} reveal ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 2, 'reveal should be blocked at non-terminal step');
+      assert.ok(stderr.includes('BLOCKED'), `expected BLOCKED in stderr, got: ${stderr}`);
+    });
+
+    it('blocks session-guard.js complete when workflow is not at complete step (R4)', async () => {
+      writeWorkState(makeStepStatus('implement', WORK_STEPS));
+
+      const { code, stderr } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} complete ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 2, 'complete should be blocked at non-terminal step');
+      assert.ok(stderr.includes('BLOCKED'), `expected BLOCKED in stderr, got: ${stderr}`);
+    });
+
+    // ─── R3/R5: Allow finish/reveal/complete when AT complete step ──────────
+
+    it('allows session-guard.js finish when workflow is at complete step (R3, R5)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      const { code } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} finish ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 0, 'finish should be allowed at complete step');
+    });
+
+    it('allows session-guard.js reveal when workflow is at complete step (R3)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      const { code } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} reveal ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 0, 'reveal should be allowed at complete step');
+    });
+
+    it('allows session-guard.js complete when workflow is at complete step (R3)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      const { code } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} complete ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 0, 'complete should be allowed at complete step');
+    });
+
+    // ─── R1/R7: Allow safe subcommands (init, status) at any step ───────────
+
+    it('allows session-guard.js init at any step (R1, R7)', async () => {
+      writeWorkState(makeStepStatus('implement', WORK_STEPS));
+
+      const { code } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} init ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 0, 'init should be allowed at any step');
+    });
+
+    it('allows session-guard.js status at any step (R1, R7)', async () => {
+      writeWorkState(makeStepStatus('implement', WORK_STEPS));
+
+      const { code } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} status ${TEST_TICKET}` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 0, 'status should be allowed at any step');
+    });
+
+    // ─── R8: Block shell operators even at complete step ────────────────────
+
+    it('blocks session-guard.js finish with shell operators at complete step (R8)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      const shellOperatorCases = [
+        { desc: 'pipe', cmd: `node ${SESSION_GUARD_PATH} finish ${TEST_TICKET} | tee /tmp/out` },
+        { desc: 'redirect', cmd: `node ${SESSION_GUARD_PATH} finish ${TEST_TICKET} > /tmp/out` },
+        { desc: '|| chain', cmd: `node ${SESSION_GUARD_PATH} finish ${TEST_TICKET} || echo pwned` },
+        { desc: '&& chain', cmd: `node ${SESSION_GUARD_PATH} finish ${TEST_TICKET} && echo done` },
+        { desc: 'command substitution', cmd: `node ${SESSION_GUARD_PATH} finish $(echo ${TEST_TICKET})` },
+        { desc: 'backtick substitution', cmd: `node ${SESSION_GUARD_PATH} finish \`echo ${TEST_TICKET}\`` },
+      ];
+
+      for (const { desc, cmd } of shellOperatorCases) {
+        const { code, stderr } = await runHook(
+          {
+            tool_name: 'Bash',
+            tool_input: { command: cmd },
+          },
+          'PreToolUse'
+        );
+        assert.equal(code, 2, `finish with ${desc} should be blocked`);
+        assert.ok(stderr.includes('BLOCKED'), `expected BLOCKED for ${desc}, got: ${stderr}`);
+      }
+    });
+
+    // ─── R9: Block wrong ticket ─────────────────────────────────────────────
+
+    it('blocks session-guard.js finish targeting wrong ticket at complete step (R9)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      const { code, stderr } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: `node ${SESSION_GUARD_PATH} finish WRONG-TICKET` },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 2, 'finish targeting wrong ticket should be blocked');
+      assert.ok(stderr.includes('BLOCKED'), `expected BLOCKED in stderr, got: ${stderr}`);
+    });
+  });
 });
