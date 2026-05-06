@@ -167,6 +167,16 @@
             "command": "CLAUDE_HOOK_TYPE=PostToolUse node ${CLAUDE_PLUGIN_ROOT}/workflows/check/hooks/enforce-env-start-failure.js"
           }
         ]
+      },
+      {
+        "matcher": "Task|Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/workflows/work2/hooks/work-auto-advance.js",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PreCompact": [
@@ -184,6 +194,11 @@
       {
         "matcher": ".*",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/workflows/work2/hooks/work-prevent-stop.js",
+            "timeout": 10
+          },
           {
             "type": "command",
             "command": "CLAUDE_HOOK_TYPE=Stop node ${CLAUDE_PLUGIN_ROOT}/workflows/lib/hooks/session-guard.js",
