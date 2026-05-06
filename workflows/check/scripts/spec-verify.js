@@ -426,7 +426,7 @@ function checkReuses(args, root) {
     type: 'REUSES',
     args,
     passed: false,
-    reason: `Expected import matching "${importPattern}" in ${filePath} — not found`,
+    reason: `Expected import or definition matching "${importPattern}" in ${filePath} — not found`,
   };
 }
 
