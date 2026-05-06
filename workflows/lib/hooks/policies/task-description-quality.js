@@ -170,7 +170,9 @@ function validateTaskDescriptions(content) {
         if (!entry.pattern.test(line)) continue;
 
         // TDD prefix exemption (R13): lines like "**RED:** Add tests for ..."
-        if (hasTddPrefix(line)) continue;
+        // Only applies to qualifiable patterns — non-qualifiable patterns like
+        // TBD/TODO must still be blocked even on TDD-prefixed lines.
+        if (entry.qualifiable && hasTddPrefix(line)) continue;
 
         // Qualification check (R8): if the pattern is qualifiable and the
         // line has enough detail after the trigger phrase, skip it.
