@@ -112,5 +112,8 @@ module.exports = function registerImplement(register) {
     ].join('\n');
 
     entry.agentPrompt = delegationBlock;
+    // Override delegation type: must be task (not skill) so AI uses Task(developer-nodejs-tdd)
+    // instead of Skill(work-implement) which can't call agent-gated scripts
+    entry.agentType = 'developer-nodejs-tdd';
   });
 };
