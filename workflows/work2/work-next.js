@@ -246,7 +246,27 @@ function buildInstruction(entry, stateCtx) {
   return instruction;
 }
 
+let _recursionDepth = 0;
+const MAX_RECURSION = 10; // prevent infinite loops through soft steps
+
 function getNextInstruction(ticketRaw, rework) {
+  if (_recursionDepth >= MAX_RECURSION) {
+    return {
+      type: 'work_instruction',
+      action: 'blocked',
+      state: {
+        ticket: ticketRaw,
+        currentStep: null,
+        progress: '0/0',
+        completedSteps: [],
+        remainingSteps: [],
+      },
+      reason: 'Max recursion depth reached during auto-advance',
+      suggestion: 'Run work-next.js again — the workflow may be stuck',
+    };
+  }
+  _recursionDepth++;
+
   // Parse ticket input
   let ticketBase, suffix;
   try {
@@ -364,11 +384,8 @@ function getNextInstruction(ticketRaw, rework) {
         timeout: 5000,
         stdio: 'pipe',
       });
-      // Re-run after advancing (limit recursion via env flag)
-      if (!process.env._WORK_NEXT_RECURSION) {
-        process.env._WORK_NEXT_RECURSION = '1';
-        return getNextInstruction(ticketRaw, rework);
-      }
+      // Re-run after advancing (depth-limited by _recursionDepth)
+      return getNextInstruction(ticketRaw, rework);
     } catch {
       /* fail-open */
     }
@@ -392,8 +409,35 @@ function getNextInstruction(ticketRaw, rework) {
         continue;
       }
 
-      // If this is the current step, no transition needed — just execute
+      // If this is the current step...
       if (entry.step === currentStepName) {
+        // Check if we already dispatched this step in a previous call
+        if (workState && workState._work2Dispatched === entry.step) {
+          // Step was already executed — try to transition forward
+          const allowed = STEP_TRANSITIONS[entry.step] || [];
+          let advanced = false;
+          for (const target of allowed) {
+            const transResult = transitionStep(safeName, target);
+            if (transResult && !transResult.error) {
+              // Successfully advanced! Clear dispatched flag and recurse
+              const ws = loadWorkState(safeName);
+              if (ws) {
+                delete ws._work2Dispatched;
+                saveWorkState(safeName, ws);
+              }
+              return getNextInstruction(ticketRaw, rework);
+            }
+          }
+          // All transitions blocked — step needs more work, return instruction again
+        }
+
+        // Mark step as dispatched for next call
+        const ws = loadWorkState(safeName);
+        if (ws) {
+          ws._work2Dispatched = entry.step;
+          saveWorkState(safeName, ws);
+        }
+
         if (entry.agentType && entry.agentPrompt) {
           return buildInstruction(entry, { ...stateCtx, currentStep: entry.step });
         }
