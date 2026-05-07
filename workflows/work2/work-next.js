@@ -28,11 +28,8 @@ if (require.main === module) {
 }
 
 // ─── Load shared modules from /work ─────────────────────────────────────────
-// Resolve workDir from CLAUDE_PLUGIN_ROOT (marketplace) when available,
-// falling back to __dirname (dev repo) for tests and direct invocation.
-const workDir = process.env.CLAUDE_PLUGIN_ROOT
-  ? path.join(process.env.CLAUDE_PLUGIN_ROOT, 'workflows', 'work')
-  : path.join(__dirname, '..', 'work');
+const { resolvePluginPaths } = require(path.join(__dirname, 'lib', 'resolve-plugin-root'));
+const { workDir, libDir } = resolvePluginPaths(__dirname);
 
 function tryRequire(modulePath, fallback) {
   try {
@@ -42,10 +39,6 @@ function tryRequire(modulePath, fallback) {
     throw err;
   }
 }
-
-const libDir = process.env.CLAUDE_PLUGIN_ROOT
-  ? path.join(process.env.CLAUDE_PLUGIN_ROOT, 'workflows', 'lib')
-  : path.join(__dirname, '..', 'lib');
 
 const { appendAction } = tryRequire(path.join(workDir, 'work-actions'), { appendAction: () => {} });
 const tp = tryRequire(path.join(libDir, 'ticket-provider'), null);
