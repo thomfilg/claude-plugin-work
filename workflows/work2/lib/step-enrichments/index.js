@@ -39,5 +39,6 @@ function enrich(entry, ctx) {
 require('./ticket')(register);
 require('./brief-gate')(register);
 require('./context-inject')(register);
+require('./implement')(register);
 
 module.exports = { register, enrich };
