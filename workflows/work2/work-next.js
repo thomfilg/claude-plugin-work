@@ -240,12 +240,28 @@ function buildInstruction(entry, stateCtx) {
     };
   } else {
     // Task-based (general-purpose, brief-writer, spec-writer, commit-writer, etc.)
-    instruction.delegate = {
-      type: 'task',
-      agentType: entry.agentType,
-      description: `${entry.step} ${entry.reason || ''}`.trim().slice(0, 80),
-      prompt: entry.agentPrompt,
-    };
+    // Detect simple single-command prompts and emit as "bash" instead of spawning an agent
+    const prompt = entry.agentPrompt || '';
+    const isSingleCommand =
+      entry.agentType === 'general-purpose' &&
+      /^(Fetch|Run|Execute|Check)\b/.test(prompt) &&
+      /\bgh\s|\bgit\s|\bnode\s|\bcurl\s/.test(prompt) &&
+      prompt.split('\n').filter((l) => l.trim()).length <= 3;
+
+    if (isSingleCommand) {
+      instruction.delegate = {
+        type: 'bash',
+        description: `${entry.step} ${entry.reason || ''}`.trim().slice(0, 80),
+        command: prompt,
+      };
+    } else {
+      instruction.delegate = {
+        type: 'task',
+        agentType: entry.agentType,
+        description: `${entry.step} ${entry.reason || ''}`.trim().slice(0, 80),
+        prompt,
+      };
+    }
   }
 
   return instruction;
