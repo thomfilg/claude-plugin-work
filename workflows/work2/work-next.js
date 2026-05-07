@@ -396,36 +396,36 @@ function getNextInstruction(ticketRaw, rework) {
       // Current step — handle dispatched marker logic
       if (entry.step === currentStepName) {
         if (workState && workState._work2Dispatched === entry.step) {
-          // Already dispatched — try to transition forward only if the plan
-          // now considers this step done (action changed from RUN→DEFER/SKIP)
-          // or if it was originally DEFER (optional step, condition satisfied externally).
-          const dispatchedAction = workState._work2DispatchedAction || 'RUN';
-          const actionChanged = entry.action !== dispatchedAction;
-          const canAutoAdvance = entry.action === 'DEFER' || actionChanged;
-
-          if (canAutoAdvance) {
-            const allowed = STEP_TRANSITIONS[entry.step] || [];
-            for (const target of allowed) {
-              const transResult = transitionStep(safeName, target);
-              if (transResult && !transResult.error) {
-                const ws = loadWorkState(safeName);
-                if (ws) {
-                  delete ws._work2Dispatched;
-                  delete ws._work2DispatchedAction;
-                  saveWorkState(safeName, ws);
-                }
-                return getNextInstruction(ticketRaw, rework);
+          // Already dispatched — try to transition forward.
+          // The transition gate (verify function) determines if the step is truly done.
+          // Soft steps pass immediately; gated steps (brief_gate, spec_gate) only pass
+          // when their verify() returns true (e.g., questions resolved, gherkin valid).
+          const allowed = STEP_TRANSITIONS[entry.step] || [];
+          for (const target of allowed) {
+            const transResult = transitionStep(safeName, target);
+            if (transResult && !transResult.error) {
+              const ws = loadWorkState(safeName);
+              if (ws) {
+                delete ws._work2Dispatched;
+                delete ws._work2DispatchedAction;
+                saveWorkState(safeName, ws);
               }
+              return getNextInstruction(ticketRaw, rework);
             }
           }
-          // Step still RUN and unchanged — return instruction again (agent must execute)
+          // Transition blocked — step genuinely needs more work, return instruction again
         }
 
-        // Mark as dispatched (with action) and return instruction
+        // Mark as dispatched (with action) and set stepStatus to in_progress
         const ws = loadWorkState(safeName);
         if (ws) {
           ws._work2Dispatched = entry.step;
           ws._work2DispatchedAction = entry.action;
+          // Ensure step is marked in_progress so the plan generator
+          // can detect it was started (and mark it DEFER/SKIP on completion)
+          if (ws.stepStatus && ws.stepStatus[entry.step] === 'pending') {
+            ws.stepStatus[entry.step] = 'in_progress';
+          }
           saveWorkState(safeName, ws);
         }
 
