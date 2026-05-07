@@ -288,6 +288,9 @@ function getNextInstruction(ticketRaw, rework) {
       if (fs.existsSync(sessionPath)) {
         const session = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
         session.workflow = '/work2';
+        // Fix cwd to point to the worktree (not the calling cwd)
+        const worktreeDir = path.join(WORKTREES_BASE, `${MAIN_WORKTREE_FOLDER}-${safeBase}`);
+        session.cwd = worktreeDir;
         fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2));
       }
     } catch {
