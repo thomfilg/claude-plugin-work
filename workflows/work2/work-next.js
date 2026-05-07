@@ -249,6 +249,65 @@ function buildInstruction(entry, stateCtx) {
     }
   }
 
+  // Override brief_gate prompt with detailed instructions
+  if (entry.step === 'brief_gate' && entry.askUserQuestionPayload) {
+    const questions = entry.askUserQuestionPayload.questions || [];
+    const localQs = questions.filter((q) => q.scope === 'local');
+    const userQs = questions.filter((q) => q.scope !== 'local');
+    const briefGatePath = path.join(workDir, 'steps', 'brief-gate.js');
+    const briefPath = path.join(tasksDir, 'brief.md');
+
+    const lines = ['## brief_gate: Resolve Open Questions\n'];
+    lines.push(`Brief file: ${briefPath}`);
+    lines.push(`Total blocking questions: ${questions.length}\n`);
+
+    if (localQs.length > 0) {
+      lines.push('### Step 1: Solve LOCAL questions (investigate codebase yourself)\n');
+      localQs.forEach((q, i) => {
+        lines.push(`${i + 1}. "${q.questionText}"`);
+        if (q.rationale) lines.push(`   Rationale: ${q.rationale}`);
+      });
+      lines.push('');
+    }
+
+    if (userQs.length > 0) {
+      lines.push(
+        `### Step ${localQs.length > 0 ? '2' : '1'}: Ask USER these questions (use AskUserQuestion)\n`
+      );
+      userQs.forEach((q, i) => {
+        lines.push(`${i + 1}. "${q.questionText}"`);
+        if (q.rationale) lines.push(`   Rationale: ${q.rationale}`);
+      });
+      lines.push('');
+    }
+
+    lines.push(
+      `### Step ${localQs.length > 0 && userQs.length > 0 ? '3' : '2'}: Apply resolutions\n`
+    );
+    lines.push('Run this command with your answers (JSON map of questionText → answer):');
+    lines.push('```bash');
+    lines.push(
+      `node -e "require('${briefGatePath}').applyBriefResolutions('${briefPath}', JSON.parse(process.argv[1]))" '<JSON_RESOLUTIONS>'`
+    );
+    lines.push('```');
+    lines.push('');
+    lines.push('Example:');
+    lines.push('```bash');
+    if (questions.length > 0) {
+      const example = {};
+      example[questions[0].questionText] = 'Your answer here';
+      lines.push(
+        `node -e "require('${briefGatePath}').applyBriefResolutions('${briefPath}', JSON.parse(process.argv[1]))" '${JSON.stringify(example)}'`
+      );
+    }
+    lines.push('```');
+    lines.push(
+      '\nIMPORTANT: Do NOT edit brief.md directly. Only applyBriefResolutions can modify it during brief_gate.'
+    );
+
+    entry.agentPrompt = lines.join('\n');
+  }
+
   // Delegation block
   if (entry.agentType === 'skill') {
     // Extract skill name from agentPrompt (e.g., "/check" → "check", "/work-implement ..." → "work-implement")
