@@ -154,10 +154,12 @@ describe('buildInstruction', () => {
 describe('work-next.js CLI', () => {
   it('outputs blocked instruction when no ticket provided', () => {
     const { execFileSync } = require('child_process');
+    const env = { ...process.env };
+    delete env.CLAUDE_PLUGIN_ROOT; // Use __dirname fallback for tests
     const result = execFileSync(
       process.execPath,
       [require('path').join(__dirname, '..', 'work-next.js')],
-      { encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'], env }
     );
     const parsed = JSON.parse(result);
     assert.equal(parsed.type, 'work_instruction');

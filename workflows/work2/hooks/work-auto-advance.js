@@ -33,7 +33,10 @@ function main() {
   if (transcriptPath.includes('/subagents/')) process.exit(0);
 
   // Guard: find active /work2 session via marker file
-  const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
+  const libDir = process.env.CLAUDE_PLUGIN_ROOT
+    ? path.join(process.env.CLAUDE_PLUGIN_ROOT, 'workflows', 'lib')
+    : path.join(__dirname, '..', '..', 'lib');
+  const getConfig = require(path.join(libDir, 'get-config'));
   const WORKTREES_BASE = getConfig('WORKTREES_BASE') || '';
   const TASKS_BASE =
     getConfig('TASKS_BASE') || (WORKTREES_BASE ? path.join(WORKTREES_BASE, 'tasks') : '');

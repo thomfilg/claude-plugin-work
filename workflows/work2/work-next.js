@@ -28,7 +28,11 @@ if (require.main === module) {
 }
 
 // ─── Load shared modules from /work ─────────────────────────────────────────
-const workDir = path.join(__dirname, '..', 'work');
+// Resolve workDir from CLAUDE_PLUGIN_ROOT (marketplace) when available,
+// falling back to __dirname (dev repo) for tests and direct invocation.
+const workDir = process.env.CLAUDE_PLUGIN_ROOT
+  ? path.join(process.env.CLAUDE_PLUGIN_ROOT, 'workflows', 'work')
+  : path.join(__dirname, '..', 'work');
 
 function tryRequire(modulePath, fallback) {
   try {
@@ -39,12 +43,16 @@ function tryRequire(modulePath, fallback) {
   }
 }
 
+const libDir = process.env.CLAUDE_PLUGIN_ROOT
+  ? path.join(process.env.CLAUDE_PLUGIN_ROOT, 'workflows', 'lib')
+  : path.join(__dirname, '..', 'lib');
+
 const { appendAction } = tryRequire(path.join(workDir, 'work-actions'), { appendAction: () => {} });
-const tp = tryRequire(path.join(__dirname, '..', 'lib', 'ticket-provider'), null);
+const tp = tryRequire(path.join(libDir, 'ticket-provider'), null);
 if (!tp) process.exit(0);
 
 // ─── Configuration ──────────────────────────────────────────────────────────
-const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
+const getConfig = require(path.join(libDir, 'get-config'));
 const WORKTREES_BASE = getConfig('WORKTREES_BASE') || '';
 const TASKS_BASE =
   getConfig('TASKS_BASE') || (WORKTREES_BASE ? path.join(WORKTREES_BASE, 'tasks') : '');
@@ -76,7 +84,7 @@ const { STEPS, STEP_TRANSITIONS, ALL_STEPS, workflowCanTransition } = require(
 const { run, fileExists, readFile, listFiles, ...helpers } = require(
   path.join(workDir, 'work-helpers')
 );
-const { parseTicketInput } = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
+const { parseTicketInput } = require(path.join(libDir, 'ticket-provider'));
 const { parseTasks, buildTaskPrompt } = require(path.join(workDir, 'task-parser'));
 const { archiveStepArtifacts } = require(path.join(workDir, 'artifact-archival'));
 const { getHeadSha } = require(path.join(workDir, 'git-utils'));
