@@ -14,7 +14,11 @@ module.exports = function registerImplement(register) {
   register('implement', (entry, ctx) => {
     if (!entry.agentPrompt) return;
 
-    const tddNextPath = path.join(__dirname, '..', '..', 'tdd-next.js');
+    // Resolve tdd-next.js via plugin root (not __dirname) to avoid agents rewriting
+    // the dev repo path to the worktree cwd where work2/ doesn't exist.
+    const { resolvePluginRoot } = require(path.join(__dirname, '..', 'resolve-plugin-root'));
+    const pluginRoot = resolvePluginRoot(__dirname, 4); // step-enrichments → lib → work2 → workflows → plugin root
+    const tddNextPath = path.join(pluginRoot, 'workflows', 'work2', 'tdd-next.js');
     const ticket = ctx.ticket || 'TICKET';
 
     // Extract task number from prompt if present

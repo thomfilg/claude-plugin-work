@@ -454,6 +454,7 @@ function getNextInstruction(ticketRaw, rework) {
               loadWorkState,
               saveWorkState,
               readTddEvidence,
+              validateTddEvidence,
               stepName: entry.step,
               workDir,
               work2Dir: __dirname,
