@@ -375,34 +375,48 @@ function getNextInstruction(ticketRaw, rework) {
   }
 
   // Find first actionable step
-  // Determine current step from work state to avoid self-transitions
+  // Determine current step from work state to skip steps we've already passed
   const workState = loadWorkState(safeName);
   const currentStepName = workState ? getCurrentStep(workState) : null;
+  const currentStepIdx = currentStepName ? ALL_STEPS.indexOf(currentStepName) : -1;
 
   for (const entry of plan) {
     if (entry.action === 'SKIP') continue;
 
     if (entry.action === 'RUN' || entry.action === 'DEFER') {
-      // Only transition if this step is NOT the current step
-      // (current step is already in_progress, no transition needed)
-      if (entry.step !== currentStepName) {
-        const transResult = transitionStep(safeName, entry.step);
+      const entryIdx = ALL_STEPS.indexOf(entry.step);
 
-        if (transResult && transResult.error) {
-          // Gate blocked
-          return {
-            type: 'work_instruction',
-            action: 'blocked',
-            state: { ...stateCtx, currentStep: entry.step },
-            reason: transResult.message || 'Transition blocked',
-            suggestion: transResult.suggestion || `Resolve the gate for step: ${entry.step}`,
-          };
-        }
+      // Skip steps that are behind the current step in the state machine
+      // The plan may mark them as RUN but the state already advanced past them
+      if (currentStepIdx >= 0 && entryIdx >= 0 && entryIdx < currentStepIdx) {
+        continue;
       }
 
-      // Step is now in_progress — check if it needs AI execution
+      // If this is the current step, no transition needed — just execute
+      if (entry.step === currentStepName) {
+        if (entry.agentType && entry.agentPrompt) {
+          return buildInstruction(entry, { ...stateCtx, currentStep: entry.step });
+        }
+        continue;
+      }
+
+      // Need to transition forward to this step
+      const transResult = transitionStep(safeName, entry.step);
+
+      if (transResult && transResult.error) {
+        // Gate blocked
+        return {
+          type: 'work_instruction',
+          action: 'blocked',
+          state: { ...stateCtx, currentStep: entry.step },
+          reason: transResult.message || 'Transition blocked',
+          suggestion: transResult.suggestion || `Resolve the gate for step: ${entry.step}`,
+        };
+      }
+
+      // Transition succeeded — check if it needs AI execution
       if (entry.agentType && entry.agentPrompt) {
-        return buildInstruction(entry, stateCtx);
+        return buildInstruction(entry, { ...stateCtx, currentStep: entry.step });
       }
 
       // No agentType means this is a pass-through (rare) — continue to next
