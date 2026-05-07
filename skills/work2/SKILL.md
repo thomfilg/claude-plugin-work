@@ -56,9 +56,10 @@ node ${CLAUDE_PLUGIN_ROOT}/workflows/work2/work-next.js <TICKET_ID>
 |---------------|-----|
 | `skill` | `Skill(name)` |
 | `task` | `Task(agentType)` with description + prompt from instruction |
-| `bash` | `Task(Bash)` with description + command |
+| `bash` | Run via `Bash` directly (no sub-agent needed) |
 
-- If `preCommands` present → run via `Task(Bash)` **first**, then delegate the main step
+- If `preCommands` present → run via `Bash` **first**, then delegate the main step
+- **Simple prompts** (single command like `gh issue view`): run directly via `Bash` — no need to spawn a sub-agent
 - Task description **MUST** start with the step name (e.g., `"brief generate product brief"`)
 - **Augment prompts with context**: When delegating, append relevant context from previous steps (e.g., ticket details, spec decisions) to the agent's prompt. The instruction prompt is a minimum — enrich it with what you know.
 
