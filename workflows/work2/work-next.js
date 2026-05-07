@@ -400,7 +400,11 @@ function getNextInstruction(ticketRaw, rework) {
           // The transition gate (verify function) determines if the step is truly done.
           // Soft steps pass immediately; gated steps (brief_gate, spec_gate) only pass
           // when their verify() returns true (e.g., questions resolved, gherkin valid).
-          const allowed = STEP_TRANSITIONS[entry.step] || [];
+          // Only try FORWARD transitions (higher index in ALL_STEPS)
+          // Backward transitions would revert state and cause loops
+          const allowed = (STEP_TRANSITIONS[entry.step] || []).filter(
+            (t) => ALL_STEPS.indexOf(t) > ALL_STEPS.indexOf(entry.step)
+          );
           for (const target of allowed) {
             const transResult = transitionStep(safeName, target);
             if (transResult && !transResult.error) {
