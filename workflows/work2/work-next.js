@@ -94,6 +94,7 @@ const { buildInstruction } = require(path.join(__dirname, 'lib', 'instruction-bu
 const { buildStateContext } = require(path.join(__dirname, 'lib', 'state-context'));
 const { writeMarkerFile } = require(path.join(__dirname, 'lib', 'marker'));
 const { enrich } = require(path.join(__dirname, 'lib', 'step-enrichments'));
+const { createDebugLog } = require(path.join(__dirname, 'lib', 'debug-log'));
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const TDD_GATED_STEPS = [STEPS.implement];
@@ -331,8 +332,11 @@ function getNextInstruction(ticketRaw, rework) {
 
   const plan = result.plan;
   const tasksDir = path.join(TASKS_BASE, safeName);
+  const log = createDebugLog(tasksDir);
+  const args = process.argv.slice(2).join(' ');
+  log.call(ticket, args);
 
-  // Debug logging (env-gated)
+  // Debug logging (env-gated, stderr)
   const _dbgState = loadWorkState(safeName);
   if (process.env.WORK2_DEBUG) {
     process.stderr.write(
@@ -368,6 +372,14 @@ function getNextInstruction(ticketRaw, rework) {
   const workState = loadWorkState(safeName);
   const currentStepName = workState ? getCurrentStep(workState) : null;
   const currentStepIdx = currentStepName ? ALL_STEPS.indexOf(currentStepName) : -1;
+  log.state(currentStepName, workState?.stepStatus, workState?._work2Dispatched);
+
+  // Helper: log and return instruction
+  function returnInstruction(entry, ctx) {
+    const instr = buildInstruction(entry, ctx);
+    log.instruction(instr);
+    return instr;
+  }
 
   // Enrichment context for step overrides
   const enrichCtx = { tasksDir, ticket, workDir, path, fs, tp, TASKS_BASE };
@@ -379,6 +391,7 @@ function getNextInstruction(ticketRaw, rework) {
       const entryIdx = ALL_STEPS.indexOf(entry.step);
 
       // Pseudo-steps (e.g., 2b_transition) not in ALL_STEPS — execute directly
+      log.step(entry.step, entry.action, entryIdx < 0 ? { pseudo: true } : null);
       if (entryIdx < 0) {
         const dispatched = workState?._work2PseudoDispatched || [];
         if (dispatched.includes(entry.step)) continue;
@@ -389,7 +402,7 @@ function getNextInstruction(ticketRaw, rework) {
         }
         if (entry.agentType && entry.agentPrompt) {
           enrich(entry, enrichCtx);
-          return buildInstruction(entry, stateCtx);
+          return returnInstruction(entry, stateCtx);
         }
         continue;
       }
@@ -411,11 +424,11 @@ function getNextInstruction(ticketRaw, rework) {
           );
           for (const target of allowed) {
             const transResult = transitionStep(safeName, target);
-            if (process.env.WORK2_DEBUG) {
-              process.stderr.write(
-                `[work-next] dispatch-advance ${entry.step}→${target}: ${transResult?.error ? transResult.message : 'SUCCESS'}\n`
-              );
-            }
+            log.transition(
+              entry.step,
+              target,
+              transResult?.error ? transResult.message : 'SUCCESS'
+            );
             if (transResult && !transResult.error) {
               const ws = loadWorkState(safeName);
               if (ws) {
@@ -423,15 +436,11 @@ function getNextInstruction(ticketRaw, rework) {
                 delete ws._work2DispatchedAction;
                 saveWorkState(safeName, ws);
               }
+              log.recurse(_recursionDepth, `advanced ${entry.step} → ${target}`);
               return getNextInstruction(ticketRaw, rework);
             }
           }
-          // Transition blocked — log the last failure (debug only, no re-attempt)
-          if (process.env.WORK2_DEBUG) {
-            process.stderr.write(
-              `[work-next] dispatch-advance BLOCKED for ${entry.step}, tried ${allowed.length} forward targets\n`
-            );
-          }
+          log.error(`dispatch-advance BLOCKED for ${entry.step}`, { tried: allowed.length });
           // Step genuinely needs more work, return instruction again
         }
 
@@ -450,7 +459,7 @@ function getNextInstruction(ticketRaw, rework) {
 
         if (entry.agentType && entry.agentPrompt) {
           enrich(entry, enrichCtx);
-          return buildInstruction(entry, { ...stateCtx, currentStep: entry.step });
+          return returnInstruction(entry, { ...stateCtx, currentStep: entry.step });
         }
         continue;
       }
@@ -470,19 +479,21 @@ function getNextInstruction(ticketRaw, rework) {
       // Transition succeeded
       if (entry.agentType && entry.agentPrompt) {
         enrich(entry, enrichCtx);
-        return buildInstruction(entry, { ...stateCtx, currentStep: entry.step });
+        return returnInstruction(entry, { ...stateCtx, currentStep: entry.step });
       }
       continue;
     }
   }
 
   // All steps done
-  return {
+  const completeInstr = {
     type: 'work_instruction',
     action: 'complete',
     state: stateCtx,
     summary: `All ${plan.length} steps done for ${ticket}`,
   };
+  log.instruction(completeInstr);
+  return completeInstr;
 }
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
