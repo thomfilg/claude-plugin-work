@@ -34,29 +34,16 @@ module.exports = function registerImplement(register) {
         refactor: 'REFACTOR phase — clean up code',
       }[currentPhase] || `${currentPhase} phase`;
 
-    // Read artifacts for injection into the developer agent prompt
-    function readArtifact(filename, maxLen) {
-      try {
-        const content = fs.readFileSync(path.join(tasksDir, filename), 'utf8');
-        return content.length > maxLen
-          ? content.slice(0, maxLen) +
-              `\n\n[... truncated, read full file at: ${path.join(tasksDir, filename)}]`
-          : content;
-      } catch {
-        return null;
-      }
-    }
-
-    const brief = readArtifact('brief.md', 3000);
-    const spec = readArtifact('spec.md', 5000);
-    const tasks = readArtifact('tasks.md', 3000);
-
-    // Build context block from available artifacts
-    const contextParts = [];
-    if (brief) contextParts.push(`## Brief\n\n${brief}`);
-    if (spec) contextParts.push(`## Spec\n\n${spec}`);
-    if (tasks) contextParts.push(`## Tasks\n\n${tasks}`);
-    const contextBlock = contextParts.length > 0 ? '\n\n' + contextParts.join('\n\n') : '';
+    // Build artifact references (file paths, not inlined content — avoids truncation)
+    const artifactFiles = ['brief.md', 'spec.md', 'tasks.md']
+      .map((f) => ({ name: f, fullPath: path.join(tasksDir, f) }))
+      .filter((a) => fs.existsSync(a.fullPath));
+    const contextBlock =
+      artifactFiles.length > 0
+        ? '\n\n## Required Reading (MUST read IN FULL before implementing)\n' +
+          artifactFiles.map((a) => `- ${a.fullPath}`).join('\n') +
+          '\n\nDo NOT skip or skim these files.'
+        : '';
 
     // Strip the raw TDD protocol from the prompt (will be replaced)
     let prompt = entry.agentPrompt;
