@@ -1,16 +1,22 @@
 /**
  * Step enrichments registry.
  *
- * Each enrichment is a function(entry, ctx) that modifies the plan entry
- * before instruction building (e.g., overriding prompts, changing delegation type).
+ * Two extension points:
+ *   1. Enrichments - mutate plan entries before instruction building
+ *      (e.g., overriding prompts, changing delegation type).
+ *   2. Dispatch-advance gates - called when a dispatched step's transition
+ *      is blocked. Return null (no action), { recurse: true } (re-run
+ *      orchestrator), or a full instruction object. All step-specific
+ *      dispatch logic lives here, NOT in work-next.js.
  *
- * Registry pattern: add new enrichments by creating a file in this directory
- * and registering it below. No changes needed to the core orchestrator.
+ * Registry pattern: add new enrichments/gates by creating a file in this
+ * directory and registering it below. No changes needed to the core orchestrator.
  */
 
 'use strict';
 
 const enrichments = Object.create(null);
+const gates = Object.create(null);
 
 /**
  * Register an enrichment for a step.
@@ -20,6 +26,15 @@ const enrichments = Object.create(null);
 function register(stepName, fn) {
   if (!enrichments[stepName]) enrichments[stepName] = [];
   enrichments[stepName].push(fn);
+}
+
+/**
+ * Register a dispatch-advance gate for a step.
+ * @param {string} stepName
+ * @param {(safeName: string, ctx: object, deps: object) => null|{recurse:true}|object} fn
+ */
+function registerGate(stepName, fn) {
+  gates[stepName] = fn;
 }
 
 /**
@@ -35,11 +50,29 @@ function enrich(entry, ctx) {
   }
 }
 
-// ─── Register built-in enrichments ─���────────────────────────────────────────
+/**
+ * Run the dispatch-advance gate for a step (if registered).
+ * @param {string} stepName
+ * @param {string} safeName
+ * @param {object} ctx
+ * @param {object} deps
+ * @returns {null | { recurse: true } | object}
+ */
+function runGate(stepName, safeName, ctx, deps) {
+  const fn = gates[stepName];
+  if (!fn) return null;
+  return fn(safeName, ctx, deps);
+}
+
+// --- Register built-in enrichments ---
 require('./ticket')(register);
 require('./brief-gate')(register);
 require('./spec-gate')(register);
 require('./context-inject')(register);
 require('./implement')(register);
 
-module.exports = { register, enrich };
+// --- Register dispatch-advance gates ---
+const { dispatchAdvanceGate: implementGate } = require('./implement-gate');
+registerGate('implement', implementGate);
+
+module.exports = { register, registerGate, enrich, runGate };

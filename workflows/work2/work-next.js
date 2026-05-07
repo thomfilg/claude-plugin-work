@@ -93,10 +93,7 @@ const { validateCheckGate: _validateCheckGate } = require(path.join(workDir, 'ch
 const { buildInstruction } = require(path.join(__dirname, 'lib', 'instruction-builder'));
 const { buildStateContext } = require(path.join(__dirname, 'lib', 'state-context'));
 const { writeMarkerFile } = require(path.join(__dirname, 'lib', 'marker'));
-const { enrich } = require(path.join(__dirname, 'lib', 'step-enrichments'));
-const { checkMultiTaskGate } = require(
-  path.join(__dirname, 'lib', 'step-enrichments', 'implement-gate')
-);
+const { enrich, runGate } = require(path.join(__dirname, 'lib', 'step-enrichments'));
 const { createDebugLog } = require(path.join(__dirname, 'lib', 'debug-log'));
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -202,6 +199,9 @@ function transitionStep(ticket, targetStep) {
 }
 
 // ─── Core Orchestration Loop ────────────────────────────────────────────────
+// IMPORTANT: This file is the generic orchestrator. NO step-specific logic here.
+// Step-specific behavior (prompts, gates, delegation overrides) belongs in
+// lib/step-enrichments/ — registered via enrich() and runGate().
 
 let _recursionDepth = 0;
 const MAX_RECURSION = 10;
@@ -445,57 +445,25 @@ function getNextInstruction(ticketRaw, rework) {
           }
           log.error(`dispatch-advance BLOCKED for ${entry.step}`, { tried: allowed.length });
 
-          // For TDD-gated steps, delegate to step-specific gate logic
-          // (handles missing evidence, multi-task iteration, task advancement)
-          if (TDD_GATED_STEPS.includes(entry.step)) {
-            const gateResult = checkMultiTaskGate(safeName, {
+          // Run step-specific dispatch-advance gate (registered in step-enrichments/)
+          const gateResult = runGate(
+            entry.step,
+            safeName,
+            { ticket, stateCtx },
+            {
               loadWorkState,
               saveWorkState,
               readTddEvidence,
               stepName: entry.step,
               workDir,
+              work2Dir: __dirname,
               log,
               recursionDepth: _recursionDepth,
-            });
-
-            if (gateResult.action === 'evidence-missing') {
-              const tddNextPath = path.join(__dirname, 'tdd-next.js');
-              const taskFlag = gateResult.taskNum ? ` --task ${gateResult.taskNum}` : '';
-              const tddInstr = {
-                type: 'work_instruction',
-                action: 'execute',
-                state: { ...stateCtx, currentStep: entry.step },
-                continue: true,
-                delegate: {
-                  type: 'task',
-                  agentType: 'developer-nodejs-tdd',
-                  description: `record TDD evidence for task ${gateResult.taskNum || ''}`.trim(),
-                  prompt: [
-                    '## TDD Evidence Missing',
-                    '',
-                    'The implementation work is done but TDD evidence was NOT recorded.',
-                    'The workflow CANNOT advance without it.',
-                    '',
-                    '**You MUST run these commands in order:**',
-                    '',
-                    '```bash',
-                    `node "${tddNextPath}" ${ticket}${taskFlag}`,
-                    '```',
-                    '',
-                    'Follow the instructions from tdd-next.js to record evidence for each phase (init → red → green → refactor).',
-                    'Run the test command at each phase to generate real evidence.',
-                    '',
-                    'DO NOT skip any phase. DO NOT re-implement code. Just record evidence.',
-                  ].join('\n'),
-                },
-              };
-              log.instruction(tddInstr);
-              return tddInstr;
             }
-
-            if (gateResult.action === 'advance') {
-              return getNextInstruction(ticketRaw, rework);
-            }
+          );
+          if (gateResult) {
+            if (gateResult.recurse) return getNextInstruction(ticketRaw, rework);
+            return gateResult; // full instruction object
           }
 
           // Step genuinely needs more work, return instruction again
