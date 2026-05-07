@@ -38,6 +38,7 @@ function enrich(entry, ctx) {
 // ─── Register built-in enrichments ─���────────────────────────────────────────
 require('./ticket')(register);
 require('./brief-gate')(register);
+require('./spec-gate')(register);
 require('./context-inject')(register);
 require('./implement')(register);
 
