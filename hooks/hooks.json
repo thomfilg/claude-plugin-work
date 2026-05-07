@@ -196,11 +196,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/workflows/work2/hooks/work-prevent-stop.js",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "CLAUDE_HOOK_TYPE=Stop node ${CLAUDE_PLUGIN_ROOT}/workflows/lib/hooks/session-guard.js",
             "timeout": 10
           },
