@@ -330,17 +330,21 @@ function getNextInstruction(ticketRaw, rework) {
     };
   }
 
-  // Override session guard: generatePlan() inits with '/work', we re-init with '/work2'
-  // so session-guard Stop hook shows the correct work-next.js command
+  // Override session guard: generatePlan() inits with '/work', we patch the session
+  // file to '/work2' so session-guard Stop hook shows the correct work-next.js command.
+  // cmdInit is idempotent and won't overwrite the workflow field, so we patch directly.
   const safeBase = tp.sanitizeTicketIdForPath(ticket, providerConfig);
   const safeName = suffix ? safeBase + '/' + suffix : safeBase;
   if (process.env.SESSION_GUARD_ENABLED !== '0') {
     try {
-      const guardPath = path.join(__dirname, '..', 'lib', 'hooks', 'session-guard.js');
-      execFileSync(process.execPath, [guardPath, 'init', safeBase, '/work2'], {
-        stdio: 'pipe',
-        timeout: 5000,
-      });
+      const sessionDir = process.env.SESSION_GUARD_DIR || '/tmp';
+      const sanitizedId = String(safeBase).replace(/[/\\:\0]/g, '_');
+      const sessionPath = path.join(sessionDir, `claude-session-guard-${sanitizedId}.json`);
+      if (fs.existsSync(sessionPath)) {
+        const session = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+        session.workflow = '/work2';
+        fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+      }
     } catch {
       /* fail-open */
     }
