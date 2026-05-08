@@ -2,8 +2,8 @@
  * Implement step enrichment.
  *
  * Overrides agentType to developer-nodejs-tdd (agent-gated for TDD scripts).
- * Replaces the raw TDD protocol with tdd-next.js instructions.
- * The prompt is written FOR the developer agent (it does the work directly).
+ * Builds a compact prompt with file references instead of embedding content.
+ * The agent reads brief/spec/tasks from disk — no need to duplicate them in the prompt.
  */
 
 'use strict';
@@ -17,17 +17,22 @@ module.exports = function registerImplement(register) {
     // Resolve tdd-next.js via plugin root (not __dirname) to avoid agents rewriting
     // the dev repo path to the worktree cwd where work2/ doesn't exist.
     const { resolvePluginRoot } = require(path.join(__dirname, '..', 'resolve-plugin-root'));
-    const pluginRoot = resolvePluginRoot(__dirname, 4); // step-enrichments → lib → work2 → workflows → plugin root
+    const pluginRoot = resolvePluginRoot(__dirname, 4);
     const tddNextPath = path.join(pluginRoot, 'workflows', 'work2', 'tdd-next.js');
     const ticket = ctx.ticket || 'TICKET';
 
-    // Extract task number from prompt if present
-    const taskMatch = entry.agentPrompt.match(/Task (\d+) of \d+/);
-    const taskFlag = taskMatch ? ` --task ${taskMatch[1]}` : '';
+    // Extract task number and title from the plan generator prompt
+    const taskMatch = entry.agentPrompt.match(/Task (\d+) of (\d+)/);
+    const taskNum = taskMatch ? taskMatch[1] : null;
+    const totalTasks = taskMatch ? taskMatch[2] : null;
+    const taskFlag = taskNum ? ` --task ${taskNum}` : '';
+
+    // Extract task title from prompt
+    const titleMatch = entry.agentPrompt.match(/## Current Task: Task \d+ — (.+?)(?:\n|$)/);
+    const taskTitle = titleMatch ? titleMatch[1].trim() : 'Implementation';
 
     // Read current TDD phase
     const { readPhase } = require(path.join(__dirname, '..', '..', 'tdd-next.js'));
-    const taskNum = taskMatch ? taskMatch[1] : null;
     const tddState = readPhase(ticket.replace('#', 'GH-'), taskNum);
     const currentPhase = tddState?.currentPhase || 'red';
     const phaseLabel =
@@ -37,54 +42,31 @@ module.exports = function registerImplement(register) {
         refactor: 'REFACTOR — clean up code',
       }[currentPhase] || `${currentPhase} phase`;
 
-    // Strip content the agent shouldn't see (replaced by tdd-next.js / direct instructions)
-    let prompt = entry.agentPrompt;
-
-    // Remove /work-implement skill prefix — agents interpret it as a skill invocation
-    // and follow SKILL.md setup steps (PR slot claiming, symlink creation)
-    prompt = prompt.replace(/\/work-implement\s*/g, '');
-
-    // Strip the raw TDD protocol (replaced by tdd-next.js)
-    const tddProtocolStart = prompt.indexOf('TDD protocol (hook-enforced');
-    if (tddProtocolStart >= 0) {
-      const afterProtocol = prompt.indexOf('\n## ', tddProtocolStart + 1);
-      prompt =
-        afterProtocol >= 0
-          ? prompt.slice(0, tddProtocolStart) + prompt.slice(afterProtocol)
-          : prompt.slice(0, tddProtocolStart);
-    }
-
-    // Build the prompt for the developer agent (it does the work, no re-delegation)
+    // Build compact prompt — agent reads files for details
+    const tasksDir = ctx.tasksDir || '';
     const devPrompt = [
-      `## Current TDD Phase: ${phaseLabel}`,
-      taskMatch ? `## Task: ${taskMatch[1]}` : '',
+      `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
-      '## MANDATORY: TDD Evidence Recording',
-      '',
-      'You MUST record TDD evidence at each phase. The workflow CANNOT advance without it.',
-      'Skipping evidence recording will cause the task to be re-dispatched in a loop.',
-      '',
-      '**Phase commands** (run `tdd-next.js` to get exact commands for your current phase):',
+      `### TDD Phase: ${phaseLabel}`,
+      'Get phase commands:',
       '```bash',
       `node "${tddNextPath}" ${ticket}${taskFlag}`,
       '```',
+      'Record evidence at each phase (init → red → green → refactor) or the task will be re-dispatched.',
       '',
-      '**Workflow per phase:**',
-      '1. Run `tdd-next.js` to see current phase and allowed actions',
-      '2. Do the work for that phase (write tests / write code / refactor)',
-      '3. Run the record command shown by `tdd-next.js` with your test command',
-      '4. Run the transition command to move to the next phase',
-      '5. Repeat until all phases (init → red → green → refactor) are recorded',
+      '### Required Reading (read IN FULL before implementing)',
+      `- **Task details:** ${path.join(tasksDir, 'tasks.md')} (find "## Task ${taskNum}" section)`,
+      `- **Spec:** ${path.join(tasksDir, 'spec.md')}`,
+      `- **Brief:** ${path.join(tasksDir, 'brief.md')}`,
       '',
-      '**DO NOT** implement multiple tasks. Only implement the ONE task below.',
-      '',
-      '---',
-      '',
-      prompt.trim(),
+      '### Rules',
+      `- Implement ONLY Task ${taskNum} deliverables`,
+      '- Do NOT touch files reserved for other tasks',
+      '- Do NOT invoke /work-implement or any other skill',
+      '- Follow TDD: run tdd-next.js → do the work → record evidence → transition phase',
     ].join('\n');
 
     entry.agentPrompt = devPrompt;
-    // Override to developer agent (required for TDD script authorization)
     entry.agentType = 'developer-nodejs-tdd';
   });
 };
