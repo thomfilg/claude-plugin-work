@@ -1,8 +1,9 @@
 /**
- * Step: monitor — Run follow-up-pr.js --once for a single status check.
+ * Step: monitor — Run follow-up-pr.js with full adaptive polling.
  *
- * Uses --once so the call returns in ~15s (one API round trip).
- * The follow-up2 orchestrator loop handles retries when CI is pending.
+ * follow-up-pr.js handles CI waiting internally (40 attempts, 10s→30s→60s).
+ * Returns only when CI finishes (pass/fail) or max attempts reached.
+ * No timeout — the script has its own limits.
  *
  * Exit codes: 0 = all clear, 1 = issues remain, 2 = error
  */
@@ -15,7 +16,7 @@ const { execFileSync } = require('child_process');
 module.exports = function registerMonitor(register) {
   register('monitor', (state, ctx) => {
     const scriptPath = path.join(ctx.workScriptsDir, 'follow-up-pr.js');
-    const args = [scriptPath, '--once'];
+    const args = [scriptPath];
     if (state.prNumber) args.push('--pr', String(state.prNumber));
 
     let exitCode = 0;
@@ -23,7 +24,6 @@ module.exports = function registerMonitor(register) {
     try {
       stdout = execFileSync(process.execPath, args, {
         encoding: 'utf8',
-        timeout: 60000,
         cwd: ctx.worktreeDir,
         stdio: ['pipe', 'pipe', 'pipe'],
       });

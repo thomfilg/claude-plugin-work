@@ -4,11 +4,12 @@
  * Priority order:
  *   1. Merge conflict → fix-ci
  *   2. CI FAILING → fix-ci
- *   3. CI CANCELLED + merge blocked → fix-ci (cancelled check is required)
- *   4. CI CANCELLED + merge NOT blocked → treat as passing
- *   5. Blocking reviews with NO ongoing bot review → fix-reviews
- *   6. Ongoing bot review (awaiting) → report
- *   7. All clear → report
+ *   3. CI PENDING → back to monitor (wait for CI to finish)
+ *   4. CI CANCELLED + merge blocked → fix-ci
+ *   5. CI CANCELLED + merge NOT blocked → treat as passing
+ *   6. Blocking reviews with NO ongoing bot review → fix-reviews
+ *   7. Ongoing bot review (awaiting) → back to monitor (wait for bot)
+ *   8. All clear (CI passed, no reviews) → report
  */
 
 'use strict';
@@ -29,6 +30,7 @@ module.exports = function registerTriage(register) {
 
     const hasConflict = /merge conflict|cannot be merged/i.test(output);
     const hasCiFailure = /CI:\s*FAILING/i.test(output);
+    const hasCiPending = /CI:\s*PENDING/i.test(output);
     const hasCiCancelled = /CI:\s*CANCELLED/i.test(output);
     const isMergeBlocked = /MERGE STATUS:\s*BLOCKED/i.test(output);
     const hasBlockingReviews = /Reviews:.*BLOCKING/i.test(output);
@@ -46,6 +48,13 @@ module.exports = function registerTriage(register) {
       return null;
     }
 
+    // CI still running — should not reach here if monitor runs full polling.
+    // Safety fallback: loop back to monitor.
+    if (hasCiPending) {
+      state.currentStep = 'monitor';
+      return null;
+    }
+
     // CI cancelled: only care if it blocks the merge
     if (hasCiCancelled && isMergeBlocked && !hasBlockingReviews) {
       state.failureCategory = 'ci_cancelled_blocking';
@@ -59,7 +68,13 @@ module.exports = function registerTriage(register) {
       return null;
     }
 
-    // Ongoing review, cancelled but non-blocking, or all clear → report
+    // Bot still reviewing — loop back to monitor and wait
+    if (hasOngoingReview) {
+      state.currentStep = 'monitor';
+      return null;
+    }
+
+    // Only reach report when CI passed AND no blocking reviews
     state.currentStep = 'report';
     return null;
   });
