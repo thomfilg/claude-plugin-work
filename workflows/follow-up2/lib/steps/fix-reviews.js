@@ -122,7 +122,7 @@ module.exports = function registerFixReviews(register) {
         { encoding: 'utf8', timeout: 10000, cwd: ctx.worktreeDir, env: scriptEnv, stdio: ['pipe', 'pipe', 'pipe'] }
       );
       const st = JSON.parse(raw);
-      totalComments = st.total || '?';
+      totalComments = st.remaining || st.total || '?';
       currentIndex = (st.solved || 0) + (st.skipped || 0) + 1;
     } catch { /* ignore */ }
 
