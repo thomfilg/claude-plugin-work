@@ -186,11 +186,17 @@ module.exports = function registerImplement(register) {
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
       `### TDD Phase: ${phaseLabel}`,
-      'Get phase commands:',
+      '',
+      '### How TDD works (MANDATORY)',
+      '',
+      '1. Run this command to get your current phase instruction:',
       '```bash',
       `node "${tddNextPath}" ${ticket}${taskFlag}`,
       '```',
-      'Record evidence at each phase (init → red → green → refactor) or the task will be re-dispatched.',
+      '2. It returns a JSON with the EXACT `command` to run. Run THAT command — nothing else.',
+      '3. After the command completes, run tdd-next.js again for the next phase.',
+      '4. Repeat until all phases (init → red → green → refactor) are done.',
+      '',
       '',
       '### Required Reading (read IN FULL before implementing)',
       `- **Task details:** ${path.join(tasksDir, 'tasks.md')} (find "## Task ${taskNum}" section)`,
@@ -201,7 +207,6 @@ module.exports = function registerImplement(register) {
       `- Implement ONLY Task ${taskNum} deliverables`,
       '- Do NOT touch files reserved for other tasks',
       '- Do NOT invoke /work-implement or any other skill',
-      '- Follow TDD: run tdd-next.js → do the work → record evidence → transition phase',
     ].join('\n');
 
     entry.agentPrompt = devPrompt;
