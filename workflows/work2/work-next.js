@@ -355,8 +355,27 @@ function getNextInstruction(ticketRaw, rework) {
   const args = process.argv.slice(2).join(' ');
   log.call(ticket, args);
 
+  // If workflow is already at the complete step, release session guard and return
+  const _preCheckState = loadWorkState(safeName);
+  if (_preCheckState && getCurrentStep(_preCheckState) === 'complete' &&
+      _preCheckState.stepStatus?.complete === 'completed') {
+    // Release session guard inline
+    try {
+      const sgPath = path.join(workDir, '..', 'lib', 'hooks', 'session-guard.js');
+      execFileSync(process.execPath, [sgPath, 'finish', safeName], {
+        encoding: 'utf8', timeout: 10000, stdio: 'pipe',
+      });
+    } catch { /* already released or not active */ }
+    return {
+      type: 'work_instruction',
+      action: 'complete',
+      state: buildStateContext(_preCheckState),
+      summary: `Workflow ${safeName} already complete. Session released.`,
+    };
+  }
+
   // Debug logging (env-gated, stderr)
-  const _dbgState = loadWorkState(safeName);
+  const _dbgState = _preCheckState;
   if (process.env.WORK2_DEBUG) {
     process.stderr.write(
       `[work-next] safeName=${safeName} currentStep=${_dbgState ? getCurrentStep(_dbgState) : 'null'} dispatched=${_dbgState?._work2Dispatched || 'none'} depth=${_recursionDepth}\n`

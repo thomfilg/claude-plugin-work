@@ -204,6 +204,9 @@ function main() {
   if (isInit) {
     const markerDir = path.join(TASKS_BASE, safeName);
     fs.mkdirSync(markerDir, { recursive: true });
+    // Force-reset any existing state (e.g., stale "complete" from previous run)
+    const existingState = path.join(markerDir, '.follow-up2-state.json');
+    if (fs.existsSync(existingState)) fs.unlinkSync(existingState);
     fs.writeFileSync(
       path.join(markerDir, '.follow-up2-orchestrator.pid'),
       JSON.stringify({
