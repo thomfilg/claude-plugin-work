@@ -62,6 +62,7 @@ function buildInstruction(entry, stateCtx) {
         agentType: entry.agentType,
         description: `${entry.step} ${entry.reason || ''}`.trim().slice(0, 80),
         prompt,
+        note: 'Pass the prompt directly to the agent. Do NOT read brief/spec/tasks files yourself — the agent reads them.',
       };
     }
   }
