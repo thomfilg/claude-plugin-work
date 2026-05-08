@@ -16,7 +16,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 module.exports = function registerPhase2(register) {
-  register('5_phase2_consensus', (state, ctx) => {
+  register('6_phase2_consensus', (state, ctx) => {
     const reportFolder = state.setupResult?.reportFolder || ctx.tasksDir;
     const crPath = path.join(reportFolder, 'code-review.check.md');
 
@@ -58,7 +58,7 @@ module.exports = function registerPhase2(register) {
       return {
         type: 'check_instruction',
         action: 'execute',
-        state: { ticket: state.ticketId, currentStep: '5_phase2_consensus', progress: '5/9' },
+        state: { ticket: state.ticketId, currentStep: '6_phase2_consensus', progress: '5/9' },
         continue: true,
         delegate: {
           type: 'task',
@@ -77,7 +77,7 @@ module.exports = function registerPhase2(register) {
       return {
         type: 'check_instruction',
         action: 'execute',
-        state: { ticket: state.ticketId, currentStep: '5_phase2_consensus', progress: '5/9' },
+        state: { ticket: state.ticketId, currentStep: '6_phase2_consensus', progress: '5/9' },
         continue: true,
         delegate: {
           type: 'task',

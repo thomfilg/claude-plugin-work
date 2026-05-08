@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = function registerOutput(register) {
-  register('8_output', (state, ctx) => {
+  register('9_output', (state, ctx) => {
     const readmePath = path.join(ctx.tasksDir, 'README.md');
     let readme = 'No summary generated.';
     try {
@@ -22,7 +22,7 @@ module.exports = function registerOutput(register) {
     return {
       type: 'check_instruction',
       action: 'complete',
-      state: { ticket: state.ticketId, currentStep: '8_output', progress: '8/8' },
+      state: { ticket: state.ticketId, currentStep: '9_output', progress: '8/8' },
       content: readme,
     };
   });

@@ -8,7 +8,7 @@
 const { execSync } = require('child_process');
 
 module.exports = function registerQualityRecheck(register) {
-  register('6_quality_recheck', (state) => {
+  register('7_quality_recheck', (state) => {
     // Check if code was modified during consensus
     let hasModifiedFiles = false;
     try {
@@ -20,14 +20,14 @@ module.exports = function registerQualityRecheck(register) {
 
     if (!hasModifiedFiles) return null; // no changes → skip
 
-    if (state.dispatched === '6_quality_recheck') return null; // already ran → advance
+    if (state.dispatched === '7_quality_recheck') return null; // already ran → advance
 
-    state.dispatched = '6_quality_recheck';
+    state.dispatched = '7_quality_recheck';
 
     return {
       type: 'check_instruction',
       action: 'execute',
-      state: { ticket: state.ticketId, currentStep: '6_quality_recheck', progress: '6/9' },
+      state: { ticket: state.ticketId, currentStep: '7_quality_recheck', progress: '6/9' },
       continue: true,
       delegate: {
         type: 'task',

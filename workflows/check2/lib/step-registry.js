@@ -44,17 +44,19 @@ const STEPS = [
   '1_setup',
   '2_start_env',
   '3_verify_playwright',
-  '4_phase1_agents',
-  '5_phase2_consensus',
-  '6_quality_recheck',
-  '7_validate_summary',
-  '8_output',
+  '4_run_tests',
+  '5_phase1_agents',
+  '6_phase2_consensus',
+  '7_quality_recheck',
+  '8_validate_summary',
+  '9_output',
 ];
 
 // ─── Register steps ─────────────────────────────────────────────────────────
 require('./steps/setup')(registerStep);
 require('./steps/start-env')(registerStep);
 require('./steps/verify-playwright')(registerStep);
+require('./steps/run-tests')(registerStep);
 require('./steps/phase1-agents')(registerStep);
 require('./steps/phase2-consensus')(registerStep);
 require('./steps/quality-recheck')(registerStep);
