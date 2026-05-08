@@ -27,21 +27,45 @@ function getTaskStatus(tasksDir, taskNum) {
   const taskDir = path.join(tasksDir, `task${taskNum}`);
   const tddPath = path.join(taskDir, 'tdd-phase.json');
 
+  // Check task type — test/checkpoint tasks complete with RED-only evidence
+  const taskType = resolveTaskType(tasksDir, taskNum);
+  const isTestOnly = taskType === 'test' || taskType === 'checkpoint';
+
   try {
     const state = JSON.parse(fs.readFileSync(tddPath, 'utf8'));
-    // Check for completed TDD cycle (red+green minimum)
-    // Evidence format uses cycles array: [{red:{...}, green:{...}, refactor:{...}}]
     const cycles = state.cycles || [];
+
+    // For test/checkpoint tasks, any cycle (even RED-only) means completed
+    if (isTestOnly && cycles.length > 0) return 'completed';
+
+    // For other tasks, require RED+GREEN minimum
     const hasCompleteCycle = cycles.some((c) => c.red && c.green);
     if (hasCompleteCycle) return 'completed';
-    // Also check legacy flat format (evidence.red/evidence.green)
+    // Legacy flat format
     const evidence = state.evidence || {};
     if (evidence.red && evidence.green) return 'completed';
     return 'in_progress';
   } catch {
-    // No TDD state file — check if task dir exists (may have been started)
     if (fs.existsSync(taskDir)) return 'in_progress';
     return 'not_started';
+  }
+}
+
+/**
+ * Read task type from tasks.md.
+ * @param {string} tasksDir
+ * @param {number} taskNum - 1-indexed
+ * @returns {string|null}
+ */
+function resolveTaskType(tasksDir, taskNum) {
+  try {
+    const content = fs.readFileSync(path.join(tasksDir, 'tasks.md'), 'utf8');
+    const match = content.match(
+      new RegExp(`## Task ${taskNum}\\b[\\s\\S]*?### Type\\s*\\n(\\w+)`, 'm')
+    );
+    return match ? match[1].trim().toLowerCase() : null;
+  } catch {
+    return null;
   }
 }
 
