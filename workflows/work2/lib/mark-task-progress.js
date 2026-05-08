@@ -51,23 +51,7 @@ function getTaskStatus(tasksDir, taskNum) {
   }
 }
 
-/**
- * Read task type from tasks.md.
- * @param {string} tasksDir
- * @param {number} taskNum - 1-indexed
- * @returns {string|null}
- */
-function resolveTaskType(tasksDir, taskNum) {
-  try {
-    const content = fs.readFileSync(path.join(tasksDir, 'tasks.md'), 'utf8');
-    const match = content.match(
-      new RegExp(`## Task ${taskNum}\\b[\\s\\S]*?### Type\\s*\\n(\\w+)`, 'm')
-    );
-    return match ? match[1].trim().toLowerCase() : null;
-  } catch {
-    return null;
-  }
-}
+const { resolveTaskType } = require(path.join(__dirname, 'resolve-task-type'));
 
 /**
  * Map task status to checkbox marker.

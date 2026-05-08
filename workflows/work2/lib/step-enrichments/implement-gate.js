@@ -20,24 +20,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { markProgress } = require(path.join(__dirname, '..', 'mark-task-progress'));
 
-/**
- * Read task type from tasks.md for a given task number.
- * @param {string} tasksDir
- * @param {number} taskNum - 1-indexed
- * @returns {string|null} - 'test', 'backend', 'checkpoint', etc.
- */
-function resolveTaskType(tasksDir, taskNum) {
-  try {
-    const fs = require('fs');
-    const tasksFile = path.join(tasksDir, 'tasks.md');
-    const content = fs.readFileSync(tasksFile, 'utf8');
-    const pattern = new RegExp(`## Task ${taskNum}\\b[\\s\\S]*?### Type\\s*\\n(\\w+)`, 'm');
-    const match = content.match(pattern);
-    return match ? match[1].trim().toLowerCase() : null;
-  } catch {
-    return null;
-  }
-}
+const { resolveTaskType } = require(path.join(__dirname, '..', 'resolve-task-type'));
 
 /**
  * Dispatch-advance gate for the implement step.
