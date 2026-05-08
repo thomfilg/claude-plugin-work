@@ -17,12 +17,13 @@ module.exports = function registerOutput(register) {
       /* no README */
     }
 
+    state.status = 'complete';
+
     return {
       type: 'check_instruction',
-      action: 'display',
-      state: { ticket: state.ticketId, currentStep: '8_output', progress: '8/9' },
+      action: 'complete',
+      state: { ticket: state.ticketId, currentStep: '8_output', progress: '8/8' },
       content: readme,
-      continue: true,
     };
   });
 };

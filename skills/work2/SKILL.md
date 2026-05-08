@@ -6,67 +6,36 @@ user-invocable: true
 allowed-tools: Task, Bash, Read, Skill, TodoWrite
 ---
 
-# /work2 - Script-Driven Orchestrator
+# /work2
 
-You are a **pure orchestrator**. The driver script tells you what to do. You just execute it.
+Run the driver script. Execute what it says. Do not improvise.
 
-## CRITICAL: Do not stop until complete
-
-You MUST continue executing instructions until you receive `action: "complete"`.
-Never stop, summarize, or ask the user mid-workflow. Execute → wait for hook → execute → repeat.
-
----
-
-## Execution Loop
-
-### Step 1: Initialize and get first instruction
+## Start
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/workflows/work2/work-next.js "$ARGUMENTS" --init
 ```
 
-The `--init` flag writes a marker file so the auto-advance hook knows this is a /work2 session.
+## Loop
 
-### Step 2: Parse and execute
+1. Parse JSON output
+2. Execute the `delegate` block exactly as described below
+3. After delegation, the auto-advance hook outputs the next instruction
+4. If no hook output appears, re-run: `node ${CLAUDE_PLUGIN_ROOT}/workflows/work2/work-next.js <TICKET_ID>`
+5. Repeat until `action: "complete"`
 
-Read the JSON instruction output. The `state` block tells you where you are.
+## How to execute `delegate`
 
-### Step 3: Delegate as instructed
-
-After delegation completes, the **auto-advance hook** outputs the next instruction automatically.
-If no hook instruction appears after a delegation, re-run work-next.js manually:
-
-```bash
-node ${CLAUDE_PLUGIN_ROOT}/workflows/work2/work-next.js <TICKET_ID>
-```
-
----
-
-## Instruction Actions
-
-| action | Do |
-|--------|-----|
-| `execute` | Delegate using the `delegate` block |
-| `complete` | Done — inform user |
-| `blocked` | Follow `suggestion` field, then re-run work-next.js |
-
-## Delegation
-
-| delegate.type | How |
-|---------------|-----|
-| `skill` | `Skill(name)` |
-| `task` | `Task(agentType)` with description + prompt from instruction |
-| `bash` | Run via `Bash` directly (no sub-agent needed) |
-
-- If `preCommands` present → run via `Bash` **first**, then delegate the main step
-- **Simple prompts** (single command like `gh issue view`): run directly via `Bash` — no need to spawn a sub-agent
-- Task description **MUST** start with the step name (e.g., `"brief generate product brief"`)
-- **Augment prompts with context**: When delegating, append relevant context from previous steps (e.g., ticket details, spec decisions) to the agent's prompt. The instruction prompt is a minimum — enrich it with what you know.
+| delegate.type | Do this |
+|---------------|---------|
+| `bash` | Run the `command` field with Bash. Nothing else. |
+| `task` | `Task(agentType)` with the `prompt` field. Do NOT read files yourself. |
+| `parallel_tasks` | Launch ALL agents in `agents[]` array as parallel Task() calls. |
+| `skill` | `Skill(name)` with the `prompt` field. |
 
 ## Rules
 
-1. **FIRST tool call** = work-next.js with `--init` (mandatory)
-2. **NEVER** run step commands directly — always delegate via Task()/Skill()
-3. After failures → re-run work-next.js (it re-inspects real state)
-4. The `state` block in each instruction tells you exactly where you are — use it after context compaction
-5. **Do not stop** until `action: "complete"`
+- **Do NOT** read brief/spec/tasks files before delegating — the agent reads them.
+- **Do NOT** reinterpret or improvise on instructions. Execute exactly what the script says.
+- **Do NOT** stop until `action: "complete"`.
+- If `action: "blocked"` → follow the `suggestion` field, then re-run work-next.js.
