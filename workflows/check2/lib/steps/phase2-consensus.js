@@ -81,7 +81,7 @@ module.exports = function registerPhase2(register) {
         continue: true,
         delegate: {
           type: 'task',
-          agentType: 'code-checker',
+          agentType: 'work-workflow:code-checker',
           description: `Validate consensus (iteration ${state.consensusIteration})`,
           prompt: `Validate the developer's response to code review suggestions for ${state.ticketId}. Read ${reportFolder}/code-review.check.md and the developer reply.`,
           note: 'Pass the prompt directly to the agent.',

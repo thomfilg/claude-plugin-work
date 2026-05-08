@@ -37,7 +37,7 @@ module.exports = function registerFixReviews(register) {
       continue: true,
       delegate: {
         type: 'task',
-        agentType: 'developer-nodejs-tdd',
+        agentType: 'work-workflow:developer-nodejs-tdd',
         description: `Address review comment (attempt ${state.attempt})`,
         prompt: [
           '## Address Review Comment',

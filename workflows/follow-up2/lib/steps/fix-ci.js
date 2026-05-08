@@ -19,7 +19,7 @@ module.exports = function registerFixCi(register) {
       continue: true,
       delegate: {
         type: 'task',
-        agentType: 'developer-nodejs-tdd',
+        agentType: 'work-workflow:developer-nodejs-tdd',
         description: `Fix ${category} (attempt ${state.attempt})`,
         prompt: [
           `## Fix ${category === 'conflict' ? 'Merge Conflict' : 'CI Failure'}`,

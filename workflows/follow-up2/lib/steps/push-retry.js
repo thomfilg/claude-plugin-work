@@ -34,7 +34,7 @@ module.exports = function registerPushRetry(register) {
       continue: true,
       delegate: {
         type: 'task',
-        agentType: 'commit-writer',
+        agentType: 'work-workflow:commit-writer',
         description: `Commit follow-up fixes (attempt ${state.attempt})`,
         prompt: `autonomous - commit and push follow-up fixes for ${state.ticketId}`,
         note: 'Pass the prompt directly to the agent.',

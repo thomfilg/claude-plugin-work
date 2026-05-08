@@ -31,7 +31,7 @@ module.exports = function registerQualityRecheck(register) {
       continue: true,
       delegate: {
         type: 'task',
-        agentType: 'quality-checker',
+        agentType: 'work-workflow:quality-checker',
         description: 'Re-check after code review fixes',
         prompt: `Re-run tests for ${state.ticketId} after code review fixes. Verify all tests still pass.`,
         note: 'Pass the prompt directly to the agent.',

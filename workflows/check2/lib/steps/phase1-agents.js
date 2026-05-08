@@ -38,17 +38,17 @@ module.exports = function registerPhase1(register) {
         type: 'parallel_tasks',
         agents: [
           {
-            agentType: 'code-checker',
+            agentType: 'work-workflow:code-checker',
             description: 'Code review',
             prompt: `Review code changes for ${state.ticketId}. Write report to ${reportFolder}/code-review.check.md. Changes hash: ${changesHash}`,
           },
           {
-            agentType: 'quality-checker',
+            agentType: 'work-workflow:quality-checker',
             description: 'Run tests',
             prompt: `Run tests for ${state.ticketId}. Write report to ${reportFolder}/tests.check.md. Changes hash: ${changesHash}`,
           },
           {
-            agentType: 'completion-checker',
+            agentType: 'work-workflow:completion-checker',
             description: 'Verify requirements',
             prompt: `Verify requirements for ${state.ticketId}. Write report to ${reportFolder}/completion.check.md. Changes hash: ${changesHash}`,
           },
