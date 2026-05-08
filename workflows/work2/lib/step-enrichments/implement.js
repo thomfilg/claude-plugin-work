@@ -37,8 +37,14 @@ module.exports = function registerImplement(register) {
         refactor: 'REFACTOR — clean up code',
       }[currentPhase] || `${currentPhase} phase`;
 
-    // Strip the raw TDD protocol from the prompt (replaced by tdd-next.js)
+    // Strip content the agent shouldn't see (replaced by tdd-next.js / direct instructions)
     let prompt = entry.agentPrompt;
+
+    // Remove /work-implement skill prefix — agents interpret it as a skill invocation
+    // and follow SKILL.md setup steps (PR slot claiming, symlink creation)
+    prompt = prompt.replace(/\/work-implement\s*/g, '');
+
+    // Strip the raw TDD protocol (replaced by tdd-next.js)
     const tddProtocolStart = prompt.indexOf('TDD protocol (hook-enforced');
     if (tddProtocolStart >= 0) {
       const afterProtocol = prompt.indexOf('\n## ', tddProtocolStart + 1);
