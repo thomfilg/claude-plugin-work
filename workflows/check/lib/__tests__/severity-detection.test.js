@@ -70,6 +70,46 @@ describe('severity-detection', () => {
         'mid-line negation phrase must not suppress genuine finding'
       );
     });
+
+    it('does not suppress genuine finding with "no remaining" in description', () => {
+      const report = '🔴 CRITICAL: No remaining input validation after auth refactor';
+      const result = detectSeverityMarkers(report);
+      assert.equal(
+        result.critical.length,
+        1,
+        '"no remaining" in description must not suppress genuine finding'
+      );
+    });
+
+    it('does not suppress genuine finding with "none found" in description', () => {
+      const report = '🔴 CRITICAL: Security headers - none found in response';
+      const result = detectSeverityMarkers(report);
+      assert.equal(
+        result.critical.length,
+        1,
+        '"none found" in description must not suppress genuine finding'
+      );
+    });
+
+    it('does not suppress genuine finding with "all resolved" in description', () => {
+      const report = '🔴 CRITICAL: All user sessions resolved to wrong tenant';
+      const result = detectSeverityMarkers(report);
+      assert.equal(
+        result.critical.length,
+        1,
+        '"all...resolved" in description must not suppress genuine finding'
+      );
+    });
+
+    it('does not suppress genuine finding with "0 critical" in description', () => {
+      const report = '🔴 CRITICAL: Returns 0 critical errors instead of raising exception';
+      const result = detectSeverityMarkers(report);
+      assert.equal(
+        result.critical.length,
+        1,
+        '"0...critical" in description must not suppress genuine finding'
+      );
+    });
   });
 
   describe('inline code — false positive prevention', () => {

@@ -31,12 +31,12 @@ const IMPORTANT_RE = /🟡\s*IMPORTANT/i;
  * negation keyword and the anchor word (e.g., "No 🔴 CRITICAL issues").
  */
 const NEGATION_PATTERNS = [
-  /\bno\s+remaining\b/i,
+  /^\s*no\s+remaining\b/i,
   /^\s*\bno\b.*\bissues\b/i,
-  /\b0\s+.*(?:critical|important)\b/i,
-  /\bnone\s+found\b/i,
-  /\ball\b.*\bresolved\b/i,
-  /\ball\b.*\baddressed\b/i,
+  /^\s*0\s+.*(?:critical|important)\b/i,
+  /^\s*none\s+found\b/i,
+  /^\s*\ball\b.*\bresolved\b/i,
+  /^\s*\ball\b.*\baddressed\b/i,
   /^\s*\bno\b.*\bfound\b/i,
 ];
 
