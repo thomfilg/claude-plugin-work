@@ -100,18 +100,18 @@ describe('severity-detection', () => {
     });
   });
 
-  describe('severity label formatting — false positive prevention', () => {
-    it('does not detect review severity label **[🟡 Important]**', () => {
+  describe('severity label formatting — real findings in bracket format', () => {
+    it('detects real finding in **[🟡 Important]** format', () => {
       const report =
         '**[🟡 Important] Backward-compatibility regression: text-only severity patterns silently dropped**';
       const result = detectSeverityMarkers(report);
-      assert.equal(result.important.length, 0);
+      assert.equal(result.important.length, 1);
     });
 
-    it('does not detect review severity label **[🔴 CRITICAL]**', () => {
+    it('detects real finding in **[🔴 CRITICAL]** format', () => {
       const report = '**[🔴 CRITICAL] Missing input validation**';
       const result = detectSeverityMarkers(report);
-      assert.equal(result.critical.length, 0);
+      assert.equal(result.critical.length, 1);
     });
 
     it('does not detect severity justification lines with emoji', () => {

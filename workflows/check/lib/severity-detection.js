@@ -41,12 +41,14 @@ const NEGATION_PATTERNS = [
 ];
 
 /**
- * Severity label pattern — the review's own categorization markers.
- * E.g., `**[🟡 Important]**` or `**[🔴 CRITICAL]**` used to label suggestions.
- * Also matches severity justification lines like "Severity justification: 🟡 Important".
- * These are metadata, not genuine findings.
+ * Severity justification pattern — metadata lines that explain *why* a severity
+ * level was assigned, not actual findings.
+ * E.g., "Severity justification: 🟡 Important because ..."
+ *
+ * NOTE: `**[🔴 CRITICAL] Issue Title**` is the code-checker agent's actual finding
+ * format and must NOT be suppressed here — those are genuine findings.
  */
-const SEVERITY_LABEL_RE = /\*\*\[(?:🔴\s*CRITICAL|🟡\s*IMPORTANT)\]|severity\s+justification[:\s]/i;
+const SEVERITY_JUSTIFICATION_RE = /severity\s+justification[:\s]/i;
 
 /** Markdown heading prefix (e.g., `###`). */
 const HEADING_RE = /^\s*#{1,6}\s+/;
@@ -123,8 +125,8 @@ function detectSeverityMarkers(content) {
     // Filter false positives: severity marker inside inline code (backticks)
     if (isInsideInlineCode(line)) continue;
 
-    // Filter false positives: severity label formatting (e.g., **[🟡 Important]**)
-    if (SEVERITY_LABEL_RE.test(line)) continue;
+    // Filter false positives: severity justification metadata lines
+    if (SEVERITY_JUSTIFICATION_RE.test(line)) continue;
 
     // Filter false positives: negation context
     if (isNegated(line)) continue;
