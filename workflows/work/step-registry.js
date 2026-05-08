@@ -103,7 +103,7 @@ const RETRY_EDGES = {
   [STEPS.check]: [STEPS.implement], // check failed, fix code
   [STEPS.pr]: [STEPS.check], // GH-299: recheck on new commits
   [STEPS.ready]: [STEPS.check], // GH-299: recheck on new commits
-  [STEPS.follow_up]: [STEPS.implement, STEPS.check], // follow-up requires code changes; GH-299: recheck
+  [STEPS.follow_up]: [STEPS.ci, STEPS.implement, STEPS.check], // ci = forward (follow-up complete); implement/check = backward (needs fixes)
   [STEPS.ci]: [STEPS.implement, STEPS.check], // CI failed, fix code; GH-299: recheck
   [STEPS.cleanup]: [STEPS.check], // GH-299: recheck on new commits
   [STEPS.reports]: [STEPS.check], // GH-299: recheck on new commits
