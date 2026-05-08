@@ -91,7 +91,21 @@ function transitionStep(ticket, targetStep, deps) {
   // TDD gate: require evidence before leaving gated steps (always enforced)
   // NOTE: This validates TDD evidence for the CURRENT task only (per tasksMeta.currentTaskIndex).
   // The multi-task guard below separately blocks leaving implement when tasks remain.
-  if (TDD_GATED_STEPS.includes(currentStep) && currentStep !== targetStep) {
+  // Checkpoint tasks skip TDD entirely — they verify, they don't write code.
+  const _isCheckpointTask = (() => {
+    if (!taskNum) return false;
+    try {
+      const tasksFile = path.join(TASKS_BASE, safeTicket, 'tasks.md');
+      const content = fs.readFileSync(tasksFile, 'utf8');
+      const m = content.match(
+        new RegExp(`## Task ${taskNum}\\b[\\s\\S]*?### Type\\s*\\n(\\w+)`, 'm')
+      );
+      return m && m[1].trim().toLowerCase() === 'checkpoint';
+    } catch {
+      return false;
+    }
+  })();
+  if (TDD_GATED_STEPS.includes(currentStep) && currentStep !== targetStep && !_isCheckpointTask) {
     const { exists, parseError, evidence } = readTddEvidence(safeTicket, currentStep, taskNum);
     if (!exists || parseError) {
       const tddStatePath = path.resolve(__dirname, '..', 'work-implement', 'tdd-phase-state.js');

@@ -12,6 +12,24 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * Read task type from tasks.md.
+ * @param {string} tasksDir
+ * @param {number|string} taskNum - 1-indexed
+ * @returns {string|null}
+ */
+function resolveTaskType(tasksDir, taskNum) {
+  try {
+    const content = fs.readFileSync(path.join(tasksDir, 'tasks.md'), 'utf8');
+    const match = content.match(
+      new RegExp(`## Task ${taskNum}\\b[\\s\\S]*?### Type\\s*\\n(\\w+)`, 'm')
+    );
+    return match ? match[1].trim().toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolve the developer agent type from task metadata.
  *
  * Priority:
@@ -105,7 +123,28 @@ module.exports = function registerImplement(register) {
       }
     }
 
-    // Build compact prompt — agent reads files for details
+    // Detect task type for checkpoint handling
+    const taskType = resolveTaskType(tasksDir, taskNum);
+
+    if (taskType === 'checkpoint') {
+      // Checkpoint tasks: verify, don't implement. No TDD needed.
+      entry.agentPrompt = [
+        `## Checkpoint: Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
+        '',
+        '### What to verify',
+        `Read the acceptance criteria in ${path.join(tasksDir, 'tasks.md')} (find "## Task ${taskNum}" section).`,
+        'Run each verification command listed there and confirm all pass.',
+        '',
+        '### Rules',
+        '- Do NOT write or modify any code',
+        '- Do NOT record TDD evidence',
+        '- Run the test commands and report results',
+      ].join('\n');
+      entry.agentType = 'code-checker';
+      return;
+    }
+
+    // Build compact prompt for implementation tasks
     const devPrompt = [
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
