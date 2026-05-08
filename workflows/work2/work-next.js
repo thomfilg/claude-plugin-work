@@ -369,7 +369,13 @@ function getNextInstruction(ticketRaw, rework) {
     return {
       type: 'work_instruction',
       action: 'complete',
-      state: buildStateContext(_preCheckState),
+      state: {
+        ticket,
+        currentStep: 'complete',
+        progress: `${ALL_STEPS.length}/${ALL_STEPS.length}`,
+        completedSteps: ALL_STEPS,
+        remainingSteps: [],
+      },
       summary: `Workflow ${safeName} already complete. Session released.`,
     };
   }
