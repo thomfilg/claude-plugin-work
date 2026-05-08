@@ -131,10 +131,8 @@ module.exports = function registerImplement(register) {
       }
     }
 
-    // Extract task number and title from the plan generator prompt
-    const taskMatch = entry.agentPrompt.match(/Task (\d+) of (\d+)/);
+    // Reuse taskMatch/totalTasks from parallel check above
     const taskNum = taskMatch ? taskMatch[1] : null;
-    const totalTasks = taskMatch ? taskMatch[2] : null;
     const taskFlag = taskNum ? ` --task ${taskNum}` : '';
 
     // Extract task title from prompt
@@ -153,7 +151,6 @@ module.exports = function registerImplement(register) {
       }[currentPhase] || `${currentPhase} phase`;
 
     // Mark current progress in tasks.md (shows [-] for in-progress task)
-    const tasksDir = ctx.tasksDir || '';
     if (tasksDir) {
       try {
         const { markProgress } = require(path.join(__dirname, '..', 'mark-task-progress'));
