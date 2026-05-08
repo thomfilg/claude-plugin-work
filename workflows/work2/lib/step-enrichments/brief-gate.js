@@ -1,10 +1,11 @@
 /**
  * Brief-gate step enrichment.
  *
- * Overrides the brief_gate prompt with structured step-by-step instructions:
- * 1. Solve local questions (AI investigates codebase)
- * 2. Ask user remaining questions (AskUserQuestion)
- * 3. Apply resolutions via applyBriefResolutions()
+ * When there are cross-ticket/user questions → returns a blocked instruction
+ * that forces the orchestrator to stop and ask the user directly.
+ * The agent CANNOT answer cross-ticket questions on its own.
+ *
+ * When there are only local questions → auto-passes (resolved during spec).
  */
 
 'use strict';
@@ -22,64 +23,43 @@ module.exports = function registerBriefGate(register) {
     const briefGatePath = path.join(workDir, 'steps', 'brief-gate.js');
     const briefPath = path.join(tasksDir, 'brief.md');
 
-    const lines = ['## brief_gate: Resolve Open Questions\n'];
-    lines.push(`Brief file: ${briefPath}`);
-    lines.push(`Total blocking questions: ${questions.length}\n`);
-
-    if (localQs.length > 0 && userQs.length === 0) {
-      // Only local questions — these don't block the gate. They'll be resolved
-      // during spec phase when the AI investigates the codebase in depth.
-      lines.push('### LOCAL questions (non-blocking — resolved during spec phase)\n');
-      lines.push(
-        'These questions will be answered by the spec-writer agent when it analyzes the codebase.'
-      );
-      lines.push('No action needed here — the gate will pass automatically.\n');
+    // Only local questions — non-blocking, resolved during spec phase
+    if (userQs.length === 0) {
+      const lines = ['## brief_gate: Local Questions (non-blocking)\n'];
+      lines.push('These questions will be answered by the spec-writer when it analyzes the codebase.');
+      lines.push('No action needed — the gate passes automatically.\n');
       localQs.forEach((q, i) => {
         lines.push(`${i + 1}. "${q.questionText}" → deferred to spec`);
       });
-      lines.push('');
-    } else if (localQs.length > 0) {
-      lines.push('### LOCAL questions (investigate codebase yourself before asking user)\n');
-      localQs.forEach((q, i) => {
-        lines.push(`${i + 1}. "${q.questionText}"`);
-        if (q.rationale) lines.push(`   Rationale: ${q.rationale}`);
-      });
-      lines.push('');
+      entry.agentPrompt = lines.join('\n');
+      return;
     }
 
-    if (userQs.length > 0) {
-      lines.push(
-        `### Step ${localQs.length > 0 ? '2' : '1'}: Ask USER these questions (use AskUserQuestion)\n`
-      );
-      userQs.forEach((q, i) => {
-        lines.push(`${i + 1}. "${q.questionText}"`);
-        if (q.rationale) lines.push(`   Rationale: ${q.rationale}`);
-      });
-      lines.push('');
-    }
+    // Cross-ticket/user questions — MUST ask the user, not delegate to agent
+    // Override the delegate type to force a blocked instruction
+    entry.agentType = 'Bash';
+    entry.agentPrompt = 'echo "brief_gate: waiting for user answers"';
 
-    lines.push(
-      `### Step ${localQs.length > 0 && userQs.length > 0 ? '3' : '2'}: Apply resolutions\n`
-    );
-    lines.push('Run this command with your answers (JSON map of questionText → answer):');
-    lines.push('```bash');
-    lines.push(
-      `node -e "require('${briefGatePath}').applyBriefResolutions('${briefPath}', JSON.parse(process.argv[1]))" '<JSON_RESOLUTIONS>'`
-    );
-    lines.push('```');
-    lines.push('');
-    lines.push('Example:');
-    lines.push('```bash');
-    const example = {};
-    example[questions[0].questionText] = 'Your answer here';
-    lines.push(
-      `node -e "require('${briefGatePath}').applyBriefResolutions('${briefPath}', JSON.parse(process.argv[1]))" '${JSON.stringify(example)}'`
-    );
-    lines.push('```');
-    lines.push(
-      '\nIMPORTANT: Do NOT edit brief.md directly. Only applyBriefResolutions can modify it during brief_gate.'
-    );
+    // Store the questions and paths for the orchestrator to use
+    entry._briefGateUserQuestions = userQs;
+    entry._briefGateLocalQuestions = localQs;
+    entry._briefGatePath = briefGatePath;
+    entry._briefPath = briefPath;
 
-    entry.agentPrompt = lines.join('\n');
+    // Return a blocked instruction instead — the orchestrator must ask the user
+    entry._overrideInstruction = {
+      type: 'work_instruction',
+      action: 'blocked',
+      reason: 'brief_gate requires user input for cross-ticket questions',
+      userQuestions: userQs.map((q, i) => ({
+        index: i + 1,
+        question: q.questionText,
+        rationale: q.rationale || '',
+        scope: q.scope,
+      })),
+      localQuestions: localQs.map((q) => q.questionText),
+      applyCommand: `node -e "require('${briefGatePath}').applyBriefResolutions('${briefPath}', JSON.parse(process.argv[1]))" '<JSON_MAP>'`,
+      hint: 'Answer the userQuestions, then run the applyCommand with a JSON map of questionText → answer. Re-run work-next.js after.',
+    };
   });
 };

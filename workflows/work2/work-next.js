@@ -420,6 +420,11 @@ function getNextInstruction(ticketRaw, rework) {
 
   // Helper: log and return instruction
   function returnInstruction(entry, ctx) {
+    // Enrichments can override the entire instruction (e.g., brief_gate blocking for user input)
+    if (entry._overrideInstruction) {
+      log.instruction(entry._overrideInstruction);
+      return entry._overrideInstruction;
+    }
     const instr = buildInstruction(entry, ctx);
     log.instruction(instr);
     return instr;
