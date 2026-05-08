@@ -70,6 +70,7 @@ require('./brief-gate')(register);
 require('./spec-gate')(register);
 require('./context-inject')(register);
 require('./implement')(register);
+require('./check')(register);
 
 // --- Register dispatch-advance gates ---
 const { dispatchAdvanceGate: implementGate } = require('./implement-gate');
