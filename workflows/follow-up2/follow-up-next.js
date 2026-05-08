@@ -121,7 +121,8 @@ function getNextInstruction(ticketId, prNumber) {
   if (prNumber && !state.prNumber) state.prNumber = prNumber;
 
   const tasksDir = path.join(TASKS_BASE, ticketId);
-  const worktreeDir = path.join(WORKTREES_BASE, `${MAIN_WORKTREE_FOLDER}-${ticketId}`);
+  const candidateWorktree = path.join(WORKTREES_BASE, `${MAIN_WORKTREE_FOLDER}-${ticketId}`);
+  const worktreeDir = fs.existsSync(candidateWorktree) ? candidateWorktree : process.cwd();
   const ctx = {
     tasksDir,
     worktreeDir,

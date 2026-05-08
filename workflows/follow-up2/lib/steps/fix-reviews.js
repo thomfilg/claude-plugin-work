@@ -24,6 +24,7 @@ module.exports = function registerFixReviews(register) {
   register('fix-reviews', (state, ctx) => {
     const commentsScript = path.join(ctx.workScriptsDir, 'follow-up-pr-comments.js');
     const prNum = String(state.prNumber || '');
+    const scriptEnv = { ...process.env, WORK_TICKET_ID: state.ticketId };
 
     // First call: take snapshot
     if (!state._reviewSnapshotDone) {
@@ -32,10 +33,16 @@ module.exports = function registerFixReviews(register) {
           encoding: 'utf8',
           timeout: 30000,
           cwd: ctx.worktreeDir,
+          env: scriptEnv,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
-      } catch {
-        return null; // snapshot failed — skip reviews
+      } catch (err) {
+        const msg = err.stderr || err.stdout || err.message || 'unknown error';
+        return {
+          type: 'follow_up_instruction',
+          action: 'blocked',
+          reason: `Snapshot failed: ${String(msg).substring(0, 500)}`,
+        };
       }
       state._reviewSnapshotDone = true;
     }
@@ -51,12 +58,26 @@ module.exports = function registerFixReviews(register) {
       const result = execFileSync(
         process.execPath,
         [commentsScript, '--next-comment'],
-        { encoding: 'utf8', timeout: 15000, cwd: ctx.worktreeDir, stdio: ['pipe', 'pipe', 'pipe'] }
+        { encoding: 'utf8', timeout: 15000, cwd: ctx.worktreeDir, env: scriptEnv, stdio: ['pipe', 'pipe', 'pipe'] }
       );
       comment = JSON.parse(result);
-    } catch {
+    } catch (err) {
+      // Exit 0 + {"done":true} is handled above via JSON.parse
+      // Any other error (exit 1, parse error) = script failure
+      const exitCode = typeof err.status === 'number' ? err.status : -1;
+      if (exitCode === 1) {
+        // Script error — snapshot may not exist or was corrupted
+        delete state._reviewSnapshotDone;
+        const msg = err.stderr || err.stdout || err.message || 'unknown error';
+        return {
+          type: 'follow_up_instruction',
+          action: 'blocked',
+          reason: `--next-comment failed: ${String(msg).substring(0, 500)}`,
+        };
+      }
+      // JSON parse error on valid exit = no comments
       delete state._reviewSnapshotDone;
-      return null; // no more comments → advance
+      return null;
     }
 
     if (!comment || comment.done) {
@@ -68,7 +89,7 @@ module.exports = function registerFixReviews(register) {
         const raw = execFileSync(
           process.execPath,
           [commentsScript, '--status'],
-          { encoding: 'utf8', timeout: 10000, cwd: ctx.worktreeDir, stdio: ['pipe', 'pipe', 'pipe'] }
+          { encoding: 'utf8', timeout: 10000, cwd: ctx.worktreeDir, env: scriptEnv, stdio: ['pipe', 'pipe', 'pipe'] }
         );
         statusResult = JSON.parse(raw);
       } catch { /* ignore */ }
@@ -98,7 +119,7 @@ module.exports = function registerFixReviews(register) {
       const raw = execFileSync(
         process.execPath,
         [commentsScript, '--status'],
-        { encoding: 'utf8', timeout: 10000, cwd: ctx.worktreeDir, stdio: ['pipe', 'pipe', 'pipe'] }
+        { encoding: 'utf8', timeout: 10000, cwd: ctx.worktreeDir, env: scriptEnv, stdio: ['pipe', 'pipe', 'pipe'] }
       );
       const st = JSON.parse(raw);
       totalComments = st.total || '?';
