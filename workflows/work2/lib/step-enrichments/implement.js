@@ -94,8 +94,18 @@ module.exports = function registerImplement(register) {
         refactor: 'REFACTOR — clean up code',
       }[currentPhase] || `${currentPhase} phase`;
 
-    // Build compact prompt — agent reads files for details
+    // Mark current progress in tasks.md (shows [-] for in-progress task)
     const tasksDir = ctx.tasksDir || '';
+    if (tasksDir) {
+      try {
+        const { markProgress } = require(path.join(__dirname, '..', 'mark-task-progress'));
+        markProgress(tasksDir);
+      } catch {
+        /* fail-open */
+      }
+    }
+
+    // Build compact prompt — agent reads files for details
     const devPrompt = [
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
