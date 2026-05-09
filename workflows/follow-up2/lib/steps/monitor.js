@@ -11,6 +11,29 @@
 'use strict';
 
 const path = require('path');
+const { execFileSync } = require('child_process');
+
+/**
+ * Check if any workflow run for the PR's branch has already failed.
+ * GitHub Actions matrix jobs: individual shards complete and fail
+ * but `gh pr checks` still shows the parent as "in_progress".
+ * `gh run list` sees the run-level conclusion sooner.
+ */
+function hasFailedRuns(prInfo, worktreeDir) {
+  try {
+    const branch = prInfo.headRefName || prInfo.branch || '';
+    if (!branch) return false;
+    const raw = execFileSync(
+      'gh',
+      ['run', 'list', '--branch', branch, '--limit', '10', '--json', 'conclusion,status,name'],
+      { encoding: 'utf8', timeout: 10000, cwd: worktreeDir, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+    const runs = JSON.parse(raw);
+    return runs.some((r) => r.conclusion === 'failure');
+  } catch {
+    return false; // fail-open
+  }
+}
 
 module.exports = function registerMonitor(register) {
   register('monitor', (state, ctx) => {
@@ -43,6 +66,12 @@ module.exports = function registerMonitor(register) {
     } catch (err) {
       state.lastMonitorResult = { exitCode: 2, output: `Error checking CI: ${err.message}` };
       return null;
+    }
+
+    // Early fail-fast: gh pr checks shows matrix parent as "pending" while
+    // individual shards have already failed. Check run-level conclusions.
+    if (ci.status === 'pending' && hasFailedRuns(prInfo, ctx.worktreeDir)) {
+      ci.status = 'failing';
     }
 
     try {
