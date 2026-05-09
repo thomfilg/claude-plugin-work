@@ -160,14 +160,14 @@ module.exports = function registerMonitor(register) {
             ? '⏳ CI'
             : `CI:${ci.status || '?'}`;
 
-    // Most recent notable check
+    // Most recent notable check — full status line
     let detail = '';
     if (ci.failed && ci.failed.length > 0) {
-      detail = ci.failed[0].name;
+      detail = `✗ ${ci.failed[0].name} — failed`;
     } else if (ci.running && ci.running.length > 0) {
-      detail = ci.running[0].name;
+      detail = `⏳ ${ci.running[0].name} — running`;
     } else if (ci.passed && ci.passed.length > 0) {
-      detail = ci.passed[ci.passed.length - 1].name;
+      detail = `✓ ${ci.passed[ci.passed.length - 1].name} — passed`;
     }
 
     // Track when CI monitoring started (not session start)
