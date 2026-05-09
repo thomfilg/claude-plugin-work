@@ -15,7 +15,10 @@ module.exports = function registerPushRetry(register) {
     state.attempt = 0;
     delete state._monitorStartTime;
 
-    state._pushRetryCount = (state._pushRetryCount || 0) + 1;
+    // Only increment on fresh entry, not on re-entry after dispatch
+    if (state.dispatched !== 'push-retry') {
+      state._pushRetryCount = (state._pushRetryCount || 0) + 1;
+    }
     if (state._pushRetryCount >= (state.maxAttempts || 40)) {
       return {
         type: 'follow_up_instruction',

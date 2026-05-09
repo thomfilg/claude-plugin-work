@@ -54,9 +54,15 @@ describe('push-retry step', () => {
     assert.equal(state._monitorStartTime, undefined);
   });
 
-  it('increments push-retry counter', () => {
-    const state = makeState({ _pushRetryCount: 2, dispatched: 'push-retry' });
+  it('increments push-retry counter on fresh entry only', () => {
+    const state = makeState({ _pushRetryCount: 2 });
     pushRetry(state, ctx);
     assert.equal(state._pushRetryCount, 3);
+  });
+
+  it('does not increment push-retry counter on re-entry after dispatch', () => {
+    const state = makeState({ _pushRetryCount: 2, dispatched: 'push-retry' });
+    pushRetry(state, ctx);
+    assert.equal(state._pushRetryCount, 2);
   });
 });
