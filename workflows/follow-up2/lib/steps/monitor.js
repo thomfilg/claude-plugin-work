@@ -15,7 +15,7 @@ const path = require('path');
 module.exports = function registerMonitor(register) {
   register('monitor', (state, ctx) => {
     const followUpPr = require(path.join(ctx.workScriptsDir, 'follow-up-pr.js'));
-    const { getPRInfo, checkCI, getReviews, formatReport, decideNextAction } = followUpPr;
+    const { getPRInfo, checkCI, getReviews, formatReport } = followUpPr;
 
     const prArg = state.prNumber || undefined;
 
