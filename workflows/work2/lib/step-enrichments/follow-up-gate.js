@@ -36,7 +36,7 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
 
   // Advance: follow_up → ci
   ws.stepStatus.follow_up = 'completed';
-  ws.currentStep = ALL_STEPS.indexOf('ci');
+  ws.currentStep = ALL_STEPS.indexOf('ci') + 1;
   ws.stepStatus.ci = 'in_progress';
   delete ws._work2Dispatched;
   delete ws._work2DispatchedAction;

@@ -22,7 +22,7 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
       if (!ws) return null;
 
       ws.stepStatus.ci = 'completed';
-      ws.currentStep = ALL_STEPS.indexOf('cleanup');
+      ws.currentStep = ALL_STEPS.indexOf('cleanup') + 1;
       ws.stepStatus.cleanup = 'in_progress';
       delete ws._work2Dispatched;
       delete ws._work2DispatchedAction;
