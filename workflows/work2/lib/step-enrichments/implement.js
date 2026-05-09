@@ -80,10 +80,10 @@ module.exports = function registerImplement(register) {
     // Check for parallel tasks
     const tasksDir = ctx.tasksDir || '';
     const taskMatch = entry.agentPrompt.match(/Task (\d+) of (\d+)/);
-    const currentTaskNum = taskMatch ? parseInt(taskMatch[1], 10) : 1;
-    const totalTasks = taskMatch ? parseInt(taskMatch[2], 10) : 1;
+    const currentTaskNum = taskMatch ? parseInt(taskMatch[1], 10) : null;
+    const totalTasks = taskMatch ? parseInt(taskMatch[2], 10) : null;
 
-    if (tasksDir && totalTasks > 1) {
+    if (tasksDir && totalTasks && totalTasks > 1) {
       const { parallelTasks } = findReadyTasks(tasksDir, currentTaskNum - 1);
       if (parallelTasks.length > 1) {
         const allTasks = parseTasks(tasksDir);
