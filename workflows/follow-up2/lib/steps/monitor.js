@@ -131,6 +131,7 @@ module.exports = function registerMonitor(register) {
     const exitCode = ciOk && reviewsOk ? 0 : 1;
 
     state.lastMonitorResult = { exitCode, output: output.substring(0, 3000) };
+    state._ciRunningCount = ci.running ? ci.running.length : 0;
 
     // ── Compact CI status to stderr (saves context vs full report) ──
     const attempt = state.attempt || 1;

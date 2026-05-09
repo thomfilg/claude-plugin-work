@@ -69,10 +69,11 @@ module.exports = function registerTriage(register) {
     }
 
     // CI still running — wait before re-checking.
-    // Adaptive interval: 30s for first 5 attempts, then 60s.
+    // Adaptive interval: shorter when few checks remain.
     if (hasCiPending) {
       state.attempt = (state.attempt || 0) + 1;
-      const interval = state.attempt <= 5 ? 30 : 60;
+      const running = state._ciRunningCount || 0;
+      const interval = running <= 2 ? 15 : state.attempt <= 5 ? 30 : 60;
       waitSeconds(interval);
       state.currentStep = 'monitor';
       return null;
