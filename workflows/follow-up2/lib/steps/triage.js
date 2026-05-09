@@ -27,12 +27,11 @@ module.exports = function registerTriage(register) {
     const result = state.lastMonitorResult || {};
     const output = result.output || '';
 
-    // Increment attempt on every triage pass (not just pending/review loops)
-    state.attempt = (state.attempt || 0) + 1;
-
     // Max attempts guard — prevent infinite polling
+    // Attempt is incremented only for wait-loops (pending CI, bot reviews)
+    // not for actionable routes (fix-ci, fix-reviews, report)
     const maxAttempts = state.maxAttempts || 40;
-    if (state.attempt >= maxAttempts) {
+    if ((state.attempt || 0) >= maxAttempts) {
       return {
         type: 'follow_up_instruction',
         action: 'blocked',
@@ -72,6 +71,7 @@ module.exports = function registerTriage(register) {
     // CI still running — wait before re-checking.
     // Adaptive interval: 30s for first 5 attempts, then 60s.
     if (hasCiPending) {
+      state.attempt = (state.attempt || 0) + 1;
       const interval = state.attempt <= 5 ? 30 : 60;
       waitSeconds(interval);
       state.currentStep = 'monitor';
@@ -93,6 +93,7 @@ module.exports = function registerTriage(register) {
 
     // Bot still reviewing — wait before re-checking
     if (hasOngoingReview) {
+      state.attempt = (state.attempt || 0) + 1;
       const interval = state.attempt <= 5 ? 30 : 60;
       waitSeconds(interval);
       state.currentStep = 'monitor';
