@@ -263,7 +263,35 @@ describe('CI progression with mocked gh calls', () => {
     });
   });
 
-  describe('Scenario 6: bot still reviewing', () => {
+  describe('Scenario 6: pending checks + failure → fail fast', () => {
+    it('2 pending + 1 fail → triage → fix-ci (does not wait for pending)', () => {
+      setGhMocks({
+        checks: [
+          { name: 'Cursor Bugbot', bucket: 'pending' },
+          { name: 'E2E shard 1', bucket: 'pending' },
+          { name: 'Unit Tests', bucket: 'fail' },
+        ],
+      });
+
+      const state = {
+        ticketId: 'GH-123',
+        currentStep: 'monitor',
+        prNumber: 42,
+        attempt: 1,
+        maxAttempts: 40,
+        failureCategory: null,
+      };
+      monitor(state, ctx);
+      assert.equal(state.lastMonitorResult.exitCode, 1);
+
+      state.currentStep = 'triage';
+      triage(state, {});
+      assert.equal(state.failureCategory, 'ci_failure');
+      assert.equal(state.currentStep, 'fix-ci');
+    });
+  });
+
+  describe('Scenario 7: bot still reviewing', () => {
     it('pending bot detected in output → triage loops to monitor', () => {
       // Mock produces "Awaiting bot reviews" in formatReport when pendingBots present
       // But getReviews' REST→fallback heuristic requires CI checks still running
