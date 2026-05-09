@@ -143,32 +143,31 @@ module.exports = function registerMonitor(register) {
     const attempt = state.attempt || 1;
     const maxAttempts = state.maxAttempts || 40;
     const parts = [];
-    if (ci.running && ci.running.length > 0) parts.push(`${ci.running.length} running`);
-    if (ci.passed && ci.passed.length > 0) parts.push(`${ci.passed.length} passed`);
-    if (ci.failed && ci.failed.length > 0) parts.push(`${ci.failed.length} failed`);
-    if (ci.cancelled && ci.cancelled.length > 0) parts.push(`${ci.cancelled.length} cancelled`);
+    if (ci.running && ci.running.length > 0) parts.push(`⏳${ci.running.length}`);
+    if (ci.passed && ci.passed.length > 0) parts.push(`✓${ci.passed.length}`);
+    if (ci.failed && ci.failed.length > 0) parts.push(`✗${ci.failed.length}`);
+    if (ci.cancelled && ci.cancelled.length > 0) parts.push(`⊘${ci.cancelled.length}`);
     const pendingBots = reviews.pendingBots || [];
-    if (pendingBots.length > 0) parts.push(`${pendingBots.length} bot reviews pending`);
-    if (reviews.hasBlocking) parts.push(`${reviews.blocking.length} blocking reviews`);
+    if (pendingBots.length > 0) parts.push(`🤖${pendingBots.length}`);
+    if (reviews.hasBlocking) parts.push(`🚫${reviews.blocking.length}`);
 
     const statusLabel =
       ci.status === 'passing'
-        ? 'CI passed'
+        ? '✓ CI'
         : ci.status === 'failing'
-          ? 'CI FAILING'
+          ? '✗ CI'
           : ci.status === 'pending'
-            ? 'CI running'
-            : `CI: ${ci.status || 'unknown'}`;
+            ? '⏳ CI'
+            : `CI:${ci.status || '?'}`;
 
-    // Find most recent notable check for the detail line
-    let detailLine = '';
+    // Most recent notable check
+    let detail = '';
     if (ci.failed && ci.failed.length > 0) {
-      detailLine = `  ✗ ${ci.failed[0].name} — failed`;
+      detail = ci.failed[0].name;
     } else if (ci.running && ci.running.length > 0) {
-      detailLine = `  ⏳ ${ci.running[0].name} — running`;
+      detail = ci.running[0].name;
     } else if (ci.passed && ci.passed.length > 0) {
-      const last = ci.passed[ci.passed.length - 1];
-      detailLine = `  ✓ ${last.name} — passed`;
+      detail = ci.passed[ci.passed.length - 1].name;
     }
 
     // Track when CI monitoring started (not session start)
@@ -184,14 +183,11 @@ module.exports = function registerMonitor(register) {
       else elapsed = `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
     }
 
-    const header = elapsed
-      ? `${statusLabel} (${attempt}/${maxAttempts}) · ${elapsed}`
-      : `${statusLabel} (${attempt}/${maxAttempts})`;
-    const lines = [header];
-    if (parts.length > 0) lines.push(parts.join(' · '));
-    if (detailLine) lines.push(detailLine);
-
-    process.stderr.write(lines.join(' | ') + '\n');
+    const counts = parts.length > 0 ? parts.join(' ') : '';
+    const time = elapsed ? `${elapsed}` : '';
+    const poll = `${attempt}/${maxAttempts}`;
+    const seg = [statusLabel, poll, time, counts, detail].filter(Boolean).join(' · ');
+    process.stderr.write(seg + '\n');
 
     if (exitCode === 0) {
       state.currentStep = 'report';

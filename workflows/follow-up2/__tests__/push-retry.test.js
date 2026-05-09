@@ -27,11 +27,11 @@ function makeState(overrides = {}) {
 const ctx = { worktreeDir: '/tmp/test-worktree' };
 
 describe('push-retry step', () => {
-  it('blocks after max attempts', () => {
-    const state = makeState({ attempt: 39, maxAttempts: 40 });
+  it('blocks after max push-retry cycles', () => {
+    const state = makeState({ _pushRetryCount: 39, maxAttempts: 40 });
     const result = pushRetry(state, ctx);
     assert.equal(result.action, 'blocked');
-    assert.ok(result.reason.includes('Max attempts'));
+    assert.ok(result.reason.includes('Max push-retry'));
   });
 
   it('loops back to monitor when already dispatched', () => {
@@ -43,9 +43,20 @@ describe('push-retry step', () => {
     assert.equal(state.failureCategory, null);
   });
 
-  it('increments attempt counter', () => {
-    const state = makeState({ attempt: 5, dispatched: 'push-retry' });
+  it('resets attempt counter and monitor start time', () => {
+    const state = makeState({
+      attempt: 5,
+      _monitorStartTime: '2026-01-01',
+      dispatched: 'push-retry',
+    });
     pushRetry(state, ctx);
-    assert.equal(state.attempt, 6);
+    assert.equal(state.attempt, 0);
+    assert.equal(state._monitorStartTime, undefined);
+  });
+
+  it('increments push-retry counter', () => {
+    const state = makeState({ _pushRetryCount: 2, dispatched: 'push-retry' });
+    pushRetry(state, ctx);
+    assert.equal(state._pushRetryCount, 3);
   });
 });
