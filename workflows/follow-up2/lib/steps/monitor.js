@@ -151,10 +151,13 @@ module.exports = function registerMonitor(register) {
       detailLine = `  ✓ ${last.name} — passed`;
     }
 
-    // Elapsed time since follow-up started
+    // Track when CI monitoring started (not session start)
+    if (!state._monitorStartTime) state._monitorStartTime = new Date().toISOString();
+
+    // Elapsed time since CI monitoring started
     let elapsed = '';
-    if (state.startTime) {
-      const ms = Date.now() - new Date(state.startTime).getTime();
+    if (state._monitorStartTime) {
+      const ms = Date.now() - new Date(state._monitorStartTime).getTime();
       const secs = Math.floor(ms / 1000);
       if (secs < 60) elapsed = `${secs}s`;
       else if (secs < 3600) elapsed = `${Math.floor(secs / 60)}m ${secs % 60}s`;
