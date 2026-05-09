@@ -84,4 +84,7 @@ registerGate('check', checkGate);
 const { dispatchAdvanceGate: followUpGate } = require('./follow-up-gate');
 registerGate('follow_up', followUpGate);
 
+const { dispatchAdvanceGate: ciGate } = require('./ci-gate');
+registerGate('ci', ciGate);
+
 module.exports = { register, registerGate, enrich, runGate };
