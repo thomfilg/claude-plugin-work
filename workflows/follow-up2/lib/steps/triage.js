@@ -78,6 +78,14 @@ module.exports = function registerTriage(register) {
       return null;
     }
 
+    // Bot check still running with blocking reviews — wait for it to finish
+    if (hasBlockingReviews && botStillRunning) {
+      state.attempt = (state.attempt || 0) + 1;
+      waitSeconds(15);
+      state.currentStep = 'monitor';
+      return null;
+    }
+
     // CI still running — wait before re-checking.
     // Adaptive interval: shorter when few checks remain.
     if (hasCiPending) {
