@@ -87,9 +87,19 @@ module.exports = function registerImplement(register) {
       const { parallelTasks } = findReadyTasks(tasksDir, currentTaskNum - 1);
       if (parallelTasks.length > 1) {
         const allTasks = parseTasks(tasksDir);
+        const { readPhase } = require(path.join(__dirname, '..', '..', 'tdd-next.js'));
+        const phaseLabels = {
+          red: 'RED — write failing tests',
+          green: 'GREEN — make tests pass with minimum code',
+          refactor: 'REFACTOR — clean up code',
+        };
+
         const delegates = parallelTasks.map((num) => {
           const task = allTasks.find((t) => t.num === num);
           const agentType = resolveAgentType(tasksDir, num);
+          const tddState = readPhase(ticket.replace('#', 'GH-'), num);
+          const phase = tddState?.currentPhase || 'red';
+          const phaseLabel = phaseLabels[phase] || `${phase} phase`;
           return {
             type: 'task',
             agentType,
@@ -97,7 +107,7 @@ module.exports = function registerImplement(register) {
             prompt: [
               `## Implement Task ${num}/${totalTasks} — ${task?.title || 'Implementation'}`,
               '',
-              `### TDD Phase: RED — write failing tests`,
+              `### TDD Phase: ${phaseLabel}`,
               'Get phase commands:',
               '```bash',
               `node "${tddNextPath}" ${ticket} --task ${num}`,
