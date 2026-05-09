@@ -143,7 +143,7 @@ module.exports = function registerMonitor(register) {
     if (ci.cancelled && ci.cancelled.length > 0) parts.push(`⊘ ${ci.cancelled.length}`);
     const pendingBots = reviews.pendingBots || [];
     if (pendingBots.length > 0) parts.push(`🤖 ${pendingBots.length}`);
-    if (reviews.hasBlocking) parts.push(`🚫 ${reviews.blocking.length}`);
+    if (reviews.hasBlocking) parts.push(`💬 ${reviews.blocking.length}`);
 
     const statusLabel =
       ci.status === 'passing'
