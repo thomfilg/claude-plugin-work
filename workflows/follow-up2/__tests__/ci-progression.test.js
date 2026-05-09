@@ -1,5 +1,8 @@
 'use strict';
 
+// Skip delays in tests
+process.env.FOLLOW_UP2_NO_DELAY = '1';
+
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

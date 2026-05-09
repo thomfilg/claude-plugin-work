@@ -14,6 +14,14 @@
 
 'use strict';
 
+function waitSeconds(seconds) {
+  if (process.env.FOLLOW_UP2_NO_DELAY) return;
+  const { execSync } = require('child_process');
+  execSync(`node -e "setTimeout(()=>{},${seconds * 1000})"`, {
+    timeout: (seconds + 5) * 1000,
+  });
+}
+
 module.exports = function registerTriage(register) {
   register('triage', (state) => {
     const result = state.lastMonitorResult || {};
@@ -48,9 +56,12 @@ module.exports = function registerTriage(register) {
       return null;
     }
 
-    // CI still running — should not reach here if monitor runs full polling.
-    // Safety fallback: loop back to monitor.
+    // CI still running — wait before re-checking.
+    // Adaptive interval: 30s for first 5 attempts, then 60s.
     if (hasCiPending) {
+      state.attempt = (state.attempt || 0) + 1;
+      const interval = state.attempt <= 5 ? 30 : 60;
+      waitSeconds(interval);
       state.currentStep = 'monitor';
       return null;
     }
@@ -68,8 +79,11 @@ module.exports = function registerTriage(register) {
       return null;
     }
 
-    // Bot still reviewing — loop back to monitor and wait
+    // Bot still reviewing — wait before re-checking
     if (hasOngoingReview) {
+      state.attempt = (state.attempt || 0) + 1;
+      const interval = state.attempt <= 5 ? 30 : 60;
+      waitSeconds(interval);
       state.currentStep = 'monitor';
       return null;
     }

@@ -90,6 +90,56 @@ module.exports = function registerMonitor(register) {
 
     state.lastMonitorResult = { exitCode, output: output.substring(0, 3000) };
 
+    // ── Compact CI status to stderr (saves context vs full report) ──
+    const attempt = state.attempt || 1;
+    const maxAttempts = state.maxAttempts || 40;
+    const parts = [];
+    if (ci.running && ci.running.length > 0) parts.push(`${ci.running.length} running`);
+    if (ci.passed && ci.passed.length > 0) parts.push(`${ci.passed.length} passed`);
+    if (ci.failed && ci.failed.length > 0) parts.push(`${ci.failed.length} failed`);
+    if (ci.cancelled && ci.cancelled.length > 0) parts.push(`${ci.cancelled.length} cancelled`);
+    const pendingBots = reviews.pendingBots || [];
+    if (pendingBots.length > 0) parts.push(`${pendingBots.length} bot reviews pending`);
+    if (reviews.hasBlocking) parts.push(`${reviews.blocking.length} blocking reviews`);
+
+    const statusLabel =
+      ci.status === 'passing'
+        ? 'CI passed'
+        : ci.status === 'failing'
+          ? 'CI FAILING'
+          : ci.status === 'pending'
+            ? 'CI running'
+            : `CI: ${ci.status || 'unknown'}`;
+
+    // Find most recent notable check for the detail line
+    let detailLine = '';
+    if (ci.failed && ci.failed.length > 0) {
+      detailLine = `  ✗ ${ci.failed[0].name} — failed`;
+    } else if (ci.running && ci.running.length > 0) {
+      detailLine = `  ⏳ ${ci.running[0].name} — running`;
+    } else if (ci.passed && ci.passed.length > 0) {
+      const last = ci.passed[ci.passed.length - 1];
+      detailLine = `  ✓ ${last.name} — passed`;
+    }
+
+    // Elapsed time since follow-up started
+    let elapsed = '';
+    if (state.startTime) {
+      const ms = Date.now() - new Date(state.startTime).getTime();
+      const secs = Math.floor(ms / 1000);
+      if (secs < 60) elapsed = `${secs}s`;
+      else if (secs < 3600) elapsed = `${Math.floor(secs / 60)}m ${secs % 60}s`;
+      else elapsed = `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+    }
+
+    const header = elapsed
+      ? `${statusLabel} (${attempt}/${maxAttempts}) · ${elapsed}`
+      : `${statusLabel} (${attempt}/${maxAttempts})`;
+    const lines = [header];
+    if (parts.length > 0) lines.push(parts.join(' · '));
+    if (detailLine) lines.push(detailLine);
+    process.stderr.write(lines.join('\n') + '\n');
+
     if (exitCode === 0) {
       state.currentStep = 'report';
     }
