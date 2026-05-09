@@ -27,6 +27,16 @@ module.exports = function registerTriage(register) {
     const result = state.lastMonitorResult || {};
     const output = result.output || '';
 
+    // Max attempts guard — prevent infinite polling
+    const maxAttempts = state.maxAttempts || 40;
+    if ((state.attempt || 0) >= maxAttempts) {
+      return {
+        type: 'follow_up_instruction',
+        action: 'blocked',
+        reason: `Max polling attempts (${maxAttempts}) reached. CI still not resolved.\nLast status: ${output.substring(0, 300)}`,
+      };
+    }
+
     // Error (exit 2) — unrecoverable
     if (result.exitCode === 2) {
       return {
