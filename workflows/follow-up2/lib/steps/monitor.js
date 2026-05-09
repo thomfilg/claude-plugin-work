@@ -143,13 +143,13 @@ module.exports = function registerMonitor(register) {
     const attempt = state.attempt || 1;
     const maxAttempts = state.maxAttempts || 40;
     const parts = [];
-    if (ci.running && ci.running.length > 0) parts.push(`⏳${ci.running.length}`);
-    if (ci.passed && ci.passed.length > 0) parts.push(`✓${ci.passed.length}`);
-    if (ci.failed && ci.failed.length > 0) parts.push(`✗${ci.failed.length}`);
-    if (ci.cancelled && ci.cancelled.length > 0) parts.push(`⊘${ci.cancelled.length}`);
+    if (ci.running && ci.running.length > 0) parts.push(`🔄 ${ci.running.length}`);
+    if (ci.passed && ci.passed.length > 0) parts.push(`🟢 ${ci.passed.length}`);
+    if (ci.failed && ci.failed.length > 0) parts.push(`🔴 ${ci.failed.length}`);
+    if (ci.cancelled && ci.cancelled.length > 0) parts.push(`⚪ ${ci.cancelled.length}`);
     const pendingBots = reviews.pendingBots || [];
-    if (pendingBots.length > 0) parts.push(`🤖${pendingBots.length}`);
-    if (reviews.hasBlocking) parts.push(`🚫${reviews.blocking.length}`);
+    if (pendingBots.length > 0) parts.push(`🤖 ${pendingBots.length}`);
+    if (reviews.hasBlocking) parts.push(`🚫 ${reviews.blocking.length}`);
 
     const statusLabel =
       ci.status === 'passing'
@@ -183,11 +183,13 @@ module.exports = function registerMonitor(register) {
       else elapsed = `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
     }
 
-    const counts = parts.length > 0 ? parts.join(' ') : '';
-    const time = elapsed ? `${elapsed}` : '';
+    const counts = parts.length > 0 ? parts.join(' ╎ ') : '';
+    const time = elapsed || '';
     const poll = `${attempt}/${maxAttempts}`;
-    const seg = [statusLabel, poll, time, counts, detail].filter(Boolean).join(' · ');
-    process.stderr.write(seg + '\n');
+    const line1 = [statusLabel, poll, time, counts].filter(Boolean).join(' · ');
+    process.stderr.write(line1 + '\n');
+    if (detail) process.stderr.write(detail + '\n');
+    process.stderr.write('\n');
 
     if (exitCode === 0) {
       state.currentStep = 'report';
