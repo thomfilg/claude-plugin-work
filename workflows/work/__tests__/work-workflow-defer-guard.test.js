@@ -7,7 +7,7 @@
  * Run: node --test workflows/work/__tests__/work-workflow-defer-guard.test.js
  */
 
-const { describe, it, after } = require('node:test');
+const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('child_process');
 const path = require('path');
@@ -16,6 +16,10 @@ const fs = require('fs');
 const HOOK_PATH = path.join(__dirname, '..', 'work.workflow.js');
 const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
 const TASKS_BASE = getConfig.require('TASKS_BASE');
+const { cleanupTestDirs } = require('../../lib/__tests__/test-cleanup');
+
+// Clean up leftover TEST-* dirs from previous interrupted runs
+before(() => cleanupTestDirs());
 
 // Construct state filename dynamically to avoid hook static analysis (Vector 3)
 const STATE_BASENAME = ['.work', '-state', '.json'].join('');
@@ -109,14 +113,7 @@ function cleanupTicket(ticket) {
 // ─── Global Cleanup ─────────────────────────────────────────────────────────
 
 after(() => {
-  try {
-    const entries = fs.readdirSync(TASKS_BASE);
-    for (const entry of entries) {
-      if (entry.startsWith('TEST-DEFER-')) {
-        fs.rmSync(path.join(TASKS_BASE, entry), { recursive: true, force: true });
-      }
-    }
-  } catch {}
+  cleanupTestDirs();
   try {
     const tmpDir = require('os').tmpdir();
     const tmpFiles = fs
