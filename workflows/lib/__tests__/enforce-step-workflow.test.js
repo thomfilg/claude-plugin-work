@@ -15,11 +15,7 @@ const path = require('path');
 const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-step-workflow.js');
 const getConfig = require(path.join(__dirname, '..', 'get-config'));
 const TASKS_BASE = getConfig.require('TASKS_BASE');
-const { cleanupTestDirs } = require('./test-cleanup');
-
-// Clean up leftover TEST-* dirs from previous interrupted runs
-before(() => cleanupTestDirs());
-after(() => cleanupTestDirs());
+// TEST-* dirs are cleaned globally by scripts/run-tests.sh via test-cleanup.js
 
 // Use a unique ticket ID per test run to avoid interference
 // Convention: all test tickets MUST start with TEST- for cleanup (see test-cleanup.js)
