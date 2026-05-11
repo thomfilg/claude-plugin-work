@@ -87,38 +87,30 @@ grep -r "pattern" <paths>
 
 ### Planning Artifact Verification (MANDATORY)
 
-You MUST read and cross-reference ALL planning documents. Do NOT skip any.
+**Your prompt includes a pre-loaded "Verification Context" section** with 4 layers extracted from the planning artifacts (ticket → brief → spec → tasks). This context is injected automatically by the check2 orchestrator — you do NOT need to read the artifact files yourself.
 
-**Step 1 — Read ALL planning artifacts from `${TASKS_BASE}/${TICKET_ID}/`:**
-- `ticket.json` — original ticket requirements from Jira/Linear/GitHub
-- `brief.md` — product brief with requirements (P0/P1/P2), constraints, acceptance criteria
-- `spec.md` — technical spec with architecture decisions, reuse audit, data model, API changes
-- `tasks.md` — task breakdown with deliverables and acceptance criteria per task
+**Verify each layer in order against the actual code diff:**
 
-**Step 2 — Verify brief.md requirements against code:**
-- Read brief.md IN FULL
-- Extract every requirement (P0, P1, P2)
-- For EACH requirement: grep the PR diff or codebase to find evidence it was implemented
-- Mark as DELIVERED only if you can cite specific code/diff evidence
+**Layer 1 — Ticket:** Does the code change address what the ticket asked for?
+- Compare the ticket title/description against the PR diff
 
-**Step 3 — Verify spec.md architecture decisions against code:**
-- Read spec.md IN FULL
-- Check the Reuse Audit — were existing components actually reused (not duplicated)?
-- Check Architecture Decisions — was the proposed approach followed?
-- Check Files to Create/Modify — were all listed files actually changed?
+**Layer 2 — Brief:** Were all P0/P1 requirements implemented?
+- For EACH requirement listed: grep the code diff to find evidence
+- Mark DELIVERED only with a code citation (file:line or diff excerpt)
 
-**Step 4 — Verify tasks.md deliverables against code:**
-- Read tasks.md IN FULL
-- For EACH `## Task N` section:
-  - Read each deliverable (`- [ ] N.X`)
-  - Grep/read the actual code to verify it was implemented
-  - Check each `### Acceptance Criteria` item against the code
-- Use the `## Requirement Coverage` table to ensure no requirement was missed
-- Report gaps between what was planned and what was delivered
+**Layer 3 — Spec:** Were architecture decisions followed?
+- Were existing components reused (not duplicated)?
+- Were all listed files actually modified?
 
-**Step 5 — Check for regressions:**
+**Layer 4 — Tasks:** Were all task deliverables completed?
+- For EACH task's acceptance criteria: verify against the actual code
+- Check the Requirement Coverage table — every requirement must be DELIVERED
+
+**Layer 5 — Regressions:**
 - Verify no files outside `### Suggested Scope` were modified unexpectedly
 - Check that existing functionality wasn't broken (imports, exports still intact)
+
+**If the Verification Context section is missing from your prompt**, fall back to reading the files directly from `${TASKS_BASE}/${TICKET_ID}/` (ticket.json, brief.md, spec.md, tasks.md).
 
 ### Spec Verification Output
 
