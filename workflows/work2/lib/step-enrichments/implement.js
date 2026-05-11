@@ -102,10 +102,22 @@ module.exports = function registerImplement(register) {
           const phaseLabel = phaseLabels[phase] || `${phase} phase`;
           const parallelTestCmd = task?.testCommand || null;
 
+          const parallelScope = task?.suggestedScope || '';
           const parallelTddSection = parallelTestCmd
             ? [
-                '### Testing (automated)',
-                `Tests run automatically when you finish: \`${parallelTestCmd}\``,
+                ...(parallelScope
+                  ? [
+                      '### Files to implement',
+                      ...parallelScope
+                        .split('\n')
+                        .map((l) => l.trim())
+                        .filter(Boolean)
+                        .map((l) => `- \`${l.replace(/^[-*+]\s+/, '').replace(/`/g, '')}\``),
+                      '',
+                    ]
+                  : []),
+                '### Verification (automated — runs when you stop)',
+                `\`${parallelTestCmd}\``,
                 'If tests fail, you will be blocked from stopping and must fix the code.',
                 'Do NOT run tdd-phase-state.js or tdd-next.js manually.',
               ]
@@ -290,10 +302,33 @@ module.exports = function registerImplement(register) {
     }
 
     // Build compact prompt for implementation tasks
+    // Get suggested scope for the current task
+    let taskScope = '';
+    try {
+      const { parseTasks: _pt } = require(
+        path.join(__dirname, '..', '..', '..', 'work', 'task-parser')
+      );
+      const _tasks = _pt(tasksDir);
+      const _t = _tasks?.find((t) => t.num === Number(taskNum));
+      taskScope = _t?.suggestedScope || '';
+    } catch {
+      /* fail-open */
+    }
+
     const tddSection = hasGateTDD
       ? [
-          '### Testing (automated)',
-          `Tests run automatically when you finish. The Stop hook executes:`,
+          ...(taskScope
+            ? [
+                '### Files to implement',
+                ...taskScope
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .filter(Boolean)
+                  .map((l) => `- \`${l.replace(/^[-*+]\s+/, '').replace(/`/g, '')}\``),
+                '',
+              ]
+            : []),
+          '### Verification (automated — runs when you stop)',
           '```',
           taskTestCommand,
           '```',
