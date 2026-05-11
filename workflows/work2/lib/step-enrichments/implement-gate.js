@@ -51,39 +51,42 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
   const totalTasks = ws.tasksMeta.tasks.length;
   const taskNum = currentIdx + 1; // 1-indexed
 
-  // Check evidence exists AND is valid (red+green cycle complete)
-  const { exists, evidence } = readTddEvidence(safeName, stepName, taskNum);
-  if (!exists) {
-    // Store retry reason so the implement enrichment can tell the agent what went wrong
-    ws._tddRetryReason = `No TDD evidence found at task${taskNum}/tdd-phase.json. You MUST run the TDD phase commands before this task can advance.`;
-    ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
-    saveWorkState(safeName, ws);
-    return null;
-  }
-
-  // For test-only and checkpoint tasks, RED-only evidence is sufficient
-  // (tests written and failing — GREEN requires the implementation from the next task)
+  // Check task type BEFORE evidence — checkpoint tasks are exempt from TDD entirely
   const taskType = resolveTaskType(ctx.tasksDir, taskNum);
-  const isTestOnly = taskType === 'test' || taskType === 'checkpoint';
-
-  if (isTestOnly) {
-    // Accept any evidence (even RED-only) for test/checkpoint tasks.
-    // Also accept exception evidence (e.g., config-only, mechanical-refactor).
-    const hasAnyCycle = Array.isArray(evidence?.cycles) && evidence.cycles.length > 0;
-    const hasException = evidence?.currentPhase === 'exception' && evidence?.exception;
-    if (!hasAnyCycle && !hasException) {
-      ws._tddRetryReason = `TDD evidence exists but has no cycles or exception. Record at least one RED phase or use exception mode.`;
+  if (taskType === 'checkpoint') {
+    // Checkpoints don't need TDD evidence — skip directly to advance
+    // (checkpoint tasks verify, they don't implement)
+  } else {
+    // Non-checkpoint: check evidence exists AND is valid
+    const { exists, evidence } = readTddEvidence(safeName, stepName, taskNum);
+    if (!exists) {
+      ws._tddRetryReason = `No TDD evidence found at task${taskNum}/tdd-phase.json. You MUST run the TDD phase commands before this task can advance.`;
       ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
       saveWorkState(safeName, ws);
       return null;
     }
-  } else {
-    const validation = validateTddEvidence(evidence);
-    if (!validation.valid) {
-      ws._tddRetryReason = `TDD evidence invalid: ${validation.reason}`;
-      ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
-      saveWorkState(safeName, ws);
-      return null;
+
+    const isTestOnly = taskType === 'test';
+
+    if (isTestOnly) {
+      // Accept any evidence (even RED-only) for test tasks.
+      // Also accept exception evidence (e.g., config-only, mechanical-refactor).
+      const hasAnyCycle = Array.isArray(evidence?.cycles) && evidence.cycles.length > 0;
+      const hasException = evidence?.currentPhase === 'exception' && evidence?.exception;
+      if (!hasAnyCycle && !hasException) {
+        ws._tddRetryReason = `TDD evidence exists but has no cycles or exception. Record at least one RED phase or use exception mode.`;
+        ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
+        saveWorkState(safeName, ws);
+        return null;
+      }
+    } else {
+      const validation = validateTddEvidence(evidence);
+      if (!validation.valid) {
+        ws._tddRetryReason = `TDD evidence invalid: ${validation.reason}`;
+        ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
+        saveWorkState(safeName, ws);
+        return null;
+      }
     }
   }
 
