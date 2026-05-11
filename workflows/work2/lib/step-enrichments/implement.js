@@ -191,8 +191,55 @@ module.exports = function registerImplement(register) {
       return;
     }
 
+    // Check for TDD retry feedback from implement-gate
+    const tddPhasePath = path.join(
+      path.dirname(tddNextPath),
+      '..',
+      'work-implement',
+      'tdd-phase-state.js'
+    );
+    let retryHeader = '';
+    try {
+      const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
+      const wsCheck = JSON.parse(
+        fs.readFileSync(
+          path.join(
+            getConfig.require('TASKS_BASE'),
+            ticket.replace('#', 'GH-'),
+            '.work-state.json'
+          ),
+          'utf8'
+        )
+      );
+      if (wsCheck._tddRetryReason) {
+        retryHeader = [
+          `## TDD EVIDENCE RETRY (attempt ${wsCheck._tddRetryCount || '?'})`,
+          '',
+          `Previous attempt did not produce valid TDD evidence.`,
+          `**Reason:** ${wsCheck._tddRetryReason}`,
+          '',
+          `You MUST complete the TDD cycle. Run these commands IN ORDER:`,
+          '```bash',
+          `node "${tddPhasePath}" init ${ticket}${taskFlag}`,
+          `node "${tddPhasePath}" record-red ${ticket}${taskFlag} --cmd "<your test command>"`,
+          `node "${tddPhasePath}" transition ${ticket} green${taskFlag}`,
+          `node "${tddPhasePath}" record-green ${ticket}${taskFlag} --cmd "<your test command>"`,
+          `node "${tddPhasePath}" transition ${ticket} refactor${taskFlag}`,
+          `node "${tddPhasePath}" record-refactor ${ticket}${taskFlag} --cmd "<your test command>"`,
+          '```',
+          'Replace `<your test command>` with the actual test command for this task.',
+          '',
+          '---',
+          '',
+        ].join('\n');
+      }
+    } catch {
+      /* fail-open — no retry info available */
+    }
+
     // Build compact prompt for implementation tasks
     const devPrompt = [
+      retryHeader,
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
       `### TDD Phase: ${phaseLabel}`,
