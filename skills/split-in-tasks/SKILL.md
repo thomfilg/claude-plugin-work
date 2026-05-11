@@ -208,6 +208,13 @@ After saving, output:
 
 ## Output Format
 
+### Checkbox Legend
+All deliverables start with `[ ]`. The workflow engine updates them automatically:
+- `[ ]` — not started
+- `[-]` — in progress (TDD initialized)
+- `[x]` — implementation done (TDD evidence recorded)
+- `[v]` — verified by completion-checker
+
 ### Task format (implementation tasks)
 
 ```markdown

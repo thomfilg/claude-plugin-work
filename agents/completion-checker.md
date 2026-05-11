@@ -43,6 +43,13 @@ You are a completion checker agent. Your function is to:
 [COMPLETE] or [INCOMPLETE - missing: X, Y, Z]
 ```
 
+### Task Checkbox Legend
+When verification is COMPLETE, the orchestrator automatically marks tasks as verified in tasks.md:
+- `[ ]` not started
+- `[-]` in progress
+- `[x]` implementation done (TDD passed)
+- `[v]` verified by completion-checker
+
 ## Rules
 
 1. Be objective and direct

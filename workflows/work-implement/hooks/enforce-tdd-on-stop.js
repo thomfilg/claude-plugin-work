@@ -3,7 +3,7 @@
 /**
  * SubagentStop hook: Block developer agents from stopping without TDD evidence.
  *
- * Wired into developer agent definitions (NOT hooks.json).
+ * Wired as SubagentStop in hooks.json (targets developer-* agents only).
  * When a developer agent tries to stop during the implement step,
  * this hook checks if TDD evidence exists for the current task.
  * If not, it blocks the stop and tells the agent the ONE next command to run.
@@ -23,6 +23,20 @@
 
 const fs = require('fs');
 const path = require('path');
+
+// ─── Read stdin (SubagentStop hook data) ────────────────────────────────────
+// Prevent infinite loops: if stop_hook_active is set, another stop hook
+// is already running — exit immediately to avoid re-entrance.
+let _hookData = {};
+try {
+  const input = fs.readFileSync(0, 'utf-8');
+  _hookData = JSON.parse(input);
+} catch {
+  /* empty/invalid — use default */
+}
+if (_hookData.stop_hook_active) {
+  process.exit(0);
+}
 
 // ─── Detect ticket ID ────────────────────────────────────────────────────────
 // Don't rely solely on WORK_TICKET_ID env var — detect from cwd/branch as fallback
