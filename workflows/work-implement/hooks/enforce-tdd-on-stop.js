@@ -198,7 +198,7 @@ if (testCommand) {
   //   RED:   run ALL tests (need full failure picture)
   //   GREEN/REFACTOR: fail-fast on first failure (no point running rest)
   let phaseTestCommand = testCommand;
-  if (currentPhase === 'green' || currentPhase === 'refactor') {
+  if (effectivePhase === 'green' || effectivePhase === 'refactor') {
     // Append fail-fast flags for common test runners
     // vitest/jest: --bail    playwright: already fails fast by default
     // Only append if not already present
@@ -280,7 +280,7 @@ if (testCommand) {
     }
 
     // If we recorded GREEN or REFACTOR, allow stop
-    if (currentPhase === 'green' || currentPhase === 'refactor') {
+    if (effectivePhase === 'green' || effectivePhase === 'refactor') {
       debugLog('PASS: ' + effectivePhase + ' recorded, allow stop');
       process.exit(0);
     }
