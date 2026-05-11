@@ -27,6 +27,33 @@ module.exports = function registerPhase1(register) {
 
     state.dispatched = '5_phase1_agents';
 
+    // Build structured verification context from planning artifacts
+    let completionContext = '';
+    try {
+      const { buildCompletionContext } = require(
+        path.join(__dirname, '..', 'step-enrichments', 'completion-context')
+      );
+      completionContext = buildCompletionContext(ctx.tasksDir, state.ticketId);
+    } catch {
+      completionContext = '(Could not load planning artifacts — verify against PR diff only)';
+    }
+
+    const completionPrompt = [
+      `Verify ALL requirements for ${state.ticketId} against the actual code.`,
+      `Write report to ${reportFolder}/completion.check.md. Changes hash: ${changesHash}`,
+      '',
+      '# Verification Context (pre-loaded from planning artifacts)',
+      '',
+      completionContext,
+      '',
+      '# Instructions',
+      '',
+      'Verify each layer in order (ticket → brief → spec → tasks).',
+      'For EACH requirement/deliverable: grep or read the actual code to find evidence.',
+      'Mark DELIVERED only with a code citation (file:line or diff excerpt).',
+      'Mark INCOMPLETE if any P0 requirement lacks code evidence.',
+    ].join('\n');
+
     return {
       type: 'check_instruction',
       action: 'execute',
@@ -43,7 +70,7 @@ module.exports = function registerPhase1(register) {
           {
             agentType: 'work-workflow:completion-checker',
             description: 'Verify requirements',
-            prompt: `Verify requirements for ${state.ticketId}. Write report to ${reportFolder}/completion.check.md. Changes hash: ${changesHash}`,
+            prompt: completionPrompt,
           },
         ],
         note: 'Launch ALL agents in parallel using multiple Task() calls in one message. Wait for all to complete.',

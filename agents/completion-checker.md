@@ -85,53 +85,49 @@ grep -r "pattern" <paths>
 
 **⚠️ NEVER check main branch files when verifying PR work - the changes aren't merged yet!**
 
-### Completion Indicators
-Consider COMPLETE if ANY of these are true:
-- 3+ tool calls that produce output (Edit, Write, update_cells, WebFetch, WebSearch, etc.)
-- 2+ completion phrases ("done", "ready", "complete", "here is", "finished")
-- Information was provided with sources/evidence
-- Requested action was performed (search, update, create, send, etc.)
+### Planning Artifact Verification (MANDATORY)
 
-### Task Types to Verify
-- **Research**: Information provided? Sources included?
-- **Spreadsheet**: Cells updated? Data correct?
-- **Document**: Created/updated? Content matches request?
-- **Communication**: Message drafted/sent?
-- **Organization**: Items listed? Structure clear?
-- **Analysis**: Conclusions drawn? Data reviewed?
+You MUST read and cross-reference ALL planning documents. Do NOT skip any.
 
-### Planning Artifact Validation
+**Step 1 — Read ALL planning artifacts from `${TASKS_BASE}/${TICKET_ID}/`:**
+- `ticket.json` — original ticket requirements from Jira/Linear/GitHub
+- `brief.md` — product brief with requirements (P0/P1/P2), constraints, acceptance criteria
+- `spec.md` — technical spec with architecture decisions, reuse audit, data model, API changes
+- `tasks.md` — task breakdown with deliverables and acceptance criteria per task
 
-When checking ticket work, look for planning documents in the tasks folder:
-```
-${TASKS_BASE}/${TICKET_ID}/brief.md
-${TASKS_BASE}/${TICKET_ID}/spec.md
-${TASKS_BASE}/${TICKET_ID}/tasks.md
-${TASKS_BASE}/${TICKET_ID}/**/pre-planning.md
-```
+**Step 2 — Verify brief.md requirements against code:**
+- Read brief.md IN FULL
+- Extract every requirement (P0, P1, P2)
+- For EACH requirement: grep the PR diff or codebase to find evidence it was implemented
+- Mark as DELIVERED only if you can cite specific code/diff evidence
 
-If these files exist, cross-reference them against the implementation:
-- **Components to Create** — Were all listed new components created?
-- **Reusable Components** — Were listed existing components imported (not duplicated)?
-- **Endpoints** — Were all listed API endpoints implemented?
-- **E2E Test Scenarios** — Were tests written for the listed scenarios?
-- **Implementation Order** — Were all steps completed?
+**Step 3 — Verify spec.md architecture decisions against code:**
+- Read spec.md IN FULL
+- Check the Reuse Audit — were existing components actually reused (not duplicated)?
+- Check Architecture Decisions — was the proposed approach followed?
+- Check Files to Create/Modify — were all listed files actually changed?
 
-**If `tasks.md` exists**, it is the most granular source of truth. Check each task's deliverables and acceptance criteria:
-- Walk through each `## Task N` section
-- For each `- [ ] N.X` deliverable, verify the artifact exists and works
-- Check that each task's `### Acceptance Criteria` are met
-- Use the `## Requirement Coverage` table at the bottom to ensure no requirement was missed
+**Step 4 — Verify tasks.md deliverables against code:**
+- Read tasks.md IN FULL
+- For EACH `## Task N` section:
+  - Read each deliverable (`- [ ] N.X`)
+  - Grep/read the actual code to verify it was implemented
+  - Check each `### Acceptance Criteria` item against the code
+- Use the `## Requirement Coverage` table to ensure no requirement was missed
+- Report gaps between what was planned and what was delivered
 
-Report gaps between what was planned and what was delivered.
+**Step 5 — Check for regressions:**
+- Verify no files outside `### Suggested Scope` were modified unexpectedly
+- Check that existing functionality wasn't broken (imports, exports still intact)
 
 ### Spec Verification Output
 
 If a spec-verify output exists for this ticket, read it. Spec-verify failures are deterministic checks — they MUST result in an INCOMPLETE status. These checks cannot be overridden by subjective judgment.
 
 ### Final Guidelines
-6. If assistant provided the requested information/action → COMPLETE
-8. If assistant said "ready", "done", "delivered", "implemented", "here is", "completed" → COMPLETE
+- NEVER mark as COMPLETE based on what the agent SAID. Only mark COMPLETE based on what the CODE SHOWS.
+- "The agent said it's done" is NOT evidence. Grep the code and verify.
+- Every DELIVERED requirement must have a code citation (file:line or diff excerpt).
 
 ## Verification Iron Law
 
