@@ -58,7 +58,16 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
     // (checkpoint tasks verify, they don't implement)
   } else {
     // Non-checkpoint: check evidence exists AND is valid
-    const { exists, evidence } = readTddEvidence(safeName, stepName, taskNum);
+    // Use ctx.tasksDir-derived TASKS_BASE (not the global one which points to plugin dir)
+    const gateTasksBase = ctx.tasksDir ? path.dirname(ctx.tasksDir) : null;
+    const { exists, evidence } = gateTasksBase
+      ? require(path.join(__dirname, '..', '..', '..', 'work', 'tdd-enforcement')).readTddEvidence(
+          gateTasksBase,
+          safeName,
+          stepName,
+          taskNum
+        )
+      : readTddEvidence(safeName, stepName, taskNum);
     if (!exists) {
       ws._tddRetryReason = `No TDD evidence found at task${taskNum}/tdd-phase.json. You MUST run the TDD phase commands before this task can advance.`;
       ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
