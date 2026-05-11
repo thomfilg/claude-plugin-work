@@ -80,10 +80,6 @@
           },
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work-implement/hooks/work-implement-enforce.js"
-          },
-          {
-            "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work/hooks/work-require-implement.js"
           },
           {
@@ -198,18 +194,6 @@
           {
             "type": "command",
             "command": "CLAUDE_HOOK_TYPE=PreCompact node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/lib/hooks/session-guard.js"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "developer-nodejs-tdd|developer-react-senior|developer-react-ui-architect|developer-devops",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work-implement/hooks/enforce-tdd-on-stop.js",
-            "timeout": 310
           }
         ]
       }

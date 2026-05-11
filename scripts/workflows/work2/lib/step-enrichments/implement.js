@@ -123,14 +123,17 @@ module.exports = function registerImplement(register) {
                 '### How to verify',
                 `Run \`${parallelTestCmd}\` and ensure it passes before stopping.`,
               ]
-            : [
-                `### TDD Phase: ${phaseLabel}`,
-                'Get phase commands:',
-                '```bash',
-                `node "${tddNextPath}" ${ticket} --task ${num}`,
-                '```',
-                'Record evidence at each phase (init → red → green → refactor).',
-              ];
+            : [];
+          // TDD phase instructions disabled — gate auto-synthesizes evidence.
+          // Originally fell through to:
+          //   `### TDD Phase: ${phaseLabel}`,
+          //   'Get phase commands:',
+          //   '```bash',
+          //   `node "${tddNextPath}" ${ticket} --task ${num}`,
+          //   '```',
+          //   'Record evidence at each phase (init → red → green → refactor).',
+          // phaseLabel reference kept above so eslint no-unused doesn't fire.
+          void phaseLabel;
 
           return {
             type: 'task',
@@ -217,51 +220,39 @@ module.exports = function registerImplement(register) {
       return;
     }
 
-    // Check for TDD retry feedback from implement-gate
-    const tddPhasePath = path.join(
-      path.dirname(tddNextPath),
-      '..',
-      'work-implement',
-      'tdd-phase-state.js'
-    );
-    let retryHeader = '';
-    try {
-      const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
-      const wsCheck = JSON.parse(
-        fs.readFileSync(
-          path.join(
-            getConfig.require('TASKS_BASE'),
-            ticket.replace('#', 'GH-'),
-            '.work-state.json'
-          ),
-          'utf8'
-        )
-      );
-      if (wsCheck._tddRetryReason) {
-        retryHeader = [
-          `## TDD EVIDENCE RETRY (attempt ${wsCheck._tddRetryCount || '?'})`,
-          '',
-          `Previous attempt did not produce valid TDD evidence.`,
-          `**Reason:** ${wsCheck._tddRetryReason}`,
-          '',
-          `You MUST complete the TDD cycle. Run these commands IN ORDER:`,
-          '```bash',
-          `node "${tddPhasePath}" init ${ticket}${taskFlag}`,
-          `node "${tddPhasePath}" record-red ${ticket}${taskFlag} --cmd "<your test command>"`,
-          `node "${tddPhasePath}" transition ${ticket} green${taskFlag}`,
-          `node "${tddPhasePath}" record-green ${ticket}${taskFlag} --cmd "<your test command>"`,
-          `node "${tddPhasePath}" transition ${ticket} refactor${taskFlag}`,
-          `node "${tddPhasePath}" record-refactor ${ticket}${taskFlag} --cmd "<your test command>"`,
-          '```',
-          'Replace `<your test command>` with the actual test command for this task.',
-          '',
-          '---',
-          '',
-        ].join('\n');
-      }
-    } catch {
-      /* fail-open — no retry info available */
-    }
+    // TDD retry feedback DISABLED — gate auto-synthesizes evidence; agents no longer record.
+    const retryHeader = '';
+    // Original block (kept for reference):
+    // const tddPhasePath = path.join(
+    //   path.dirname(tddNextPath), '..', 'work-implement', 'tdd-phase-state.js'
+    // );
+    // try {
+    //   const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
+    //   const wsCheck = JSON.parse(fs.readFileSync(
+    //     path.join(getConfig.require('TASKS_BASE'), ticket.replace('#', 'GH-'), '.work-state.json'),
+    //     'utf8'
+    //   ));
+    //   if (wsCheck._tddRetryReason) {
+    //     retryHeader = [
+    //       `## TDD EVIDENCE RETRY (attempt ${wsCheck._tddRetryCount || '?'})`,
+    //       '',
+    //       `Previous attempt did not produce valid TDD evidence.`,
+    //       `**Reason:** ${wsCheck._tddRetryReason}`,
+    //       '',
+    //       `You MUST complete the TDD cycle. Run these commands IN ORDER:`,
+    //       '```bash',
+    //       `node "${tddPhasePath}" init ${ticket}${taskFlag}`,
+    //       `node "${tddPhasePath}" record-red ${ticket}${taskFlag} --cmd "<your test command>"`,
+    //       `node "${tddPhasePath}" transition ${ticket} green${taskFlag}`,
+    //       `node "${tddPhasePath}" record-green ${ticket}${taskFlag} --cmd "<your test command>"`,
+    //       `node "${tddPhasePath}" transition ${ticket} refactor${taskFlag}`,
+    //       `node "${tddPhasePath}" record-refactor ${ticket}${taskFlag} --cmd "<your test command>"`,
+    //       '```',
+    //       'Replace `<your test command>` with the actual test command for this task.',
+    //       '', '---', '',
+    //     ].join('\n');
+    //   }
+    // } catch { /* fail-open */ }
 
     // Detect E2E tasks by checking suggested scope and task type for e2e/playwright patterns
     let e2eRules = '';
@@ -326,15 +317,19 @@ module.exports = function registerImplement(register) {
           taskTestCommand,
           '```',
         ]
-      : [
-          `### TDD Phase: ${phaseLabel}`,
-          '',
-          '### Next step',
-          'Run this command and follow its output:',
-          '```bash',
-          `node "${tddNextPath}" ${ticket}${taskFlag}`,
-          '```',
-        ];
+      : [];
+    // TDD phase fallback DISABLED — gate auto-synthesizes evidence.
+    // Original else branch:
+    //   `### TDD Phase: ${phaseLabel}`,
+    //   '',
+    //   '### Next step',
+    //   'Run this command and follow its output:',
+    //   '```bash',
+    //   `node "${tddNextPath}" ${ticket}${taskFlag}`,
+    //   '```',
+    void phaseLabel;
+    void tddNextPath;
+    void taskFlag;
 
     const devPrompt = [
       retryHeader,
