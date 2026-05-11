@@ -138,3 +138,23 @@ jobs:
 ```
 
 *Notes: Credentials stored in GitHub Secrets. Consider using OIDC for improved security. Add rollback steps for resilience.*
+
+---
+
+### Authoritative test commands
+
+When this agent does run tests (e.g. for IaC validation scripts, deployment helpers), use these env vars (do NOT invent your own):
+
+| Env var | When |
+|---|---|
+| `$TEST_UNIT_COMMAND` | unit tests |
+| `$TEST_INTEGRATION_COMMAND` | integration tests |
+| `$TEST_E2E_COMMAND` | e2e tests |
+
+Substitute the literal `$CHANGED_FILES` placeholder with the files you changed (`git diff --name-only HEAD`), then `eval` the command:
+
+```bash
+CHANGED_FILES="scripts/deploy.ts" eval "$TEST_UNIT_COMMAND"
+```
+
+If empty/unset, fall back to the project's standard command. Never run the full suite during implementation.

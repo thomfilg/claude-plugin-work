@@ -44,9 +44,15 @@ The plugin uses environment variables for configuration, resolved through `scrip
 | Variable | Default | Purpose |
 |---|---|---|
 | `DEV_COMMAND` | (auto-detect) | Custom dev server start command |
-| `TEST_COMMAND` | (auto-detect) | Custom test runner command |
+| `TEST_COMMAND` | (auto-detect) | Legacy single test runner (prefer `TEST_*_COMMAND` below) |
 | `LINT_COMMAND` | (auto-detect) | Custom linter command |
 | `TYPECHECK_COMMAND` | (auto-detect) | Custom typecheck command |
+| `TEST_UNIT_COMMAND` | | Per-suite scoped test command for **dev** (use `$CHANGED_FILES`). Example: `pnpm test $CHANGED_FILES` |
+| `TEST_INTEGRATION_COMMAND` | | Per-suite scoped integration test command for **dev** |
+| `TEST_E2E_COMMAND` | | Per-suite scoped e2e test command for **dev** |
+| `SCRIPT_RUN_AFFECTED_UNIT` | | Affected-suite script for **/check** (computes affected internally). Example: `pnpm exec tsx ./scripts/run-affected-tests.ts --unit` |
+| `SCRIPT_RUN_AFFECTED_INTEGRATION` | | Affected-suite script for **/check** |
+| `SCRIPT_RUN_AFFECTED_E2E` | | Affected-suite script for **/check** |
 | `SESSION_GUARD_ENABLED` | `1` | Prevent concurrent /work sessions |
 | `TASK_REVIEW_MAX_FIXES` | `2` | Max fix rounds per task review |
 | `READ_DOCS_ON_BRIEF` | | Paths to docs the brief-writer should read |

@@ -88,6 +88,22 @@ From these documents, extract:
    - Ensure database operations are properly tested with test databases or mocks
    - Aim for high code coverage but prioritize meaningful tests over metrics
 
+   **Authoritative test commands** — use these env vars (do NOT invent your own):
+
+   | Env var | When |
+   |---|---|
+   | `$TEST_UNIT_COMMAND` | unit tests during implementation |
+   | `$TEST_INTEGRATION_COMMAND` | integration tests during implementation |
+   | `$TEST_E2E_COMMAND` | e2e tests during implementation |
+
+   The literal `$CHANGED_FILES` placeholder inside these commands must be substituted with the space-separated list of files YOU changed. Compute it via `git diff --name-only HEAD` (or your own change tracking) and prefix the command:
+
+   ```bash
+   CHANGED_FILES="path/to/your/file.ts other/file.ts" eval "$TEST_INTEGRATION_COMMAND"
+   ```
+
+   If the env var is empty/unset, fall back to the project's standard command from package.json (e.g. `pnpm test:integration <path>`). Never run the full test suite during implementation — always scope to changed files.
+
 5. **Code Optimization Process**: After initial implementation, you:
    - Analyze time and space complexity
    - Implement caching strategies where appropriate

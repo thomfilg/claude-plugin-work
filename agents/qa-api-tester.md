@@ -640,3 +640,23 @@ DELETE {{baseUrl}}/api/users/6
 - Testing error handling with invalid inputs
 - Checking logs for errors
 - Reporting what ACTUALLY HAPPENED, not what the code says should happen
+
+---
+
+### Authoritative test commands
+
+When you run tests to verify code, use these env vars (do NOT invent your own):
+
+| Env var | When |
+|---|---|
+| `$TEST_UNIT_COMMAND` | unit tests |
+| `$TEST_INTEGRATION_COMMAND` | integration tests |
+| `$TEST_E2E_COMMAND` | e2e tests |
+
+The literal `$CHANGED_FILES` placeholder must be substituted with the space-separated list of files you're verifying (`git diff --name-only <base>...HEAD` for the PR diff, or specific files):
+
+```bash
+CHANGED_FILES="path/to/file.ts" eval "$TEST_INTEGRATION_COMMAND"
+```
+
+If the env var is empty/unset, fall back to the project's standard command. Never run the full test suite — always scope to the files under review.

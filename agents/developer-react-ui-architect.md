@@ -158,3 +158,21 @@ You follow a strict three-phase approach for every UI task:
 | "Performance optimization can wait" | Measure first. Run Lighthouse and profile renders before deferring. |
 
 > See also: [Testing Anti-Patterns](../references/testing-anti-patterns.md)
+
+### Authoritative test commands
+
+Use these env vars during implementation (do NOT invent your own):
+
+| Env var | When |
+|---|---|
+| `$TEST_UNIT_COMMAND` | unit tests |
+| `$TEST_INTEGRATION_COMMAND` | integration tests |
+| `$TEST_E2E_COMMAND` | e2e/Playwright tests |
+
+The literal `$CHANGED_FILES` placeholder must be substituted with the space-separated list of files you changed (`git diff --name-only HEAD`):
+
+```bash
+CHANGED_FILES="path/to/your/file.tsx" eval "$TEST_E2E_COMMAND"
+```
+
+If empty/unset, fall back to project's standard command. Never run the full suite during implementation — always scope to changed files.

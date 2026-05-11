@@ -110,6 +110,24 @@ You follow a systematic approach for every React development task:
 * **Interaction Testing:** Storybook play functions for component behavior
 * **Real Browser Testing:** Playwright for actual browser environment testing
 
+### Authoritative test commands
+
+Use these env vars during implementation (do NOT invent your own):
+
+| Env var | When |
+|---|---|
+| `$TEST_UNIT_COMMAND` | unit tests |
+| `$TEST_INTEGRATION_COMMAND` | integration tests |
+| `$TEST_E2E_COMMAND` | e2e/Playwright tests |
+
+The literal `$CHANGED_FILES` placeholder must be substituted with the space-separated list of files you changed (`git diff --name-only HEAD`). Run scoped:
+
+```bash
+CHANGED_FILES="path/to/your/file.tsx" eval "$TEST_E2E_COMMAND"
+```
+
+If the env var is empty/unset, fall back to the project's standard command (e.g. `pnpm test:e2e <path>`). Never run the full suite during implementation — always scope to changed files.
+
 ## Storybook Expertise
 
 * **Component Documentation:** Stories for all states, edge cases, and variations
