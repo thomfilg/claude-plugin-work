@@ -27,7 +27,29 @@ const path = require('path');
 // ─── Early exit: not in implement step ───────────────────────────────────────
 
 const ticketId = process.env.WORK_TICKET_ID;
+
+// ─── Debug logger ────────────────────────────────────────────────────────────
+function debugLog(message) {
+  try {
+    const _getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
+    const _tasksBase = _getConfig('TASKS_BASE');
+    if (!_tasksBase || !ticketId) return;
+    let _safeId = ticketId;
+    try {
+      _safeId = require(path.join(__dirname, '..', '..', 'lib', 'config')).safeTicketId(ticketId);
+    } catch {
+      _safeId = ticketId.replace(/[/\\:\0]/g, '_');
+    }
+    const debugPath = path.join(_tasksBase, _safeId, 'debug-tdd-hook.md');
+    const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    fs.appendFileSync(debugPath, `${timestamp} | ${message}\n`);
+  } catch {
+    /* best-effort */
+  }
+}
+
 if (!ticketId) {
+  debugLog('SKIP: no WORK_TICKET_ID');
   process.exit(0);
 }
 
@@ -38,10 +60,12 @@ try {
   const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
   TASKS_BASE = getConfig('TASKS_BASE');
 } catch {
+  debugLog('SKIP: no TASKS_BASE (config error)');
   process.exit(0); // can't resolve config — fail-open
 }
 
 if (!TASKS_BASE) {
+  debugLog('SKIP: no TASKS_BASE');
   process.exit(0);
 }
 
@@ -66,20 +90,24 @@ try {
     ? Object.entries(ws.stepStatus).find(([, v]) => v === 'in_progress')?.[0]
     : null;
   if (currentStep !== 'implement') {
+    debugLog('SKIP: step is not implement (step=' + currentStep + ')');
     process.exit(0);
   }
 
   if (!ws.tasksMeta || !Array.isArray(ws.tasksMeta.tasks)) {
+    debugLog('SKIP: no tasksMeta');
     process.exit(0);
   }
 
   const idx = ws.tasksMeta.currentTaskIndex ?? 0;
   taskNum = Math.min(idx + 1, ws.tasksMeta.tasks.length) || undefined;
 } catch {
+  debugLog('SKIP: cannot read work state');
   process.exit(0); // can't read state — fail-open
 }
 
 if (!taskNum) {
+  debugLog('SKIP: no taskNum');
   process.exit(0);
 }
 
@@ -92,6 +120,7 @@ try {
   const tasksDir = path.join(TASKS_BASE, safeTicket);
   const taskType = resolveTaskType(tasksDir, taskNum);
   if (taskType === 'checkpoint') {
+    debugLog('SKIP: checkpoint task');
     process.exit(0);
   }
 } catch {
@@ -112,10 +141,12 @@ try {
     valid = validateTddEvidence(result.evidence).valid;
   }
 } catch {
+  debugLog('SKIP: evidence check failed');
   process.exit(0); // can't check evidence — fail-open
 }
 
 if (exists && valid) {
+  debugLog('PASS: evidence valid, allow stop');
   process.exit(0); // evidence valid — allow stop
 }
 
@@ -135,6 +166,7 @@ try {
 }
 
 if (testCommand) {
+  debugLog('AUTO-RUN: test command found: ' + testCommand);
   const tddStatePath = path.join(__dirname, '..', 'tdd-phase-state.js');
   const tddEnv = { ...process.env, WORK_TDD_TOKEN_SKIP: '1' };
   const execOpts = { encoding: 'utf-8', timeout: 300000, stdio: 'pipe', env: tddEnv };
@@ -249,10 +281,12 @@ if (testCommand) {
 
     // If we recorded GREEN or REFACTOR, allow stop
     if (currentPhase === 'green' || currentPhase === 'refactor') {
+      debugLog('PASS: ' + effectivePhase + ' recorded, allow stop');
       process.exit(0);
     }
 
     // RED recorded — tests fail, block agent to fix them
+    debugLog('BLOCK: RED recorded, tests failing');
     process.stderr.write(`TDD: RED phase recorded for task ${taskNum} — tests are failing.\n`);
     process.stderr.write(`Fix the failing tests, then try to stop again.\n`);
     process.exit(2);
@@ -271,6 +305,7 @@ if (testCommand) {
     }
 
     // Test command exists but recording failed — block the agent
+    debugLog('BLOCK: recording failed');
     process.stderr.write(`BLOCKED: TDD evidence recording failed for task ${taskNum}.\n`);
     process.stderr.write(`Test command: ${testCommand}\n`);
     process.stderr.write(`Fix the issue and try stopping again.\n`);
@@ -295,4 +330,5 @@ try {
   // fail-open
 }
 
+debugLog('BYPASS: no test command in tasks.md');
 process.exit(0);
