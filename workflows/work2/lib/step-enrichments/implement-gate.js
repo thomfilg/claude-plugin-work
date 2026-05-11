@@ -67,10 +67,12 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
   const isTestOnly = taskType === 'test' || taskType === 'checkpoint';
 
   if (isTestOnly) {
-    // Accept any evidence (even RED-only) for test/checkpoint tasks
+    // Accept any evidence (even RED-only) for test/checkpoint tasks.
+    // Also accept exception evidence (e.g., config-only, mechanical-refactor).
     const hasAnyCycle = Array.isArray(evidence?.cycles) && evidence.cycles.length > 0;
-    if (!hasAnyCycle) {
-      ws._tddRetryReason = `TDD evidence exists but has no cycles. Record at least one RED phase.`;
+    const hasException = evidence?.currentPhase === 'exception' && evidence?.exception;
+    if (!hasAnyCycle && !hasException) {
+      ws._tddRetryReason = `TDD evidence exists but has no cycles or exception. Record at least one RED phase or use exception mode.`;
       ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
       saveWorkState(safeName, ws);
       return null;
