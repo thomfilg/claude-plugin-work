@@ -122,7 +122,20 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
     }
   }
 
-  // All tasks done with valid evidence — update checkboxes, allow transition
+  // All tasks done with valid evidence — mark last task completed and update checkboxes.
+  // Without this, the last task stays with status !== 'completed' in tasksMeta because
+  // task-advance only runs for non-last tasks (currentIdx < totalTasks - 1 branch above).
+  // The complete step's guard at work-state.js:278 correctly blocks if any task isn't
+  // marked completed — so we must record the bookkeeping here.
+  try {
+    execFileSync(
+      process.execPath,
+      [path.join(workDir, 'work-state.js'), 'task-advance', safeName],
+      { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' }
+    );
+  } catch {
+    /* fail-open — task-advance returns { done: true } for last task, which is fine */
+  }
   if (ctx.tasksDir) {
     try {
       markProgress(ctx.tasksDir);
