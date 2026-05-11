@@ -243,7 +243,11 @@ if (testCommand) {
       /* best-effort */
     }
 
-    // Fall through to manual block below
+    // Test command exists but recording failed — block the agent
+    process.stderr.write(`BLOCKED: TDD evidence recording failed for task ${taskNum}.\n`);
+    process.stderr.write(`Test command: ${testCommand}\n`);
+    process.stderr.write(`Fix the issue and try stopping again.\n`);
+    process.exit(2);
   }
 }
 
