@@ -292,29 +292,19 @@ module.exports = function registerImplement(register) {
       /* fail-open */
     }
 
-    // Check if task has a ### Test Command (gate-driven TDD)
+    // Read task metadata (testCommand, suggestedScope) from task-parser
     let hasGateTDD = false;
     let taskTestCommand = null;
-    try {
-      const { parseTasks } = require(path.join(__dirname, '..', '..', '..', 'work', 'task-parser'));
-      const allTasks = parseTasks(tasksDir);
-      const currentTask = allTasks?.find((t) => t.num === Number(taskNum));
-      taskTestCommand = currentTask?.testCommand || null;
-      hasGateTDD = !!taskTestCommand;
-    } catch {
-      /* fail-open */
-    }
-
-    // Build compact prompt for implementation tasks
-    // Get suggested scope for the current task
     let taskScope = '';
     try {
-      const { parseTasks: _pt } = require(
+      const { parseTasks: parseFullTasks } = require(
         path.join(__dirname, '..', '..', '..', 'work', 'task-parser')
       );
-      const _tasks = _pt(tasksDir);
-      const _t = _tasks?.find((t) => t.num === Number(taskNum));
-      taskScope = _t?.suggestedScope || '';
+      const allParsedTasks = parseFullTasks(tasksDir);
+      const currentTask = allParsedTasks?.find((t) => t.num === Number(taskNum));
+      taskTestCommand = currentTask?.testCommand || null;
+      taskScope = currentTask?.suggestedScope || '';
+      hasGateTDD = !!taskTestCommand;
     } catch {
       /* fail-open */
     }
