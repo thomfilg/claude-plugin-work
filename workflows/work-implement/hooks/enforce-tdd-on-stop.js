@@ -24,9 +24,19 @@
 const fs = require('fs');
 const path = require('path');
 
-// ─── Early exit: not in implement step ───────────────────────────────────────
-
-const ticketId = process.env.WORK_TICKET_ID;
+// ─── Detect ticket ID ────────────────────────────────────────────────────────
+// Don't rely solely on WORK_TICKET_ID env var — detect from cwd/branch as fallback
+let ticketId = process.env.WORK_TICKET_ID;
+if (!ticketId) {
+  try {
+    const { getCurrentTaskId } = require(
+      path.join(__dirname, '..', '..', 'lib', 'scripts', 'get-ticket-id')
+    );
+    ticketId = getCurrentTaskId();
+  } catch {
+    // Can't detect ticket — will exit below
+  }
+}
 
 // ─── Debug logger ────────────────────────────────────────────────────────────
 function debugLog(message) {
