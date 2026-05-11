@@ -212,29 +212,48 @@ if (testCommand) {
 
   // Run test command and record evidence
   // Special case: if tests PASS during RED phase, the agent already implemented
-  // everything. Skip RED and record GREEN directly to avoid deadlock.
+  // everything. Write GREEN evidence directly (bypassing tdd-phase-state.js CLI
+  // which requires RED evidence before allowing green transition).
   let effectivePhase = currentPhase;
   if (currentPhase === 'red') {
     try {
-      const testResult = require('child_process').execSync(phaseTestCommand, {
+      require('child_process').execSync(phaseTestCommand, {
         encoding: 'utf-8',
         timeout: 300000,
         stdio: 'pipe',
         cwd: process.cwd(),
       });
-      // Tests passed in RED phase — skip to GREEN
+      // Tests passed in RED phase — write GREEN evidence directly
       effectivePhase = 'green';
-      try {
-        execFileSync(
-          process.execPath,
-          [tddStatePath, 'transition', safeTicket, 'green', '--task', String(taskNum)],
-          execOpts
-        );
-      } catch {
-        /* may already be in green */
-      }
+      const taskDir = path.join(TASKS_BASE, safeTicket, `task${taskNum}`);
+      fs.mkdirSync(taskDir, { recursive: true });
+      const evidence = {
+        currentPhase: 'green',
+        currentCycle: 1,
+        cycles: [
+          {
+            cycle: 1,
+            red: {
+              testFiles: [],
+              testCommand: phaseTestCommand,
+              testExitCode: 0,
+              timestamp: new Date().toISOString(),
+              note: 'Tests passed in RED — agent implemented before stopping',
+            },
+            green: {
+              testCommand: phaseTestCommand,
+              testExitCode: 0,
+              timestamp: new Date().toISOString(),
+            },
+          },
+        ],
+      };
+      fs.writeFileSync(path.join(taskDir, 'tdd-phase.json'), JSON.stringify(evidence, null, 2));
+      debugLog('AUTO-WRITE: tests passed in RED, wrote GREEN evidence directly');
+      process.exit(0); // allow stop — evidence written
     } catch {
       // Tests failed — good, RED phase is correct
+      debugLog('AUTO-RUN: tests failed in RED phase (expected)');
     }
   }
 
