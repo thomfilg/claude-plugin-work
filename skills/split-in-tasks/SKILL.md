@@ -262,8 +262,22 @@ All deliverables start with `[ ]`. The workflow engine updates them automaticall
 
 ### Test Command
 <shell command to run tests for this task — supports && chaining for multiple test suites>
-Example: `pnpm test:e2e -- tests/e2e/specs/admin/general-settings.spec.ts --retries 0 && pnpm test:unit components/admin/settings.test.ts`
-Note: The implement Stop hook runs this command automatically to record TDD evidence. Agents don't need to run tdd-phase-state.js manually.
+
+**PREFER env-var-based commands** so the project can override the runner via `.envrc`. Use the per-suite env vars (set `$CHANGED_FILES` to the task's deliverable files):
+
+```bash
+CHANGED_FILES="<task's files, space-separated>" eval "$TEST_INTEGRATION_COMMAND"
+```
+
+Available env vars: `$TEST_UNIT_COMMAND`, `$TEST_INTEGRATION_COMMAND`, `$TEST_E2E_COMMAND`. Chain with `&&` for multiple suites.
+
+Example with env vars (preferred):
+`CHANGED_FILES="components/admin/settings.tsx tests/e2e/specs/admin/general-settings.spec.ts" eval "$TEST_UNIT_COMMAND" && eval "$TEST_E2E_COMMAND"`
+
+Example with hardcoded fallback (use only when env vars aren't set in the project):
+`pnpm test:e2e -- tests/e2e/specs/admin/general-settings.spec.ts --retries 0 && pnpm test:unit components/admin/settings.test.ts`
+
+Note: The implement gate runs this command automatically to record TDD evidence. Agents don't need to run tdd-phase-state.js manually.
 
 ### Suggested Scope (optional — include when file paths are inferable from the spec)
 - `<path/to/likely/file.ts>`
