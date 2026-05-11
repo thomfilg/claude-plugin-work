@@ -120,10 +120,8 @@ module.exports = function registerImplement(register) {
                       '',
                     ]
                   : []),
-                '### Verification (automated — runs when you stop)',
-                `\`${parallelTestCmd}\``,
-                'If tests fail, you will be blocked from stopping and must fix the code.',
-                'Do NOT run tdd-phase-state.js or tdd-next.js manually.',
+                '### How to verify',
+                `Run \`${parallelTestCmd}\` and ensure it passes before stopping.`,
               ]
             : [
                 `### TDD Phase: ${phaseLabel}`,
@@ -322,12 +320,11 @@ module.exports = function registerImplement(register) {
                 '',
               ]
             : []),
-          '### Verification (automated — runs when you stop)',
+          '### How to verify',
+          'Run this and ensure it passes before stopping:',
           '```',
           taskTestCommand,
           '```',
-          'If tests fail, you will be blocked from stopping and must fix the code.',
-          'Do NOT run tdd-phase-state.js or tdd-next.js — the hook handles evidence recording.',
         ]
       : [
           `### TDD Phase: ${phaseLabel}`,
