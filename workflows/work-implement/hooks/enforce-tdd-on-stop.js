@@ -179,12 +179,39 @@ if (testCommand) {
   }
 
   // Run test command and record evidence
+  // Special case: if tests PASS during RED phase, the agent already implemented
+  // everything. Skip RED and record GREEN directly to avoid deadlock.
+  let effectivePhase = currentPhase;
+  if (currentPhase === 'red') {
+    try {
+      const testResult = require('child_process').execSync(phaseTestCommand, {
+        encoding: 'utf-8',
+        timeout: 300000,
+        stdio: 'pipe',
+        cwd: process.cwd(),
+      });
+      // Tests passed in RED phase — skip to GREEN
+      effectivePhase = 'green';
+      try {
+        execFileSync(
+          process.execPath,
+          [tddStatePath, 'transition', safeTicket, 'green', '--task', String(taskNum)],
+          execOpts
+        );
+      } catch {
+        /* may already be in green */
+      }
+    } catch {
+      // Tests failed — good, RED phase is correct
+    }
+  }
+
   try {
     execFileSync(
       process.execPath,
       [
         tddStatePath,
-        `record-${currentPhase}`,
+        `record-${effectivePhase}`,
         safeTicket,
         '--task',
         String(taskNum),
