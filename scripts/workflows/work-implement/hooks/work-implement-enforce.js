@@ -253,8 +253,19 @@ function checkTddPhase(filePath, ticketId) {
 function detectWorktreeDir(safeTicketId) {
   if (process.env.WORK_WORKTREE_DIR) return path.resolve(process.env.WORK_WORKTREE_DIR);
 
+  // Use config.REPO_NAME (which has the same fallback as work-next.js /
+  // follow-up-next.js use when CREATING worktrees). Otherwise convention-based
+  // detection silently fails when REPO_NAME env var is unset but worktrees
+  // exist as `<base>/my-project-<TICKET>`.
   const wbase = process.env.WORKTREES_BASE;
-  const repo = process.env.REPO_NAME;
+  let repo = process.env.REPO_NAME;
+  if (!repo) {
+    try {
+      repo = require(path.join(__dirname, '..', '..', 'lib', 'config')).REPO_NAME;
+    } catch {
+      /* config unavailable — leave repo undefined */
+    }
+  }
   if (wbase && repo) {
     const candidate = path.join(wbase, `${repo}-${safeTicketId}`);
     try {

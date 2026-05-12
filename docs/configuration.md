@@ -45,8 +45,8 @@ The plugin uses environment variables for configuration, resolved through `scrip
 |---|---|---|
 | `DEV_COMMAND` | (auto-detect) | Custom dev server start command |
 | `TEST_COMMAND` | (auto-detect) | Legacy single test runner (prefer `TEST_*_COMMAND` below) |
-| `LINT_COMMAND` | (auto-detect) | Custom linter command |
-| `TYPECHECK_COMMAND` | (auto-detect) | Custom typecheck command |
+| `LINT_COMMAND` | (auto-detect) | Custom linter command. Use `$CHANGED_FILES` placeholder for scoped runs. Example: `pnpm lint $CHANGED_FILES` |
+| `TYPECHECK_COMMAND` | (auto-detect) | Custom typecheck command. Use `$CHANGED_FILES` placeholder for scoped runs. Example: `pnpm typecheck $CHANGED_FILES` |
 | `TEST_UNIT_COMMAND` | | Per-suite scoped test command for **dev** (use `$CHANGED_FILES`). Example: `pnpm test $CHANGED_FILES` |
 | `TEST_INTEGRATION_COMMAND` | | Per-suite scoped integration test command for **dev** |
 | `TEST_E2E_COMMAND` | | Per-suite scoped e2e test command for **dev** |

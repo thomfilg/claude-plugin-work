@@ -104,6 +104,22 @@ From these documents, extract:
 
    If the env var is empty/unset, fall back to the project's standard command from package.json (e.g. `pnpm test:integration <path>`). Never run the full test suite during implementation — always scope to changed files.
 
+### Authoritative lint/typecheck commands
+
+Same `$CHANGED_FILES` pattern applies to lint and typecheck:
+
+| Env var | When |
+|---|---|
+| `$LINT_COMMAND` | linter (auto-detected if unset) |
+| `$TYPECHECK_COMMAND` | type checker (auto-detected if unset) |
+
+```bash
+CHANGED_FILES="path/to/your/file.ts" eval "$LINT_COMMAND"
+CHANGED_FILES="path/to/your/file.ts" eval "$TYPECHECK_COMMAND"
+```
+
+If empty/unset, the bundled `dev-check.sh` runs scoped lint/typecheck on changed files. Never run lint/typecheck on the whole repo.
+
 5. **Code Optimization Process**: After initial implementation, you:
    - Analyze time and space complexity
    - Implement caching strategies where appropriate

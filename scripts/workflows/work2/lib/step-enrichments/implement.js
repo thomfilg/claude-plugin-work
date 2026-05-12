@@ -70,11 +70,6 @@ module.exports = function registerImplement(register) {
   register('implement', (entry, ctx) => {
     if (!entry.agentPrompt) return;
 
-    // Resolve tdd-next.js via plugin root (not __dirname) to avoid agents rewriting
-    // the dev repo path to the worktree cwd where work2/ doesn't exist.
-    const { resolvePluginRoot } = require(path.join(__dirname, '..', 'resolve-plugin-root'));
-    const pluginRoot = resolvePluginRoot(__dirname, 4);
-    const tddNextPath = path.join(pluginRoot, 'workflows', 'work2', 'tdd-next.js');
     const ticket = ctx.ticket || 'TICKET';
 
     // Check for parallel tasks
@@ -91,19 +86,10 @@ module.exports = function registerImplement(register) {
           path.join(__dirname, '..', '..', '..', 'work', 'task-parser')
         );
         const allTasks = parseFullTasks(tasksDir) || parseTasks(tasksDir);
-        const { readPhase } = require(path.join(__dirname, '..', '..', 'tdd-next.js'));
-        const phaseLabels = {
-          red: 'RED — write failing tests',
-          green: 'GREEN — make tests pass with minimum code',
-          refactor: 'REFACTOR — clean up code',
-        };
 
         const delegates = parallelTasks.map((num) => {
           const task = allTasks.find((t) => t.num === num);
           const agentType = resolveAgentType(tasksDir, num);
-          const tddState = readPhase(ticket.replace('#', 'GH-'), num);
-          const phase = tddState?.currentPhase || 'red';
-          const phaseLabel = phaseLabels[phase] || `${phase} phase`;
           const parallelTestCmd = task?.testCommand || null;
 
           const parallelScope = task?.suggestedScope || '';
@@ -124,16 +110,6 @@ module.exports = function registerImplement(register) {
                 `Run \`${parallelTestCmd}\` and ensure it passes before stopping.`,
               ]
             : [];
-          // TDD phase instructions disabled — gate auto-synthesizes evidence.
-          // Originally fell through to:
-          //   `### TDD Phase: ${phaseLabel}`,
-          //   'Get phase commands:',
-          //   '```bash',
-          //   `node "${tddNextPath}" ${ticket} --task ${num}`,
-          //   '```',
-          //   'Record evidence at each phase (init → red → green → refactor).',
-          // phaseLabel reference kept above so eslint no-unused doesn't fire.
-          void phaseLabel;
 
           return {
             type: 'task',
@@ -172,22 +148,10 @@ module.exports = function registerImplement(register) {
 
     // Reuse taskMatch/totalTasks from parallel check above
     const taskNum = taskMatch ? taskMatch[1] : null;
-    const taskFlag = taskNum ? ` --task ${taskNum}` : '';
 
     // Extract task title from prompt
     const titleMatch = entry.agentPrompt.match(/## Current Task: Task \d+ — (.+?)(?:\n|$)/);
     const taskTitle = titleMatch ? titleMatch[1].trim() : 'Implementation';
-
-    // Read current TDD phase
-    const { readPhase } = require(path.join(__dirname, '..', '..', 'tdd-next.js'));
-    const tddState = readPhase(ticket.replace('#', 'GH-'), taskNum);
-    const currentPhase = tddState?.currentPhase || 'red';
-    const phaseLabel =
-      {
-        red: 'RED — write failing tests',
-        green: 'GREEN — make tests pass with minimum code',
-        refactor: 'REFACTOR — clean up code',
-      }[currentPhase] || `${currentPhase} phase`;
 
     // Mark current progress in tasks.md (shows [-] for in-progress task)
     if (tasksDir) {
@@ -219,40 +183,6 @@ module.exports = function registerImplement(register) {
       entry.agentType = 'code-checker';
       return;
     }
-
-    // TDD retry feedback DISABLED — gate auto-synthesizes evidence; agents no longer record.
-    const retryHeader = '';
-    // Original block (kept for reference):
-    // const tddPhasePath = path.join(
-    //   path.dirname(tddNextPath), '..', 'work-implement', 'tdd-phase-state.js'
-    // );
-    // try {
-    //   const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
-    //   const wsCheck = JSON.parse(fs.readFileSync(
-    //     path.join(getConfig.require('TASKS_BASE'), ticket.replace('#', 'GH-'), '.work-state.json'),
-    //     'utf8'
-    //   ));
-    //   if (wsCheck._tddRetryReason) {
-    //     retryHeader = [
-    //       `## TDD EVIDENCE RETRY (attempt ${wsCheck._tddRetryCount || '?'})`,
-    //       '',
-    //       `Previous attempt did not produce valid TDD evidence.`,
-    //       `**Reason:** ${wsCheck._tddRetryReason}`,
-    //       '',
-    //       `You MUST complete the TDD cycle. Run these commands IN ORDER:`,
-    //       '```bash',
-    //       `node "${tddPhasePath}" init ${ticket}${taskFlag}`,
-    //       `node "${tddPhasePath}" record-red ${ticket}${taskFlag} --cmd "<your test command>"`,
-    //       `node "${tddPhasePath}" transition ${ticket} green${taskFlag}`,
-    //       `node "${tddPhasePath}" record-green ${ticket}${taskFlag} --cmd "<your test command>"`,
-    //       `node "${tddPhasePath}" transition ${ticket} refactor${taskFlag}`,
-    //       `node "${tddPhasePath}" record-refactor ${ticket}${taskFlag} --cmd "<your test command>"`,
-    //       '```',
-    //       'Replace `<your test command>` with the actual test command for this task.',
-    //       '', '---', '',
-    //     ].join('\n');
-    //   }
-    // } catch { /* fail-open */ }
 
     // Detect E2E tasks by checking suggested scope and task type for e2e/playwright patterns
     let e2eRules = '';
@@ -318,21 +248,8 @@ module.exports = function registerImplement(register) {
           '```',
         ]
       : [];
-    // TDD phase fallback DISABLED — gate auto-synthesizes evidence.
-    // Original else branch:
-    //   `### TDD Phase: ${phaseLabel}`,
-    //   '',
-    //   '### Next step',
-    //   'Run this command and follow its output:',
-    //   '```bash',
-    //   `node "${tddNextPath}" ${ticket}${taskFlag}`,
-    //   '```',
-    void phaseLabel;
-    void tddNextPath;
-    void taskFlag;
 
     const devPrompt = [
-      retryHeader,
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
       ...tddSection,
