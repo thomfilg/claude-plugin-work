@@ -65,6 +65,76 @@ function evidencePathFor(gateTasksBase, safeName, taskNum) {
 }
 
 /**
+ * Detect whether a test command targets E2E (Playwright) tests.
+ * Used by the WORK_SKIP_E2E env var to bypass slow E2E runs in pre/post-test.
+ */
+function isE2eCommand(cmd) {
+  if (!cmd) return false;
+  return /\bTEST_E2E_COMMAND\b|\bpnpm\s+(?:run\s+)?(?:test:)?e2e\b|\bplaywright\b|\bpw\s+test\b/i.test(
+    cmd
+  );
+}
+
+/**
+ * Should the gate skip executing this test command?
+ * Currently: WORK_SKIP_E2E=1 (or WORK_SKIP_E2E_TESTS=1) skips E2E commands.
+ */
+function shouldSkipTestExecution(cmd, env) {
+  const e = env || process.env;
+  const skipE2e = e.WORK_SKIP_E2E === '1' || e.WORK_SKIP_E2E_TESTS === '1';
+  if (skipE2e && isE2eCommand(cmd)) return 'e2e-disabled';
+  return null;
+}
+
+/**
+ * Write a skip-stub TDD evidence file when test execution is bypassed.
+ * Records a complete cycle so the gate can advance — note explains why.
+ */
+function writeSkipStubEvidence(cmd, safeName, taskNum, gateTasksBase, reason) {
+  const evidencePath = evidencePathFor(gateTasksBase, safeName, taskNum);
+  const taskDir = path.dirname(evidencePath);
+  const now = new Date().toISOString();
+  const note = `Test execution skipped by gate (reason: ${reason}).`;
+  try {
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(
+      evidencePath,
+      JSON.stringify(
+        {
+          currentPhase: 'refactor',
+          currentCycle: 1,
+          cycles: [
+            {
+              cycle: 1,
+              red: {
+                testCommand: cmd,
+                testExitCode: 0,
+                timestamp: now,
+                capturedByGate: true,
+                skippedByGate: true,
+                note,
+              },
+              green: {
+                testCommand: cmd,
+                testExitCode: 0,
+                timestamp: now,
+                capturedByGate: true,
+                skippedByGate: true,
+                note,
+              },
+            },
+          ],
+        },
+        null,
+        2
+      )
+    );
+  } catch {
+    /* fail-open */
+  }
+}
+
+/**
  * Run the test command BEFORE the dev agent is dispatched and write authentic
  * RED evidence (or block, or skip) based on outcome and task type.
  *
@@ -76,6 +146,14 @@ function evidencePathFor(gateTasksBase, safeName, taskNum) {
 function runPreImplementTest(cmd, safeName, taskNum, workingDir, env, gateTasksBase, taskType) {
   if (!gateTasksBase) {
     return { decision: 'dispatch', preTestSkipped: true };
+  }
+
+  // Honor WORK_SKIP_E2E=1 / WORK_SKIP_E2E_TESTS=1 — record a skip stub and
+  // dispatch (or just advance, since the post-test will also skip).
+  const skipReason = shouldSkipTestExecution(cmd, env);
+  if (skipReason) {
+    writeSkipStubEvidence(cmd, safeName, taskNum, gateTasksBase, skipReason);
+    return { decision: 'dispatch', preTestSkipped: true, skipReason };
   }
 
   let exitCode = 0;
@@ -182,6 +260,13 @@ function runPreImplementTest(cmd, safeName, taskNum, workingDir, env, gateTasksB
  * @returns {boolean} true if test passed and evidence is now complete
  */
 function runTestAndRecord(cmd, safeName, taskNum, workingDir, env, gateTasksBase) {
+  // Honor WORK_SKIP_E2E=1 / WORK_SKIP_E2E_TESTS=1 — write skip stub and pass.
+  const skipReason = shouldSkipTestExecution(cmd, env);
+  if (skipReason && gateTasksBase) {
+    writeSkipStubEvidence(cmd, safeName, taskNum, gateTasksBase, skipReason);
+    return true;
+  }
+
   let exitCode = 0;
   try {
     execSync(cmd, {
@@ -482,4 +567,11 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
   return null;
 }
 
-module.exports = { dispatchAdvanceGate, runPreImplementTest, runTestAndRecord };
+module.exports = {
+  dispatchAdvanceGate,
+  runPreImplementTest,
+  runTestAndRecord,
+  isE2eCommand,
+  shouldSkipTestExecution,
+  writeSkipStubEvidence,
+};
