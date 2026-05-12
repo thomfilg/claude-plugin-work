@@ -18,6 +18,9 @@ module.exports = function registerFixCi(register) {
     const prNum = state.prNumber || 'unknown';
     const monitorOutput = (state.lastMonitorResult?.output || '').substring(0, 1500);
     const isConflict = category === 'conflict';
+    const ciStatusLine = state._ciStatusLine || '';
+    const ciStatusDetail = state._ciStatusDetail || '';
+    const failedJobs = Array.isArray(state._ciFailedJobs) ? state._ciFailedJobs : [];
 
     // For CI failures: fetch the actual failed run logs.
     // Strategy:
@@ -30,13 +33,20 @@ module.exports = function registerFixCi(register) {
     let ciLogs = '';
     const ciFetchErrors = [];
 
+    // Strip the "<JobName>\tUNKNOWN STEP\t<ISO timestamp>\t" prefix gh adds
+    // to each line of --log-failed output, then drop runner/setup noise.
+    function stripGhPrefix(line) {
+      // gh log lines: "JobName\tStepName\t2026-05-12T10:14:53.123Z message"
+      return line.replace(/^[^\t]+\t[^\t]+\t\d{4}-\d{2}-\d{2}T[^\s]+\s?/, '');
+    }
+
     function filterLogs(rawLogs) {
-      const filtered = rawLogs
-        .split('\n')
+      const stripped = rawLogs.split('\n').map(stripGhPrefix);
+      const filtered = stripped
         .filter((line) => {
-          // Skip runner setup noise
-          if (/UNKNOWN STEP|##\[group\]|##\[endgroup\]|Runner Image|Operating System/i.test(line))
-            return false;
+          if (!line.trim()) return false;
+          // Drop runner setup / housekeeping noise
+          if (/##\[group\]|##\[endgroup\]|Runner Image|Operating System/i.test(line)) return false;
           if (
             /runner version|Secret source|Prepare workflow|Download action|Getting action/i.test(
               line
@@ -47,6 +57,14 @@ module.exports = function registerFixCi(register) {
             return false;
           if (/Permissions|Actions: read|Contents: read|Metadata: read|PullRequests:/i.test(line))
             return false;
+          if (
+            /Temporarily overriding HOME|safe\.directory|extraheader|submodule foreach|##\[warning\]Node\.js \d+ actions are deprecated/i.test(
+              line
+            )
+          )
+            return false;
+          if (/\[command\]\/usr\/bin\/git/.test(line)) return false;
+          if (/RESOLVEDSTATS|Cleaning up orphan|Docker container caching/i.test(line)) return false;
           // Keep error markers, assertions, test names, meaningful output
           if (/error|fail|assert|expect|timeout|ERR_|✗|✕|FAIL|Error:|×/i.test(line)) return true;
           if (/\.(spec|test)\.(ts|js|tsx|jsx)/.test(line)) return true;
@@ -58,10 +76,10 @@ module.exports = function registerFixCi(register) {
         .join('\n')
         .substring(0, 6000);
       if (filtered.trim()) return filtered;
-      // Fallback: tail of raw logs when filter removed everything
-      const lines = rawLogs.split('\n');
-      return lines
-        .slice(Math.max(0, lines.length - 120))
+      // Fallback: tail of stripped raw logs when filter removed everything
+      return stripped
+        .filter((l) => l.trim())
+        .slice(-120)
         .join('\n')
         .substring(0, 6000);
     }
@@ -94,104 +112,68 @@ module.exports = function registerFixCi(register) {
       }
     }
 
-    // Extract the failed job name from monitor output if present
-    // e.g. "✗ 🧪 Integration Tests · shard 4/5 — failed"
-    function extractFailedJobName(monitorText) {
-      const m = String(monitorText || '').match(/[✗✕×]\s+(.+?)\s+—\s+failed/);
-      return m ? m[1].trim() : null;
-    }
-
     if (!isConflict) {
-      const failedJobName = extractFailedJobName(monitorOutput);
-      const candidateRunIds = new Set();
-
-      // Strategy 1: gh pr checks
-      try {
-        const linksOutput = execFileSync(
-          'gh',
-          [
-            'pr',
-            'checks',
-            String(prNum),
-            '--json',
-            'name,state,link',
-            '--jq',
-            '.[] | select(.state == "FAILURE") | .link',
-          ],
-          {
-            encoding: 'utf8',
-            timeout: 15000,
-            cwd: ctx.worktreeDir,
-            stdio: ['pipe', 'pipe', 'pipe'],
-          }
-        );
-        for (const m of linksOutput.matchAll(/runs\/(\d+)/g)) candidateRunIds.add(m[1]);
-      } catch (err) {
-        ghErr('pr-checks', err);
+      // Strategy 1 (preferred): use the structured failed-job list captured
+      // by monitor.js — exact job names + runIds derived from the check `link`.
+      const targets = [];
+      for (const j of failedJobs) {
+        if (j && j.name && j.runId) targets.push({ name: j.name, runId: j.runId });
       }
 
-      // Strategy 2: most recent failed run on the PR branch
-      if (candidateRunIds.size === 0) {
+      // Strategy 2 (fallback): re-query gh pr checks for failed jobs+links
+      if (targets.length === 0) {
         try {
-          const branchOut = execFileSync(
+          const linksOutput = execFileSync(
             'gh',
-            ['pr', 'view', String(prNum), '--json', 'headRefName', '--jq', '.headRefName'],
+            [
+              'pr',
+              'checks',
+              String(prNum),
+              '--json',
+              'name,state,link',
+              '--jq',
+              '.[] | select(.state == "FAILURE") | "\(.name)\t\(.link)"',
+            ],
             {
               encoding: 'utf8',
-              timeout: 10000,
+              timeout: 15000,
               cwd: ctx.worktreeDir,
               stdio: ['pipe', 'pipe', 'pipe'],
             }
-          ).trim();
-          if (branchOut) {
-            const runListOut = execFileSync(
-              'gh',
-              [
-                'run',
-                'list',
-                '--branch',
-                branchOut,
-                '--status',
-                'failure',
-                '--limit',
-                '3',
-                '--json',
-                'databaseId',
-                '--jq',
-                '.[].databaseId',
-              ],
-              {
-                encoding: 'utf8',
-                timeout: 15000,
-                cwd: ctx.worktreeDir,
-                stdio: ['pipe', 'pipe', 'pipe'],
-              }
-            );
-            for (const id of runListOut.split('\n').filter(Boolean)) candidateRunIds.add(id);
+          );
+          for (const line of linksOutput.split('\n').filter(Boolean)) {
+            const [name, link] = line.split('\t');
+            const m = String(link || '').match(/runs\/(\d+)/);
+            if (name && m) targets.push({ name: name.trim(), runId: m[1] });
           }
         } catch (err) {
-          ghErr('run-list-fallback', err);
+          ghErr('pr-checks', err);
         }
       }
 
-      // Fetch + concat raw logs from up to 3 candidate runs
-      const rawChunks = [];
-      for (const runId of Array.from(candidateRunIds).slice(0, 3)) {
-        const raw = fetchRunLogs(runId, failedJobName);
-        if (raw) rawChunks.push(raw);
-        if (rawChunks.join('\n').length > 12000) break;
+      // Fetch logs only for the actually-failed jobs (up to 3 distinct runIds)
+      const seenRuns = new Set();
+      const chunks = [];
+      for (const t of targets) {
+        if (seenRuns.has(t.runId)) continue;
+        seenRuns.add(t.runId);
+        const raw = fetchRunLogs(t.runId, t.name);
+        if (raw) chunks.push(`### Failed job: ${t.name}\n` + filterLogs(raw));
+        if (chunks.join('\n').length > 8000) break;
+        if (seenRuns.size >= 3) break;
       }
 
-      if (rawChunks.length > 0) {
-        ciLogs = filterLogs(rawChunks.join('\n'));
+      if (chunks.length > 0) {
+        ciLogs = chunks.join('\n\n').substring(0, 8000);
       } else {
         const errLines = ciFetchErrors.length
           ? ciFetchErrors.map((e) => `  - ${e}`).join('\n')
-          : '  - no candidate failed runs found';
+          : '  - no failed jobs reported by monitor or gh pr checks';
+        const jobsHint = targets.length
+          ? '\nFailed jobs (from monitor): ' + targets.map((t) => t.name).join(', ')
+          : '';
         ciLogs =
-          '(Could not fetch CI logs automatically)\nCommands attempted:\n' +
-          errLines +
-          (failedJobName ? `\nFailing job (from monitor): ${failedJobName}` : '');
+          '(Could not fetch CI logs automatically)\nCommands attempted:\n' + errLines + jobsHint;
       }
     }
 
@@ -222,10 +204,8 @@ module.exports = function registerFixCi(register) {
           : [
               `## CI Failure on PR #${prNum}`,
               '',
-              '### Monitor output:',
-              '```',
-              monitorOutput,
-              '```',
+              ...(ciStatusLine ? [ciStatusLine] : []),
+              ...(ciStatusDetail ? [ciStatusDetail] : []),
               '',
               '### Failed CI logs:',
               '```',

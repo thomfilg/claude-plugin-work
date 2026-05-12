@@ -185,6 +185,15 @@ module.exports = function registerMonitor(register) {
     if (detail) process.stderr.write(detail + '\n');
     process.stderr.write('\n');
 
+    // Persist for fix-ci.js — header line + structured failed-job list
+    // (avoids the brittle "✗ Name — failed" regex extraction)
+    state._ciStatusLine = line1;
+    state._ciStatusDetail = detail || '';
+    state._ciFailedJobs = (ci.failed || []).map((j) => {
+      const m = String(j.link || '').match(/runs\/(\d+)/);
+      return { name: j.name || '', runId: m ? m[1] : null };
+    });
+
     if (exitCode === 0) {
       state.currentStep = 'report';
     }
