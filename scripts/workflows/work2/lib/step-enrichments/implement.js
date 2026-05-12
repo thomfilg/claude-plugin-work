@@ -66,11 +66,61 @@ function resolveAgentType(tasksDir, taskNum) {
 
 const { findReadyTasks, parseTasks } = require(path.join(__dirname, '..', 'task-graph'));
 
+/**
+ * Build a "### Previous attempt failed" block from work-state retry fields.
+ * Returns an empty array when there is no retry context to surface.
+ *
+ * The gate persists `_tddRetryReason` / `_tddRetryCommand` / `_tddRetryExitCode`
+ * / `_tddRetryOutputTail` whenever the implement-gate decides to re-dispatch.
+ * Surfacing them here gives the agent the exact command, exit code, and tail
+ * of test output — closing the rationale loop that previously led to TDD
+ * evidence fabrication.
+ */
+function buildRetryFailureBlock(tasksDir, ticket) {
+  if (!tasksDir || !ticket) return [];
+  let ws;
+  try {
+    const tasksBase = path.dirname(tasksDir);
+    const statePath = path.join(tasksBase, ticket, '.work-state.json');
+    ws = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  } catch {
+    return [];
+  }
+  const reason = ws && ws._tddRetryReason;
+  if (!reason) return [];
+  const count = ws._tddRetryCount || 0;
+  const cmd = ws._tddRetryCommand || '';
+  const exitCode = ws._tddRetryExitCode;
+  const tail = ws._tddRetryOutputTail || '';
+  const lines = [`### Previous attempt failed (retry ${count})`, '', `Reason: ${reason}`];
+  if (cmd) {
+    lines.push('', `Test command that ran: \`${cmd}\``);
+  }
+  if (exitCode !== null && exitCode !== undefined) {
+    lines.push(`Exit code: ${exitCode}`);
+  }
+  if (tail) {
+    lines.push('', 'Last lines of test output:', '```', tail, '```');
+  }
+  lines.push(
+    '',
+    'What to fix:',
+    '  - If the test failed → fix the source so the command above passes.',
+    '  - If the command itself errored (command-not-found, syntax, missing',
+    '    dependency, malformed parser output) → that is a tasks.md problem.',
+    '    Stop and surface it. Do NOT write `tdd-phase.json` yourself; that',
+    '    file is gate-only and any write will be blocked by the hook.',
+    ''
+  );
+  return lines;
+}
+
 module.exports = function registerImplement(register) {
   register('implement', (entry, ctx) => {
     if (!entry.agentPrompt) return;
 
     const ticket = ctx.ticket || 'TICKET';
+    const retryBlock = buildRetryFailureBlock(ctx.tasksDir, ticket);
 
     // Check for parallel tasks
     const tasksDir = ctx.tasksDir || '';
@@ -169,6 +219,7 @@ module.exports = function registerImplement(register) {
             prompt: [
               `## Implement Task ${num}/${totalTasks} — ${task?.title || 'Implementation'}`,
               '',
+              ...retryBlock,
               ...parallelTddSection,
               '',
               '### Required Reading',
@@ -368,6 +419,7 @@ module.exports = function registerImplement(register) {
     const devPrompt = [
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
+      ...retryBlock,
       ...tddSection,
       '',
       '### Required Reading (read IN FULL before implementing)',
