@@ -652,19 +652,20 @@ function handleStop(hookData) {
         const wsPath = path.join(tasksBase, safeId, '.work-state.json');
         const ws = JSON.parse(fs.readFileSync(wsPath, 'utf8'));
         if (ws && ws._work2Dispatched) {
-          // Steps that require agent to actively invoke a skill (not background sub-agents)
-          // should NOT be bypassed — the agent must stay and run the skill.
-          // Steps where the parent agent must actively re-invoke a script
-          // (not just wait for a sub-agent's Task() result):
-          //   - check: agent runs the /check workflow loop
-          //   - follow_up: agent runs follow-up-next.js iteratively until complete
-          const activeSkillSteps = new Set(['check', 'follow_up']);
-          if (!activeSkillSteps.has(ws._work2Dispatched)) {
+          // Lock-by-default. The agent may only stop at the three user-review
+          // checkpoints (brief, spec, and tasks generation):
+          //   - brief_gate: user must approve the brief before spec
+          //   - spec_gate: user must approve the spec before tasks split
+          //   - tasks: user reviews tasks.md before implement begins
+          // Every other dispatched step (implement, commit, task_review,
+          // check, pr, ready, follow_up, ci, cleanup, reports) MUST continue.
+          const allowStopSteps = new Set(['brief_gate', 'spec_gate', 'tasks']);
+          if (allowStopSteps.has(ws._work2Dispatched)) {
             process.stderr.write(
-              `ACTIVE WORKFLOW SESSION — step "${ws._work2Dispatched}" dispatched, waiting for agent.\n` +
+              `Pausing at user-review checkpoint "${ws._work2Dispatched}".\n` +
                 `When ready, continue: node "\${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work2/work-next.js" ${ticketId}\n`
             );
-            process.exit(0); // allow stop — agent is waiting, not abandoning
+            process.exit(0); // allow stop — this is a human-approval gate
             return;
           }
         }
