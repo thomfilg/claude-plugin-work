@@ -87,12 +87,62 @@ module.exports = function registerImplement(register) {
         );
         const allTasks = parseFullTasks(tasksDir) || parseTasks(tasksDir);
 
+        const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
         const delegates = parallelTasks.map((num) => {
           const task = allTasks.find((t) => t.num === num);
           const agentType = resolveAgentType(tasksDir, num);
           const parallelTestCmd = task?.testCommand || null;
-
           const parallelScope = task?.suggestedScope || '';
+
+          // Detect suite per-delegate so each parallel task gets the right
+          // TEST_*_COMMAND in its prompt.
+          const pType = String(task?.type || '').toLowerCase();
+          const pTitle = String(task?.title || '');
+          const pIsE2E =
+            /e2e|playwright/i.test(parallelScope) ||
+            pType === 'e2e' ||
+            /e2e|playwright/i.test(pTitle);
+          const pIsInt =
+            /integration|\.int\./i.test(parallelScope) ||
+            pType === 'integration' ||
+            /integration/i.test(pTitle);
+          const pSuite = pIsE2E ? 'e2e' : pIsInt ? 'integration' : 'unit';
+          const pEnvVar =
+            pSuite === 'e2e'
+              ? 'TEST_E2E_COMMAND'
+              : pSuite === 'integration'
+                ? 'TEST_INTEGRATION_COMMAND'
+                : 'TEST_UNIT_COMMAND';
+          const pCmd = (() => {
+            try {
+              return getConfig(pEnvVar) || '';
+            } catch {
+              return '';
+            }
+          })();
+          const parallelTestCmdsBlock = pCmd
+            ? [
+                '### Test Commands',
+                `This task is a **${pSuite}** task. Run tests with:`,
+                '```bash',
+                `# ${pEnvVar} (resolved):`,
+                pCmd,
+                '```',
+                'Invoke via:',
+                '```bash',
+                `CHANGED_FILES="<files-you-touched>" eval "$${pEnvVar}"`,
+                '```',
+                '',
+              ]
+            : [
+                '### Test Commands',
+                `Run tests via \`$${pEnvVar}\` (project-configured).`,
+                '```bash',
+                `CHANGED_FILES="<files-you-touched>" eval "$${pEnvVar}"`,
+                '```',
+                '',
+              ];
+
           const parallelTddSection = parallelTestCmd
             ? [
                 ...(parallelScope
@@ -106,10 +156,11 @@ module.exports = function registerImplement(register) {
                       '',
                     ]
                   : []),
+                ...parallelTestCmdsBlock,
                 '### How to verify',
                 `Run \`${parallelTestCmd}\` and ensure it passes before stopping.`,
               ]
-            : [];
+            : parallelTestCmdsBlock;
 
           return {
             type: 'task',
@@ -184,7 +235,9 @@ module.exports = function registerImplement(register) {
       return;
     }
 
-    // Detect E2E tasks by checking suggested scope and task type for e2e/playwright patterns
+    // Detect task suite (e2e / integration / unit) from scope + type + title.
+    // Used to surface the matching TEST_*_COMMAND env var to the agent.
+    let testSuite = null;
     let e2eRules = '';
     try {
       const content = fs.readFileSync(path.join(tasksDir, 'tasks.md'), 'utf8');
@@ -197,6 +250,14 @@ module.exports = function registerImplement(register) {
       const scope = scopeMatch ? scopeMatch[1] : '';
       const isE2E =
         /e2e|playwright/i.test(scope) || taskType === 'e2e' || /e2e|playwright/i.test(taskTitle);
+      const isIntegration =
+        /integration|\.int\./i.test(scope) ||
+        taskType === 'integration' ||
+        /integration/i.test(taskTitle);
+      if (isE2E) testSuite = 'e2e';
+      else if (isIntegration) testSuite = 'integration';
+      else testSuite = 'unit';
+
       if (isE2E) {
         e2eRules = [
           '',
@@ -206,6 +267,27 @@ module.exports = function registerImplement(register) {
           '- **Timeouts:** NEVER hardcode timeouts. Use project timeout tiers if they exist. Never increase timeouts — fix the root cause instead.',
           '- **Race conditions:** Wait for API response before checking state. Wait for UI to reflect mutations before polling.',
         ].join('\n');
+      }
+    } catch {
+      /* fail-open */
+    }
+
+    // Pick up the configured TEST_*_COMMAND for this suite so the agent runs
+    // the project's canonical test runner (with $CHANGED_FILES placeholder
+    // expansion) instead of inventing its own command line.
+    let suiteEnvVar = null;
+    let suiteCommand = '';
+    try {
+      const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
+      if (testSuite === 'e2e') {
+        suiteEnvVar = 'TEST_E2E_COMMAND';
+        suiteCommand = getConfig('TEST_E2E_COMMAND') || '';
+      } else if (testSuite === 'integration') {
+        suiteEnvVar = 'TEST_INTEGRATION_COMMAND';
+        suiteCommand = getConfig('TEST_INTEGRATION_COMMAND') || '';
+      } else if (testSuite === 'unit') {
+        suiteEnvVar = 'TEST_UNIT_COMMAND';
+        suiteCommand = getConfig('TEST_UNIT_COMMAND') || '';
       }
     } catch {
       /* fail-open */
@@ -228,6 +310,39 @@ module.exports = function registerImplement(register) {
       /* fail-open */
     }
 
+    // Build the "### Test Commands" block listing the suite-specific
+    // env-var-based command for this task. The agent should run it via:
+    //   CHANGED_FILES="<files>" eval "$TEST_E2E_COMMAND"
+    // (or the integration / unit variant). $CHANGED_FILES gets expanded
+    // against the suggested scope.
+    const testCommandsBlock =
+      suiteEnvVar && suiteCommand
+        ? [
+            '### Test Commands',
+            `This task is a **${testSuite}** task. Run tests with the project-configured runner:`,
+            '```bash',
+            `# ${suiteEnvVar} (resolved):`,
+            suiteCommand,
+            '```',
+            'Invoke via:',
+            '```bash',
+            `CHANGED_FILES="<files-you-touched>" eval "$${suiteEnvVar}"`,
+            '```',
+            'Do NOT invent your own test command. If $CHANGED_FILES is unset, use the resolved command above.',
+            '',
+          ]
+        : suiteEnvVar
+          ? [
+              '### Test Commands',
+              `This task is a **${testSuite}** task. The project should expose \`$${suiteEnvVar}\` — invoke via:`,
+              '```bash',
+              `CHANGED_FILES="<files-you-touched>" eval "$${suiteEnvVar}"`,
+              '```',
+              `If \`$${suiteEnvVar}\` is unset, ask the user to configure it before proceeding.`,
+              '',
+            ]
+          : [];
+
     const tddSection = hasGateTDD
       ? [
           ...(taskScope
@@ -241,13 +356,14 @@ module.exports = function registerImplement(register) {
                 '',
               ]
             : []),
+          ...testCommandsBlock,
           '### How to verify',
           'Run this and ensure it passes before stopping:',
           '```',
           taskTestCommand,
           '```',
         ]
-      : [];
+      : testCommandsBlock;
 
     const devPrompt = [
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,

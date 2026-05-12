@@ -598,12 +598,38 @@ function handleStop(hookData) {
       /* unreadable — fall through to block */
     }
 
+    // Surface the most recently computed follow-up instruction (written by
+    // follow-up-auto-advance.js after each tool call) so the agent has the
+    // next step inline — not just "go run follow-up-next.js again".
+    let pendingInstruction = '';
+    try {
+      const getConfig = require(path.join(__dirname, '..', 'get-config'));
+      const tasksBase = getConfig('TASKS_BASE');
+      if (tasksBase && ticketId) {
+        let safeId = ticketId;
+        try {
+          safeId = require(path.join(__dirname, '..', 'config')).safeTicketId(ticketId);
+        } catch {
+          /* use raw */
+        }
+        const nextPath = path.join(tasksBase, safeId, '.follow-up2-next.json');
+        if (fs.existsSync(nextPath)) {
+          pendingInstruction = fs.readFileSync(nextPath, 'utf8');
+        }
+      }
+    } catch {
+      /* fall through with empty instruction */
+    }
+
     process.stderr.write(
       `ACTIVE WORKFLOW SESSION — DO NOT ABANDON\n` +
         `Workflow: ${workflow} | Ticket: ${ticketId}\n` +
         `You MUST continue this workflow. Run:\n` +
         `  node "\${CLAUDE_PLUGIN_ROOT}/scripts/workflows/follow-up2/follow-up-next.js" ${ticketId}\n` +
         `Execute the returned instruction, then re-run follow-up-next.js until action: "complete".\n` +
+        (pendingInstruction
+          ? `\n=== PENDING /follow-up2 INSTRUCTION ===\n${pendingInstruction}\n=== END INSTRUCTION ===\n\n`
+          : '') +
         `The session is locked with a passphrase. Complete all steps to unlock.\n`
     );
     process.exit(2);
@@ -628,7 +654,11 @@ function handleStop(hookData) {
         if (ws && ws._work2Dispatched) {
           // Steps that require agent to actively invoke a skill (not background sub-agents)
           // should NOT be bypassed — the agent must stay and run the skill.
-          const activeSkillSteps = new Set(['check']);
+          // Steps where the parent agent must actively re-invoke a script
+          // (not just wait for a sub-agent's Task() result):
+          //   - check: agent runs the /check workflow loop
+          //   - follow_up: agent runs follow-up-next.js iteratively until complete
+          const activeSkillSteps = new Set(['check', 'follow_up']);
           if (!activeSkillSteps.has(ws._work2Dispatched)) {
             process.stderr.write(
               `ACTIVE WORKFLOW SESSION — step "${ws._work2Dispatched}" dispatched, waiting for agent.\n` +
