@@ -58,7 +58,7 @@
           },
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work2/hooks/protect-tdd-phase.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work2/hooks/protect-orchestrator-state.js"
           }
         ]
       },
@@ -92,7 +92,7 @@
           },
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work2/hooks/protect-tdd-phase.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work2/hooks/protect-orchestrator-state.js"
           }
         ]
       },
