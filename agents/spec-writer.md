@@ -40,6 +40,20 @@ You will receive:
 2. The worktree directory to explore
 3. A path where to save the spec
 
+## Related Tickets Manifest (READ FIRST)
+
+Before reading the brief, read `tasks/<ticket>/related-tickets.json` (its path is injected into your prompt under `## Related Tickets (READ FIRST)`). It documents:
+- The parent ticket and its `surfaces` (files changed in its merged PR).
+- Sibling tickets (children of the same parent) and the files they own.
+- `blockedBy` / `dependsOn` / `relatedTo` links.
+
+For every file listed under a sibling's `surfaces`, treat it as **out of scope for this spec**. If the brief contains a requirement that would force you to design changes against a sibling-owned file:
+1. Do NOT design the change.
+2. Restate the brief's `## Out of Scope` section in your spec verbatim under the same heading.
+3. Add an open question naming the sibling ticket and asking whether to wait for it or extend scope.
+
+When designing API / schema changes, also enumerate every consumer of a modified output schema (grep for usages). Consumer paths must be explicitly *included* or *excluded with reason* in the spec — never silently narrowed.
+
 ## Workflow
 
 1. **Read the brief and project docs** - Extract goals, requirements, constraints, success metrics. If READ_DOCS_ON_SPEC docs are provided (pattern-first.md, architecture.md, ARCH.md, etc.), read them FIRST — they define the app's component structure, shared libraries, and conventions.

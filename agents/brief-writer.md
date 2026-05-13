@@ -39,6 +39,16 @@ You will receive:
 1. Ticket requirements (title, description, acceptance criteria) from a previous step
 2. A path where to save the brief
 
+## Related Tickets Manifest (Gate 0 — REQUIRED FIRST)
+
+Before drafting the brief, fetch the related tickets and write `tasks/<ticket>/related-tickets.json`. The orchestrator injects exact fetch instructions per ticket provider (Jira / Linear / GitHub) into your prompt under `## Related Tickets Manifest (REQUIRED — fetch FIRST)`.
+
+Why this is mandatory:
+- Sibling tickets often own surfaces (files / endpoints / schemas) that are referenced by the current ticket's requirements. If you absorb those into the brief as P0 items, the next agent will edit sibling-owned code — exactly the failure mode this gate exists to prevent.
+- `brief_gate` will block until a valid manifest exists at the documented path. There is no way to skip this.
+
+After writing the manifest, treat its contents as authoritative when populating the brief — especially the `## Out of Scope` section (see below).
+
 ## Brief Template
 
 Generate a markdown document with this structure:

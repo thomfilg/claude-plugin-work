@@ -30,7 +30,7 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
         head = fs.readFileSync(path.join('.git', 'HEAD'), 'utf-8').trim();
       }
       const ref = head.startsWith('ref: ') ? head.slice(5) : head;
-      return ref.includes(ticketId);
+      return ref.toLowerCase().includes(ticketId.toLowerCase());
     } catch {
       return false;
     }
