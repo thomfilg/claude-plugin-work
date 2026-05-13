@@ -40,6 +40,18 @@ You will receive:
 2. The worktree directory to explore
 3. A path where to save the spec
 
+## Brief→Spec coverage (Gate B — REQUIRED)
+
+Every brief P0 ID must be referenced in the spec. The orchestrator runs a checker at spec_gate that scans the spec for `P0 #N` mentions (in headings or inline) for each P0 in the brief's `### Must Have (P0)` section. Missing references block transition.
+
+Conventions:
+- Add a heading per P0: `### P0 #1 — <short title>` followed by the design for that P0.
+- Or, if multiple P0s share a section, prefix the section with `P0 #1, #2, #3:` and discuss them together.
+
+Also REQUIRED: restate the brief's `## Out of scope (sibling-owned)` section in the spec verbatim under the same heading. Surfaces listed there must NOT be targeted by any spec design decision. The orchestrator checks for the heading AND for at least one matching entry; the section blocks transition when missing.
+
+For every output schema you modify, list every consumer (grep usages of the schema's imports / type aliases) and mark each consumer *included* or *excluded with reason*. This is the consumer-path manifest; silent narrowing is what caused the ECHO-4552 / ECHO-4553 incident this gate exists to prevent.
+
 ## Related Tickets Manifest (READ FIRST)
 
 Before reading the brief, read `tasks/<ticket>/related-tickets.json` (its path is injected into your prompt under `## Related Tickets (READ FIRST)`). It documents:
