@@ -6,12 +6,24 @@
  * them pairwise. Highest-precedence source overrides lower-precedence;
  * mismatches surface as questions for the user to resolve.
  *
- * The artifacts (in precedence order, highest first):
+ * The artifacts (in precedence order, highest first). The hierarchy
+ * follows the upstream-source principle: any artifact under review at a
+ * gate must not silently drop or invent claims relative to UPSTREAM
+ * sources. Hence the literal user prompt is the highest authority, the
+ * ticket text is next (system of record), and each derived artifact
+ * (brief → spec → tasks) is lower than what it was derived from.
+ *
  *   - user-prompt.md     — captured at bootstrap from the literal user text
- *   - tasks.md           — split-in-tasks output
- *   - spec.md            — spec-writer output
- *   - brief.md           — brief-writer output
- *   - ticket text        — fetched from the ticket provider
+ *   - ticket text        — fetched from the ticket provider (system of record)
+ *   - brief.md           — brief-writer output (derived from ticket + prompt)
+ *   - spec.md            — spec-writer output (derived from brief)
+ *   - tasks.md           — split-in-tasks output (derived from spec)
+ *
+ * When `brief_gate` runs, "brief" is the lower artifact under review; the
+ * gate compares it against `user prompt` and `ticket` (both higher). When
+ * `spec_gate` runs, "spec" is the lower; compares against user prompt /
+ * ticket / brief. When `implement`'s tasks-discrepancy hook runs, "tasks"
+ * is the lower; compares against all four higher sources.
  *
  * "Claims" are normalized tokens we can compare:
  *   - file paths / globs (backticked or quoted)
