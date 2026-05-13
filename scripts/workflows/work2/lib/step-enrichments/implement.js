@@ -76,7 +76,7 @@ const { findReadyTasks, parseTasks } = require(path.join(__dirname, '..', 'task-
  * of test output — closing the rationale loop that previously led to TDD
  * evidence fabrication.
  */
-function buildRetryFailureBlock(tasksDir, ticket) {
+function buildRetryFailureBlock(tasksDir, ticket, targetTaskNum) {
   if (!tasksDir || !ticket) return [];
   let ws;
   try {
@@ -88,6 +88,13 @@ function buildRetryFailureBlock(tasksDir, ticket) {
   }
   const reason = ws && ws._tddRetryReason;
   if (!reason) return [];
+  // Scope retry context to the failing task. Parallel dispatch builds one
+  // delegate per task; surfacing task N's failure to task M's agent would
+  // misdirect effort.
+  const retryTask = ws._tddRetryTask;
+  if (targetTaskNum !== null && targetTaskNum !== undefined && retryTask !== undefined) {
+    if (Number(retryTask) !== Number(targetTaskNum)) return [];
+  }
   const count = ws._tddRetryCount || 0;
   const cmd = ws._tddRetryCommand || '';
   const exitCode = ws._tddRetryExitCode;
@@ -120,7 +127,6 @@ module.exports = function registerImplement(register) {
     if (!entry.agentPrompt) return;
 
     const ticket = ctx.ticket || 'TICKET';
-    const retryBlock = buildRetryFailureBlock(ctx.tasksDir, ticket);
 
     // Check for parallel tasks
     const tasksDir = ctx.tasksDir || '';
@@ -212,6 +218,7 @@ module.exports = function registerImplement(register) {
               ]
             : parallelTestCmdsBlock;
 
+          const delegateRetryBlock = buildRetryFailureBlock(tasksDir, ticket, num);
           return {
             type: 'task',
             agentType,
@@ -219,7 +226,7 @@ module.exports = function registerImplement(register) {
             prompt: [
               `## Implement Task ${num}/${totalTasks} — ${task?.title || 'Implementation'}`,
               '',
-              ...retryBlock,
+              ...delegateRetryBlock,
               ...parallelTddSection,
               '',
               '### Required Reading',
@@ -416,10 +423,15 @@ module.exports = function registerImplement(register) {
         ]
       : testCommandsBlock;
 
+    const singleRetryBlock = buildRetryFailureBlock(
+      tasksDir,
+      ticket,
+      taskNum != null ? Number(taskNum) : null
+    );
     const devPrompt = [
       `## Implement Task ${taskNum || '?'}/${totalTasks || '?'} — ${taskTitle}`,
       '',
-      ...retryBlock,
+      ...singleRetryBlock,
       ...tddSection,
       '',
       '### Required Reading (read IN FULL before implementing)',

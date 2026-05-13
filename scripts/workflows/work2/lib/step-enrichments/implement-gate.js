@@ -503,6 +503,7 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
       delete ws._tddRetryCommand;
       delete ws._tddRetryExitCode;
       delete ws._tddRetryOutputTail;
+      delete ws._tddRetryTask;
       delete ws._preTestForTask;
       saveWorkState(safeName, ws);
     }
@@ -510,13 +511,17 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
   }
 
   // Helper: persist retry-failure context so the next dispatch prompt can
-  // surface the exact command, exit code, and output to the agent.
+  // surface the exact command, exit code, and output to the agent. The
+  // _tddRetryTask field scopes the retry block to a specific task number;
+  // parallel-dispatch delegates check this to avoid showing one task's
+  // failure to other tasks' agents.
   const recordRetry = (reason, extras) => {
     ws._tddRetryReason = reason;
     ws._tddRetryCount = (ws._tddRetryCount || 0) + 1;
     ws._tddRetryCommand = extras?.command || null;
     ws._tddRetryExitCode = extras?.exitCode ?? null;
     ws._tddRetryOutputTail = extras?.outputTail || '';
+    ws._tddRetryTask = taskNum;
     saveWorkState(safeName, ws);
   };
 
@@ -671,6 +676,7 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
   delete ws._tddRetryCommand;
   delete ws._tddRetryExitCode;
   delete ws._tddRetryOutputTail;
+  delete ws._tddRetryTask;
   saveWorkState(safeName, ws);
 
   // Derive TASKS_BASE from ctx.tasksDir for subprocess calls.
