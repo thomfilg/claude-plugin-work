@@ -76,12 +76,15 @@ const { findReadyTasks, parseTasks } = require(path.join(__dirname, '..', 'task-
  * of test output — closing the rationale loop that previously led to TDD
  * evidence fabrication.
  */
-function buildRetryFailureBlock(tasksDir, ticket, targetTaskNum) {
-  if (!tasksDir || !ticket) return [];
+function buildRetryFailureBlock(tasksDir, _ticket, targetTaskNum) {
+  if (!tasksDir) return [];
   let ws;
   try {
-    const tasksBase = path.dirname(tasksDir);
-    const statePath = path.join(tasksBase, ticket, '.work-state.json');
+    // The state file lives at <tasksDir>/.work-state.json directly. Round-tripping
+    // via path.dirname(tasksDir) + ticket would break when the raw ticket
+    // (e.g. "#56") differs from its sanitized directory basename ("GH-56"),
+    // and would double-nest under suffix workflows. Read tasksDir directly.
+    const statePath = path.join(tasksDir, '.work-state.json');
     ws = JSON.parse(fs.readFileSync(statePath, 'utf8'));
   } catch {
     return [];
