@@ -15,22 +15,23 @@ const { execSync } = require('child_process');
 
 const { parseTasks } = require(path.join('..', '..', '..', 'work', 'task-parser'));
 const { compareDiffToScope, summarizeScopeDiff } = require('../../../lib/scope-diff');
+const config = require('../../../lib/config');
 
 function gitDiffFiles(workDir) {
+  // Resolve the repo's configured base branch (honors BASE_BRANCH env / git
+  // symbolic-ref / probes for main/master/dev). Falls back to 'main' only if
+  // config.getBaseBranch() can't be resolved — and we still try `origin/<b>`
+  // first since most plugin consumers diff against the remote tip.
+  let base = 'main';
   try {
-    const out = execSync('git diff --name-only origin/main...HEAD', {
-      cwd: workDir,
-      encoding: 'utf8',
-      timeout: 10_000,
-    });
-    return out
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    base = config.getBaseBranch({ cwd: workDir }) || 'main';
   } catch {
-    // Try `main` if `origin/main` is missing
+    /* fall through with default */
+  }
+  const candidates = [`origin/${base}`, base];
+  for (const ref of candidates) {
     try {
-      const out = execSync('git diff --name-only main...HEAD', {
+      const out = execSync(`git diff --name-only ${ref}...HEAD`, {
         cwd: workDir,
         encoding: 'utf8',
         timeout: 10_000,
@@ -40,9 +41,10 @@ function gitDiffFiles(workDir) {
         .map((s) => s.trim())
         .filter(Boolean);
     } catch {
-      return null;
+      /* try next ref */
     }
   }
+  return null;
 }
 
 function buildScopeDiffBlock(tasksDir, workDir) {
