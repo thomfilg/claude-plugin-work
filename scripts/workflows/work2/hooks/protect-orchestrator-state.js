@@ -105,9 +105,17 @@ function formatMessage(match, vector) {
 
 // ─── Hook entrypoint ────────────────────────────────────────────────────────
 
+// Plugin root contains every legitimate writer of the protected basenames
+// (work-next.js, transition-step.js, tdd-phase-state.js, the gate scripts).
+// Declaring it as a trusted script root prevents Vector 3 from blocking the
+// orchestrator from running itself — it would otherwise scan work-next.js,
+// see "fs.writeFileSync" and ".work-state.json" both present, and block.
+const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+
 const protector = createFileProtector({
   isProtected: isOrchestratorManaged,
   formatMessage,
+  trustedScriptRoots: [PLUGIN_ROOT],
 });
 
 async function main() {

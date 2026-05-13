@@ -117,7 +117,22 @@ function basenameProtector(basenames) {
  * @property {boolean} skipRemainingChecks — true for file tools (Edit/Write/MultiEdit) whether blocked or not
  */
 function createFileProtector(opts) {
-  const { isProtected, isExempt = () => false, formatMessage } = opts;
+  const { isProtected, isExempt = () => false, formatMessage, trustedScriptRoots = [] } = opts;
+  // Resolve trusted script roots once. Scripts whose realpath is inside any of
+  // these roots skip Vector 3 (script-content bypass detection). This is how a
+  // hook tells the protector "these scripts are mine — they're the legitimate
+  // writers of the protected files." Without this, the hook deadlocks: it
+  // can't run its own orchestrator because the orchestrator's source mentions
+  // the protected basenames and contains write ops.
+  const resolvedTrustedRoots = trustedScriptRoots
+    .map((r) => {
+      try {
+        return fs.realpathSync(r);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 
   const defaultMessage = (match, vector) =>
     `BLOCKED: Direct ${vector} to ${match} is not allowed.\n` +
@@ -258,6 +273,21 @@ function createFileProtector(opts) {
     }
   }
 
+  function isUnderTrustedRoot(scriptPath) {
+    if (resolvedTrustedRoots.length === 0) return false;
+    let resolved;
+    try {
+      resolved = fs.realpathSync(scriptPath);
+    } catch {
+      return false;
+    }
+    for (const root of resolvedTrustedRoots) {
+      const rel = path.relative(root, resolved);
+      if (!rel.startsWith('..') && !path.isAbsolute(rel)) return true;
+    }
+    return false;
+  }
+
   function checkScriptBypass(cmd, toolInput, hookData) {
     const scripts = extractScriptPaths(cmd);
     for (const scriptPath of scripts) {
@@ -266,6 +296,11 @@ function createFileProtector(opts) {
       // Resolves the GH-141 false positive: `node --test workflow-state.test.js` is no longer
       // blocked because the test file is in __tests__/, within the repo root, and git-tracked.
       if (isTrustedTestScript(scriptPath)) continue;
+      // Skip Vector 3 for scripts inside an explicitly trusted root (e.g. the
+      // plugin's own orchestrator scripts). The hook that owns the protected
+      // basenames declares its own scripts trusted; otherwise the orchestrator
+      // can't run itself.
+      if (isUnderTrustedRoot(scriptPath)) continue;
 
       let content;
       try {

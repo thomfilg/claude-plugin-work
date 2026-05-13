@@ -109,4 +109,27 @@ describe('protect-orchestrator-state hook', () => {
       assert.equal(r.code, 0);
     });
   });
+
+  describe('does NOT deadlock the orchestrator (regression: GH plugin self-bypass)', () => {
+    // Vector 3 used to block the orchestrator from running itself because
+    // work-next.js (a) contains fs.writeFileSync and (b) mentions the literal
+    // ".work-state.json" in its source. We now exempt scripts living inside
+    // the plugin root.
+    const WORK_NEXT = path.resolve(__dirname, '..', '..', 'work-next.js');
+    const TRANSITION = path.resolve(__dirname, '..', '..', 'transition-step.js');
+    const cases = [
+      ['node work-next.js ECHO-4446', `node ${WORK_NEXT} ECHO-4446`],
+      ['node transition-step.js …', `node ${TRANSITION} ECHO-4446 brief`],
+    ];
+    for (const [label, command] of cases) {
+      it(label, () => {
+        const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+        assert.equal(
+          r.code,
+          0,
+          `orchestrator script must not be blocked by its own protector; stderr=${r.stderr.slice(0, 300)}`
+        );
+      });
+    }
+  });
 });
