@@ -222,6 +222,18 @@ function extractTestCommand(taskBody) {
     //   - leftover backticks / fence markers
     if (/^(?:bash|sh|zsh|fish|node|python|python3)\s*$/i.test(stripped)) continue;
     if (/^[`]+$/.test(stripped)) continue;
+    // Skip markdown prose lines that are obviously not shell commands —
+    // bullet-prefix italics (`- _Documentation only_`) or plain italic
+    // (`_Documentation only_`). These appear in checkpoint/doc-only tasks
+    // where the author meant "no test runs here" but the implement-gate
+    // would otherwise try to execSync the prose.
+    const bulletStripped = stripped.replace(/^[-*+]\s+/, '').trim();
+    if (/^_[^_]*_\s*$/.test(bulletStripped)) continue;
+    if (/^_/.test(bulletStripped) && /_$/.test(bulletStripped)) continue;
+    // Skip markdown horizontal-rule separators (`---`, `***`, `___`).
+    // These can leak into the captured body when the heading lookahead
+    // doesn't terminate cleanly (trailing newline missing, etc).
+    if (/^-{3,}$|^\*{3,}$|^_{3,}$/.test(stripped)) continue;
     cmdLines.push(stripped);
     if (!stripped.endsWith('\\')) break;
   }
