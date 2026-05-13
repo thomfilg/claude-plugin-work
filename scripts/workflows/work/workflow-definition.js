@@ -590,6 +590,11 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
     {
       basename: 'brief.md',
       step: STEPS.brief,
+      // brief_gate may amend brief.md to record `## Sibling-gap decisions`
+      // and to resolve open-questions. Without this allowedSteps entry,
+      // brief_gate edits get blocked by the artifact-protector before the
+      // contentGuard below ever runs.
+      allowedSteps: [STEPS.brief_gate],
       agents: ['brief-writer'],
       contentGuard: (content, currentStep) => {
         // Only enforce during the 'brief' step — brief_gate is allowed to resolve questions
@@ -616,7 +621,15 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
         return { blocked: false };
       },
     },
-    { basename: 'spec.md', step: STEPS.spec, agents: ['spec-writer'] },
+    {
+      basename: 'spec.md',
+      step: STEPS.spec,
+      // spec_gate may need in-place edits when its validators (brief↔spec
+      // coverage, embedded gherkin) fail. Without this, the agent can't
+      // repair the spec without manual state-machine rewinding.
+      allowedSteps: [STEPS.spec_gate],
+      agents: ['spec-writer'],
+    },
     {
       basename: 'tasks.md',
       step: STEPS.tasks,
