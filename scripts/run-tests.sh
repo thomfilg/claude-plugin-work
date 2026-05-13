@@ -3,9 +3,21 @@
 # Works on Node 20+ without glob support in `node --test`
 #
 # To skip a broken test, add its path to .test-skip (one per line).
-set -euo pipefail
+#
+# IMPORTANT: cleanup runs via `trap` on EXIT/INT/TERM so leftover dirs and
+# /tmp/claude-session-guard-*.json lock files NEVER survive an interrupted
+# run. Leaked locks block real agents from starting their workflows.
+set -u
+set -o pipefail
 
 SKIP_FILE=".test-skip"
+
+cleanup_test_artifacts() {
+  node -e "require('./scripts/workflows/lib/__tests__/test-cleanup').cleanupTestArtifacts()" 2>/dev/null || true
+}
+
+# Fire on ANY exit path — clean shutdown, SIGINT (Ctrl+C), SIGTERM, error.
+trap cleanup_test_artifacts EXIT INT TERM
 
 # Build space-separated file list (node --test expects positional args, not newlines)
 mapfile -t FILES < <(find scripts/workflows agents skills -type f \( -name '*.test.js' -o -name '*.spec.js' \) | sort)
@@ -28,14 +40,8 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 0
 fi
 
-# Clean up leftover TEST-* dirs from previous interrupted test runs
-node -e "require('./scripts/workflows/lib/__tests__/test-cleanup').cleanupTestDirs()" 2>/dev/null || true
+# Pre-clean (in case a prior run died before its trap could fire)
+cleanup_test_artifacts
 
-# Run tests, capture exit code, then clean up
+# Run tests; trap will fire cleanup on exit (clean or interrupted)
 node --test "${FILES[@]}"
-EXIT_CODE=$?
-
-# Clean up TEST-* dirs created during this run
-node -e "require('./scripts/workflows/lib/__tests__/test-cleanup').cleanupTestDirs()" 2>/dev/null || true
-
-exit $EXIT_CODE
