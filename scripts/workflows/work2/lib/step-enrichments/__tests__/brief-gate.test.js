@@ -109,6 +109,60 @@ describe('brief-gate Gate 0 manifest validation', () => {
   });
 });
 
+describe('brief-gate Gate A sibling-gap injection', () => {
+  beforeEach(() => {
+    // Valid manifest so Gate 0 passes — focus on Gate A injection.
+    fs.writeFileSync(path.join(tmp, 'related-tickets.json'), JSON.stringify(validManifest()));
+  });
+
+  it('injects user-scoped questions for unresolved sibling-gap entries', () => {
+    fs.writeFileSync(
+      path.join(tmp, 'brief.md'),
+      [
+        '## Out of scope (sibling-owned)',
+        '- `lib/x.ts` — owned by GH-100 (status: Done, PR: #50). Reason: read path missing.',
+        '',
+        '## Other',
+      ].join('\n')
+    );
+    const reg = makeRegistry();
+    registerBriefGate(reg.register);
+    const entry = { step: 'brief_gate' };
+    reg.run('brief_gate', entry, ctx());
+    assert.ok(entry._overrideInstruction);
+    assert.equal(entry._overrideInstruction.action, 'blocked');
+    const qs = entry._overrideInstruction.userQuestions || [];
+    assert.equal(qs.length, 1);
+    assert.match(qs[0].question, /GH-100/);
+  });
+
+  it('passes when every gap has a matching decision', () => {
+    fs.writeFileSync(
+      path.join(tmp, 'brief.md'),
+      [
+        '## Out of scope (sibling-owned)',
+        '- `lib/x.ts` — owned by GH-100. Reason: read path.',
+        '',
+        '## Sibling-gap decisions',
+        '- `lib/x.ts` — decision: wait-for-sibling; timestamp: 2026-05-13T00:00Z',
+      ].join('\n')
+    );
+    const reg = makeRegistry();
+    registerBriefGate(reg.register);
+    const entry = { step: 'brief_gate' };
+    reg.run('brief_gate', entry, ctx());
+    assert.equal(entry._overrideInstruction, undefined);
+  });
+
+  it('no-op when brief.md is missing', () => {
+    const reg = makeRegistry();
+    registerBriefGate(reg.register);
+    const entry = { step: 'brief_gate' };
+    reg.run('brief_gate', entry, ctx());
+    assert.equal(entry._overrideInstruction, undefined);
+  });
+});
+
 describe('brief-gate open-questions handling (regression)', () => {
   beforeEach(() => {
     // Write a valid manifest so the Gate 0 path passes — we want to test the

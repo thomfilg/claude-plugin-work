@@ -10,8 +10,34 @@
 
 'use strict';
 
+const fsMod = require('fs');
 const relatedTickets = require('../../../lib/related-tickets');
 const tp = require('../../../lib/ticket-provider');
+const {
+  findUnresolvedSiblingGaps,
+  buildSiblingGapQuestions,
+} = require('../../../lib/brief-sibling-gaps');
+
+function _readBriefText(tasksDir, pathMod) {
+  try {
+    return fsMod.readFileSync(pathMod.join(tasksDir, 'brief.md'), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function _injectSiblingGapQuestions(entry, ctx) {
+  const { tasksDir, ticket, path: pathMod } = ctx;
+  const briefText = _readBriefText(tasksDir, pathMod);
+  if (!briefText) return;
+  const { unresolved } = findUnresolvedSiblingGaps(briefText);
+  if (unresolved.length === 0) return;
+  const newQs = buildSiblingGapQuestions(unresolved, ticket);
+  const existing = entry.askUserQuestionPayload || { questions: [] };
+  const merged = (existing.questions || []).slice();
+  for (const q of newQs) merged.push(q);
+  entry.askUserQuestionPayload = { ...existing, questions: merged };
+}
 
 function buildRelatedTicketsBlocker(ticket, tasksDir, pathMod, fs, providerConfig) {
   const result = relatedTickets.readAndValidate(tasksDir, { fs, path: pathMod });
@@ -60,6 +86,11 @@ module.exports = function registerBriefGate(register) {
         return;
       }
     }
+
+    // Gate A — surface unresolved sibling-gap entries from the brief as
+    // user-scoped questions BEFORE the open-question routing below decides
+    // whether to block.
+    _injectSiblingGapQuestions(entry, ctx);
 
     if (!entry.askUserQuestionPayload) return;
 

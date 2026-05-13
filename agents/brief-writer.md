@@ -39,6 +39,27 @@ You will receive:
 1. Ticket requirements (title, description, acceptance criteria) from a previous step
 2. A path where to save the brief
 
+## Out of scope (sibling-owned) — Gate A
+
+When a P0 requirement names a surface (file path / endpoint / schema / symbol) that the `related-tickets.json` manifest declares as owned by a sibling ticket, do NOT add the P0 to this brief's `### Must Have`. Move it to a dedicated section:
+
+```markdown
+## Out of scope (sibling-owned)
+- `<SURFACE>` — owned by <SIBLING-TICKET-ID> (status: <STATUS>, PR: <#N or "not yet shipped">). Reason: <why this is needed for the current ticket but not owned here>.
+```
+
+One entry per surface. The format is mechanical — Gate A parses these bullets to surface AskUserQuestion at brief_gate. After the user decides, the gate persists their answer under a sibling section:
+
+```markdown
+## Sibling-gap decisions
+- `<SURFACE>` — decision: <implement-here | wait-for-sibling>; ticket: <SIBLING-TICKET-ID>; timestamp: <ISO-8601>
+```
+
+Rules:
+- Every `## Out of scope (sibling-owned)` entry MUST have a matching `## Sibling-gap decisions` entry before brief_gate passes.
+- Do NOT pre-fill the decisions section yourself — the orchestrator writes it after the user answers.
+- The surface token in both sections must match exactly (case-insensitive) so Gate A can pair them.
+
 ## Related Tickets Manifest (Gate 0 — REQUIRED FIRST)
 
 Before drafting the brief, fetch the related tickets and write `tasks/<ticket>/related-tickets.json`. The orchestrator injects exact fetch instructions per ticket provider (Jira / Linear / GitHub) into your prompt under `## Related Tickets Manifest (REQUIRED — fetch FIRST)`.
