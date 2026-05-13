@@ -218,6 +218,66 @@ function transitionStep(ticket, targetStep) {
   return _transitionStep(ticket, targetStep, buildTransitionDeps());
 }
 
+// ─── Active-session conflict detection ──────────────────────────────────────
+
+/**
+ * Detect whether the user-supplied ticket canonical conflicts with an existing
+ * active session. Returns null on no conflict, or { canonical, reason } when
+ * the caller should be blocked.
+ *
+ * Rules:
+ *   - Input has suffix, no-suffix sibling state exists at tasks/<base>/.work-state.json → conflict
+ *   - Input has no suffix, but a suffix-session exists at tasks/<base>/<suffix>/.work-state.json → conflict
+ *   - Exact-match state (or no state at all) → no conflict
+ */
+function detectSessionConflict(validated, tasksBase, tp) {
+  const fsLocal = require('fs');
+  const pathLocal = require('path');
+  const safeBase = tp.sanitizeTicketIdForPath(
+    validated.ticketBase,
+    tp.getProviderConfig({ skipPrompt: true })
+  );
+  const suffix = validated.suffix;
+  const exactPath = pathLocal.join(
+    tasksBase,
+    suffix ? `${safeBase}/${suffix}` : safeBase,
+    '.work-state.json'
+  );
+  if (fsLocal.existsSync(exactPath)) return null; // exact match — proceed
+  if (suffix) {
+    // Input has suffix; check for a bare-base session
+    const baseStatePath = pathLocal.join(tasksBase, safeBase, '.work-state.json');
+    if (fsLocal.existsSync(baseStatePath)) {
+      return {
+        canonical: safeBase,
+        reason: `An active session exists for ${safeBase} (no suffix). Re-invoke with that exact canonical, or finish/abort it first.`,
+      };
+    }
+  } else {
+    // Input has no suffix; check for any suffix-session under tasks/<base>/
+    const baseDir = pathLocal.join(tasksBase, safeBase);
+    if (fsLocal.existsSync(baseDir)) {
+      let entries;
+      try {
+        entries = fsLocal.readdirSync(baseDir, { withFileTypes: true });
+      } catch {
+        entries = [];
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const stateFile = pathLocal.join(baseDir, entry.name, '.work-state.json');
+        if (fsLocal.existsSync(stateFile)) {
+          return {
+            canonical: `${safeBase}-${entry.name}`,
+            reason: `An active session exists for ${safeBase}/${entry.name}. Re-invoke with: ${safeBase}-${entry.name}`,
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 // ─── Core Orchestration Loop ────────────────────────────────────────────────
 // IMPORTANT: This file is the generic orchestrator. NO step-specific logic here.
 // Step-specific behavior (prompts, gates, delegation overrides) belongs in
@@ -327,18 +387,30 @@ function getNextInstruction(ticketRaw, rework) {
     }
   }
 
-  // Persist DEFER metadata
+  // Persist DEFER metadata. Also persist the canonical ticket identity
+  // (ticketBase / ticketSuffix / ticketSeparator) so future invocations can
+  // verify they're addressing the same session even if the user passes a
+  // shortened or different variant.
   result.timestamp = new Date().toISOString();
   const planState = loadWorkState(safeName);
   if (planState) {
     planState.lastPlanTimestamp = result.timestamp;
     planState.deferredSteps = result.plan.filter((s) => s.action === 'DEFER').map((s) => s.step);
+    // Backfill canonical identity on existing state from pre-this-fix sessions
+    if (planState.ticketBase === undefined) planState.ticketBase = safeBase;
+    if (planState.ticketSuffix === undefined) planState.ticketSuffix = suffix || null;
+    if (planState.ticketSeparator === undefined) {
+      planState.ticketSeparator = suffix ? '/' : null;
+    }
     saveWorkState(safeName, planState);
   } else {
     const deferSteps = result.plan.filter((s) => s.action === 'DEFER').map((s) => s.step);
     if (deferSteps.length > 0) {
       const minimalState = {
         ticketId: safeName,
+        ticketBase: safeBase,
+        ticketSuffix: suffix || null,
+        ticketSeparator: suffix ? '/' : null,
         description: '',
         currentStep: 1,
         status: 'in_progress',
@@ -631,9 +703,10 @@ function main() {
   // Validate BEFORE writeMarkerFile (which creates a tasks/<id>/ folder).
   // We re-validate inside getNextInstruction too, but the marker write happens
   // first under --init, so we must gate it here as well.
+  let validated;
   try {
     const earlyProviderConfig = tp.getProviderConfig({ skipPrompt: true });
-    validateRawTicketInput(ticketRaw, earlyProviderConfig);
+    validated = validateRawTicketInput(ticketRaw, earlyProviderConfig);
   } catch (err) {
     console.log(
       JSON.stringify(
@@ -649,6 +722,28 @@ function main() {
       )
     );
     process.exit(1);
+  }
+
+  // Active-session conflict check: once a session is bootstrapped, future
+  // invocations MUST use the same canonical ID. Pass `APP-1234` when an active
+  // session uses `APP-1234-foo` (or vice versa) → block.
+  {
+    const conflict = detectSessionConflict(validated, TASKS_BASE, tp);
+    if (conflict) {
+      console.log(
+        JSON.stringify(
+          {
+            type: 'work_instruction',
+            action: 'blocked',
+            reason: conflict.reason,
+            suggestion: `Re-invoke with: ${conflict.canonical}`,
+          },
+          null,
+          2
+        )
+      );
+      process.exit(1);
+    }
   }
 
   // On --init, write marker file for auto-advance hook detection
