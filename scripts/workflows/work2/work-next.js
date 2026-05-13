@@ -97,7 +97,7 @@ const { STEPS, STEP_TRANSITIONS, ALL_STEPS, workflowCanTransition } = require(
 const { run, fileExists, readFile, listFiles, ...helpers } = require(
   path.join(workDir, 'work-helpers')
 );
-const { parseTicketInput } = require(path.join(libDir, 'ticket-provider'));
+const { parseTicketInput, validateRawTicketInput } = require(path.join(libDir, 'ticket-provider'));
 const { parseTasks, buildTaskPrompt } = require(path.join(workDir, 'task-parser'));
 const { archiveStepArtifacts } = require(path.join(workDir, 'artifact-archival'));
 const { getHeadSha } = require(path.join(workDir, 'git-utils'));
@@ -244,12 +244,15 @@ function getNextInstruction(ticketRaw, rework) {
   }
   _recursionDepth++;
 
-  // Parse ticket input
+  // Parse + STRICT validate ticket input BEFORE any filesystem side effect.
+  // This rejects malformed input like "ECHO-4446 TASKS" (whitespace), traversal,
+  // or non-canonical bases — preventing creation of bogus tasks/ subfolders.
+  const providerConfigEarly = tp.getProviderConfig({ skipPrompt: true });
   let ticketBase, suffix;
   try {
-    const parsed = parseTicketInput(ticketRaw);
-    ticketBase = parsed.ticketBase;
-    suffix = parsed.suffix;
+    const validated = validateRawTicketInput(ticketRaw, providerConfigEarly);
+    ticketBase = validated.ticketBase;
+    suffix = validated.suffix;
   } catch (err) {
     return {
       type: 'work_instruction',
@@ -262,11 +265,12 @@ function getNextInstruction(ticketRaw, rework) {
         remainingSteps: [],
       },
       reason: err.message,
-      suggestion: 'Check ticket ID format',
+      suggestion:
+        'Pass a canonical ticket ID like PROJ-123 (or PROJ-123-suffix). No spaces or path separators.',
     };
   }
 
-  const providerConfig = tp.getProviderConfig({ skipPrompt: true });
+  const providerConfig = providerConfigEarly;
   const isGitHub = providerConfig?.provider === 'github';
 
   // Normalize ticket
@@ -603,10 +607,49 @@ function main() {
 
   const rework = args.includes('--rework');
   const init = args.includes('--init');
-  const ticketRaw = args
-    .filter((a) => !a.startsWith('--'))
-    .join(' ')
-    .trim();
+  // Take only the FIRST positional arg as the ticket. Multiple positionals
+  // (e.g. "ECHO-4446 TASKS ECHO-4446") are an error — they would otherwise be
+  // silently joined into "ECHO-4446 TASKS ECHO-4446" and create a bogus folder.
+  const positionals = args.filter((a) => !a.startsWith('--'));
+  const ticketRaw = (positionals[0] || '').trim();
+  if (positionals.length > 1) {
+    console.log(
+      JSON.stringify(
+        {
+          type: 'work_instruction',
+          action: 'blocked',
+          reason: `Multiple positional arguments received: ${JSON.stringify(positionals)}. Pass exactly ONE ticket ID.`,
+          suggestion: 'Quote suffixes: use APP-1234-foo (one arg), not APP-1234 foo (two args).',
+        },
+        null,
+        2
+      )
+    );
+    process.exit(1);
+  }
+
+  // Validate BEFORE writeMarkerFile (which creates a tasks/<id>/ folder).
+  // We re-validate inside getNextInstruction too, but the marker write happens
+  // first under --init, so we must gate it here as well.
+  try {
+    const earlyProviderConfig = tp.getProviderConfig({ skipPrompt: true });
+    validateRawTicketInput(ticketRaw, earlyProviderConfig);
+  } catch (err) {
+    console.log(
+      JSON.stringify(
+        {
+          type: 'work_instruction',
+          action: 'blocked',
+          reason: err.message,
+          suggestion:
+            'Pass a canonical ticket ID like PROJ-123 (or PROJ-123-suffix). No spaces or path separators.',
+        },
+        null,
+        2
+      )
+    );
+    process.exit(1);
+  }
 
   // On --init, write marker file for auto-advance hook detection
   if (init) {

@@ -166,4 +166,73 @@ describe('work-next.js CLI', () => {
     assert.equal(parsed.action, 'blocked');
     assert.ok(parsed.reason.includes('No ticket'));
   });
+
+  it('rejects invalid ticket input (whitespace) WITHOUT creating any folder', () => {
+    const { spawnSync } = require('child_process');
+    const fs = require('fs');
+    const os = require('os');
+    const pathMod = require('path');
+    const tmpBase = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'work-next-validate-'));
+    try {
+      const env = {
+        ...process.env,
+        TASKS_BASE: tmpBase,
+        SESSION_GUARD_ENABLED: '0',
+        TICKET_PROVIDER: 'jira',
+        TICKET_PROJECT_KEY: 'ECHO',
+      };
+      delete env.CLAUDE_PLUGIN_ROOT;
+      const res = spawnSync(
+        process.execPath,
+        [pathMod.join(__dirname, '..', 'work-next.js'), 'ECHO-4446 TASKS'],
+        { encoding: 'utf8', timeout: 10000, env }
+      );
+      const stdout = String(res.stdout || '');
+      // Last JSON blob on stdout (skip any non-JSON noise)
+      const lastBrace = stdout.lastIndexOf('{');
+      const parsed = JSON.parse(stdout.slice(lastBrace > -1 ? lastBrace : 0));
+      assert.equal(parsed.action, 'blocked');
+      assert.ok(
+        /whitespace|Invalid|positional/i.test(parsed.reason),
+        `unexpected reason: ${parsed.reason}`
+      );
+      // Critical: no folder must have been created in TASKS_BASE
+      const entries = fs.readdirSync(tmpBase);
+      assert.deepEqual(entries, [], `expected empty TASKS_BASE, found: ${JSON.stringify(entries)}`);
+    } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects multiple positional args WITHOUT creating any folder', () => {
+    const { spawnSync } = require('child_process');
+    const fs = require('fs');
+    const os = require('os');
+    const pathMod = require('path');
+    const tmpBase = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'work-next-validate-'));
+    try {
+      const env = {
+        ...process.env,
+        TASKS_BASE: tmpBase,
+        SESSION_GUARD_ENABLED: '0',
+        TICKET_PROVIDER: 'jira',
+        TICKET_PROJECT_KEY: 'ECHO',
+      };
+      delete env.CLAUDE_PLUGIN_ROOT;
+      const res = spawnSync(
+        process.execPath,
+        [pathMod.join(__dirname, '..', 'work-next.js'), 'ECHO-4446', 'EXTRA-ARG'],
+        { encoding: 'utf8', timeout: 10000, env }
+      );
+      const stdout = String(res.stdout || '');
+      const lastBrace = stdout.lastIndexOf('{');
+      const parsed = JSON.parse(stdout.slice(lastBrace > -1 ? lastBrace : 0));
+      assert.equal(parsed.action, 'blocked');
+      assert.ok(/positional/i.test(parsed.reason), `unexpected reason: ${parsed.reason}`);
+      const entries = fs.readdirSync(tmpBase);
+      assert.deepEqual(entries, []);
+    } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
 });
