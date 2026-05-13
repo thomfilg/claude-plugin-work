@@ -71,6 +71,7 @@ require('./brief-gate')(register);
 require('./spec-gate')(register);
 require('./context-inject')(register);
 require('./tasks-scope-gate')(register);
+require('./discrepancy-gate')(register);
 require('./implement')(register);
 require('./check')(register);
 require('./follow-up')(register);
