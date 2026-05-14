@@ -233,10 +233,21 @@ function transitionStep(ticket, targetStep) {
 function detectSessionConflict(validated, tasksBase, tp) {
   const fsLocal = require('fs');
   const pathLocal = require('path');
-  const safeBase = tp.sanitizeTicketIdForPath(
-    validated.ticketBase,
-    tp.getProviderConfig({ skipPrompt: true })
-  );
+  const providerConfig = tp.getProviderConfig({ skipPrompt: true });
+  const isGitHub = providerConfig?.provider === 'github';
+  // Normalize ticketBase the same way getNextInstruction does, so the
+  // filesystem path we probe matches the one used by state writers.
+  // For GitHub, `GH-56` / `56` / `#56` all canonicalize to `#56` before
+  // sanitization → `sanitizeTicketIdForPath('#56', ...)` (e.g. `GH-56`).
+  let normalizedBase = validated.ticketBase.toUpperCase();
+  if (
+    isGitHub &&
+    (/^#?\d+$/.test(validated.ticketBase) || /^GH-\d+$/i.test(validated.ticketBase))
+  ) {
+    const num = validated.ticketBase.replace(/^#|^GH-/i, '');
+    normalizedBase = '#' + num;
+  }
+  const safeBase = tp.sanitizeTicketIdForPath(normalizedBase, providerConfig);
   const suffix = validated.suffix;
   const exactPath = pathLocal.join(
     tasksBase,
