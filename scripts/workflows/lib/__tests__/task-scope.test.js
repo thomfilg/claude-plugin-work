@@ -71,6 +71,12 @@ describe('validateTask', () => {
     assert.deepEqual(ts.validateTask(null), ['task must be an object']);
     assert.deepEqual(ts.validateTask(undefined), ['task must be an object']);
   });
+
+  it('exempts checkpoint tasks from the Files-in-scope requirement', () => {
+    // Checkpoint tasks don't ship code, so they don't need a scope envelope.
+    assert.deepEqual(ts.validateTask({ num: 9, type: 'checkpoint' }), []);
+    assert.deepEqual(ts.validateTask({ num: 10, isCheckpoint: true }), []);
+  });
 });
 
 describe('validateAll', () => {
@@ -335,7 +341,7 @@ describe('test-file naming convention (integration / e2e)', () => {
       };
       const errors = ts.validateTaskTestScope(task);
       assert.equal(errors.length, 1);
-      assert.match(errors[0], /not named as integration tests/i);
+      assert.match(errors[0], /no declared runner will pick up/i);
       assert.match(errors[0], /bar\.test\.ts/);
     });
 
@@ -347,7 +353,7 @@ describe('test-file naming convention (integration / e2e)', () => {
       };
       const errors = ts.validateTaskTestScope(task);
       assert.equal(errors.length, 1);
-      assert.match(errors[0], /not named as e2e tests/i);
+      assert.match(errors[0], /no declared runner will pick up/i);
     });
 
     it('blocks $TEST_UNIT_COMMAND when test file IS an integration test', () => {
@@ -359,7 +365,7 @@ describe('test-file naming convention (integration / e2e)', () => {
       };
       const errors = ts.validateTaskTestScope(task);
       assert.equal(errors.length, 1);
-      assert.match(errors[0], /integration- or e2e-named/);
+      assert.match(errors[0], /no declared runner will pick up/i);
     });
 
     it('blocks $TEST_UNIT_COMMAND when test file IS an e2e test', () => {
@@ -370,7 +376,7 @@ describe('test-file naming convention (integration / e2e)', () => {
       };
       const errors = ts.validateTaskTestScope(task);
       assert.equal(errors.length, 1);
-      assert.match(errors[0], /integration- or e2e-named/);
+      assert.match(errors[0], /no declared runner will pick up/i);
     });
 
     it('passes correctly named integration test with the integration runner', () => {
@@ -390,6 +396,33 @@ describe('test-file naming convention (integration / e2e)', () => {
         testCommand: 'CHANGED_FILES="tests/e2e/foo.spec.ts" eval "$TEST_E2E_COMMAND"',
       };
       assert.deepEqual(ts.validateTaskTestScope(task), []);
+    });
+
+    it('passes multi-suite chained command (unit + integration)', () => {
+      // The legitimate pattern: each runner self-filters CHANGED_FILES.
+      // Unit runner picks up `foo.test.ts`; integration runner picks up
+      // `bar.integration.test.ts`. No file is orphaned.
+      const task = {
+        num: 7,
+        filesInScope: ['lib/foo/**', 'app/api/**'],
+        testCommand:
+          'CHANGED_FILES="app/api/bar.integration.test.ts lib/foo/foo.test.ts" eval "$TEST_UNIT_COMMAND" && eval "$TEST_INTEGRATION_COMMAND"',
+      };
+      assert.deepEqual(ts.validateTaskTestScope(task), []);
+    });
+
+    it('still blocks when a file matches NO declared runner', () => {
+      // Only `$TEST_UNIT_COMMAND` declared, but an integration file is in
+      // CHANGED_FILES — unit runner's include pattern won't match it.
+      const task = {
+        num: 8,
+        filesInScope: ['lib/foo/**', 'app/api/**'],
+        testCommand:
+          'CHANGED_FILES="app/api/bar.integration.test.ts lib/foo/foo.test.ts" eval "$TEST_UNIT_COMMAND"',
+      };
+      const errors = ts.validateTaskTestScope(task);
+      assert.ok(errors.length >= 1);
+      assert.match(errors[0], /bar\.integration\.test\.ts/);
     });
   });
 });

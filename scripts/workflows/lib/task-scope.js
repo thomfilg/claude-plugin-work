@@ -25,6 +25,15 @@ function validateTask(task) {
   }
   const label = `Task ${task.num ?? '?'}`;
 
+  // Checkpoint tasks don't ship code, so the `Files in scope` envelope is
+  // not meaningful for them. The implement-gate already exempts them from
+  // TDD evidence; this matches that behavior at Gate C.
+  const taskType = typeof task.type === 'string' ? task.type.toLowerCase().trim() : null;
+  const isCheckpoint = taskType === 'checkpoint' || task.isCheckpoint === true;
+  if (isCheckpoint) {
+    return errors;
+  }
+
   // Legacy fallback: tasks written before Gate C may carry `### Suggested Scope`
   // instead of `### Files in scope`. Accept that as evidence of scope intent
   // and ONLY error when BOTH are missing/empty. New tasks SHOULD use
@@ -294,44 +303,39 @@ function validateTaskTestScope(task) {
     }
   }
 
-  // Test-runner / file-naming consistency
+  // Test-runner / file-naming consistency.
+  //
+  // Multi-suite chained commands (`$TEST_UNIT_COMMAND && $TEST_INTEGRATION_COMMAND`)
+  // are valid — each runner self-filters CHANGED_FILES by its include pattern.
+  // We only flag a file when NO chained runner's naming convention matches it.
   const testFiles = changed.filter((p) => TEST_FILE_EXT_RE.test(p));
   if (testFiles.length > 0) {
-    if (usesIntegrationRunner(task.testCommand)) {
-      const wrong = testFiles.filter((p) => !isIntegrationTestPath(p));
-      if (wrong.length > 0) {
-        errors.push(
-          `Task ${task.num ?? '?'} \`### Test Command\` uses \`$TEST_INTEGRATION_COMMAND\` but ` +
-            `CHANGED_FILES includes test files that are NOT named as integration tests: ` +
-            wrong.map((p) => `"${p}"`).join(', ') +
-            '. Integration tests MUST match `**/*.integration.(test|spec).(ts|tsx|js|jsx|mjs|cjs)` ' +
-            'OR live under a `**/integration/**/` directory. Either rename the test file (recommended) ' +
-            'or switch the Test Command to `$TEST_UNIT_COMMAND` if it is actually a unit test.'
-        );
-      }
-    } else if (usesE2eRunner(task.testCommand)) {
-      const wrong = testFiles.filter((p) => !isE2eTestPath(p));
-      if (wrong.length > 0) {
-        errors.push(
-          `Task ${task.num ?? '?'} \`### Test Command\` uses \`$TEST_E2E_COMMAND\` but ` +
-            `CHANGED_FILES includes test files that are NOT named as e2e tests: ` +
-            wrong.map((p) => `"${p}"`).join(', ') +
-            '. E2E tests MUST match `**/*.e2e.(test|spec).(ts|tsx|js|jsx|mjs|cjs)` ' +
-            'OR live under a `**/e2e/**/` directory. Either rename the test file (recommended) ' +
-            'or switch the Test Command to `$TEST_UNIT_COMMAND` / `$TEST_INTEGRATION_COMMAND`.'
-        );
-      }
-    } else if (usesUnitRunner(task.testCommand)) {
-      const wrong = testFiles.filter((p) => isIntegrationTestPath(p) || isE2eTestPath(p));
-      if (wrong.length > 0) {
-        errors.push(
-          `Task ${task.num ?? '?'} \`### Test Command\` uses \`$TEST_UNIT_COMMAND\` but ` +
-            `CHANGED_FILES includes integration- or e2e-named test files: ` +
-            wrong.map((p) => `"${p}"`).join(', ') +
-            '. Either rename the file to drop the `.integration.` / `.e2e.` infix and move it out of ' +
-            'any `integration/` or `e2e/` directory, or switch the Test Command to the matching runner.'
-        );
-      }
+    const runners = {
+      unit: usesUnitRunner(task.testCommand),
+      integration: usesIntegrationRunner(task.testCommand),
+      e2e: usesE2eRunner(task.testCommand),
+    };
+    const fileMatchesAnyRunner = (p) => {
+      if (runners.e2e && isE2eTestPath(p)) return true;
+      if (runners.integration && isIntegrationTestPath(p)) return true;
+      if (runners.unit && !isIntegrationTestPath(p) && !isE2eTestPath(p)) return true;
+      return false;
+    };
+    const orphans = testFiles.filter((p) => !fileMatchesAnyRunner(p));
+    if (orphans.length > 0) {
+      const declared = Object.entries(runners)
+        .filter(([, on]) => on)
+        .map(([k]) => `$TEST_${k.toUpperCase()}_COMMAND`)
+        .join(' + ');
+      errors.push(
+        `Task ${task.num ?? '?'} \`### Test Command\` declares ${declared || '(no known runner)'} ` +
+          `but CHANGED_FILES includes test files no declared runner will pick up: ` +
+          orphans.map((p) => `"${p}"`).join(', ') +
+          '. Integration tests MUST match `**/*.integration.(test|spec).<ext>` OR live under ' +
+          '`**/integration/**/`. E2E tests MUST match `**/*.e2e.(test|spec).<ext>` OR live under ' +
+          '`**/e2e/**/`. Unit tests must do NEITHER. Either rename the test file or add the matching ' +
+          'runner to the chain (e.g. append ` && eval "$TEST_INTEGRATION_COMMAND"`).'
+      );
     }
   }
 
