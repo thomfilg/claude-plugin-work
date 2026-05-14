@@ -278,9 +278,24 @@ function detectSessionConflict(validated, tasksBase, tp) {
         if (!entry.isDirectory()) continue;
         const stateFile = pathLocal.join(baseDir, entry.name, '.work-state.json');
         if (fsLocal.existsSync(stateFile)) {
+          // Read the existing session's recorded separator (if any) so the
+          // `canonical` and `reason` fields are mutually consistent —
+          // matching the form the session was originally created with.
+          // Falls back to `-` (default re-invocation form).
+          let existingSeparator = '-';
+          try {
+            const raw = fsLocal.readFileSync(stateFile, 'utf8');
+            const parsed = JSON.parse(raw);
+            if (parsed && (parsed.ticketSeparator === '-' || parsed.ticketSeparator === '/')) {
+              existingSeparator = parsed.ticketSeparator;
+            }
+          } catch {
+            // ignore — fall back to '-'
+          }
+          const canonical = `${safeBase}${existingSeparator}${entry.name}`;
           return {
-            canonical: `${safeBase}-${entry.name}`,
-            reason: `An active session exists for ${safeBase}/${entry.name}. Re-invoke with: ${safeBase}-${entry.name}`,
+            canonical,
+            reason: `An active session exists for ${canonical}. Re-invoke with: ${canonical}`,
           };
         }
       }
