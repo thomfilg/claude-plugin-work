@@ -68,6 +68,42 @@ module.exports = function registerMonitor(register) {
       return null;
     }
 
+    // GitHub returns `mergeable: UNKNOWN` for up to ~30s after a push or a
+    // sibling-PR merge, while it recomputes mergeability. If we accept that
+    // value we declare the PR conflict-free when in fact a conflict is about
+    // to be reported. Retry a few times before trusting UNKNOWN.
+    // Bounded retry (3 * 3s = 9s max latency) — better than letting a
+    // conflict slip past the gate for an entire cycle.
+    let mergeableRetries = 0;
+    while (prInfo && prInfo.mergeable === 'UNKNOWN' && mergeableRetries < 3) {
+      try {
+        execFileSync('node', ['-e', 'setTimeout(()=>{}, 3000)'], {
+          stdio: 'ignore',
+          timeout: 5000,
+        });
+      } catch {
+        /* sleep best-effort */
+      }
+      try {
+        prInfo = getPRInfo(prArg);
+      } catch {
+        break;
+      }
+      mergeableRetries++;
+    }
+
+    // First-class conflict signal. Any later step (triage, fix-reviews,
+    // report) can check `state._isConflicting` without re-parsing the
+    // formatted output. This makes merge-conflict detection authoritative:
+    // it preempts CI status, review state, and pending bot reviews.
+    state._mergeStatus = {
+      mergeable: prInfo.mergeable || 'UNKNOWN',
+      mergeStateStatus: prInfo.mergeStateStatus || 'UNKNOWN',
+      isConflicting: prInfo.mergeable === 'CONFLICTING' || prInfo.mergeStateStatus === 'DIRTY',
+      retries: mergeableRetries,
+    };
+    state._isConflicting = state._mergeStatus.isConflicting;
+
     if (prInfo.state === 'MERGED') {
       state.lastMonitorResult = { exitCode: 0, output: `PR #${prInfo.number} is merged.` };
       state.currentStep = 'report';

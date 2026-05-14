@@ -15,7 +15,7 @@ module.exports = function registerReport(register) {
     // fix-ci falling through when there were no failing CI jobs to dispatch
     // a fix for. Send the workflow back to fix-ci instead.
     const lastOutput = (state.lastMonitorResult && state.lastMonitorResult.output) || '';
-    if (/merge conflict|cannot be merged/i.test(lastOutput)) {
+    if (state._isConflicting || /merge conflict|cannot be merged/i.test(lastOutput)) {
       state.failureCategory = 'conflict';
       state.currentStep = 'fix-ci';
       return null;

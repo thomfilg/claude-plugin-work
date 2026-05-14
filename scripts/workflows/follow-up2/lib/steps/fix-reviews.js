@@ -22,6 +22,19 @@ const { execFileSync } = require('child_process');
 
 module.exports = function registerFixReviews(register) {
   register('fix-reviews', (state, ctx) => {
+    // ── PRIORITY 0 guard: never process reviews against a conflicted branch.
+    // Conflict was either detected on the current monitor cycle (state
+    // ._isConflicting set by monitor.js) or persisted from a prior cycle.
+    // Sending the agent to fix reviews against a branch that won't merge
+    // wastes a round-trip and risks the "blocked: review skipped, ask
+    // user" instruction when the real issue is "rebase first". Re-route
+    // to fix-ci so the agent resolves the conflict before any review work.
+    if (state._isConflicting) {
+      state.failureCategory = 'conflict';
+      state.currentStep = 'fix-ci';
+      return null;
+    }
+
     const commentsScript = path.join(ctx.workScriptsDir, 'follow-up-pr-comments.js');
     const prNum = String(state.prNumber || '');
     const scriptEnv = { ...process.env, WORK_TICKET_ID: state.ticketId };
