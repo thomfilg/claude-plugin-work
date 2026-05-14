@@ -23,6 +23,8 @@ module.exports = function registerReport(register) {
 
     // Write accountability report if it doesn't exist
     const reportPath = path.join(ctx.tasksDir, 'review-accountability.json');
+    const skippedReviews = state._skippedReviewsCount || 0;
+    const solvedReviews = state._solvedReviewsCount || 0;
     if (!fs.existsSync(reportPath)) {
       try {
         fs.writeFileSync(
@@ -34,6 +36,7 @@ module.exports = function registerReport(register) {
               attempts: state.attempt || 1,
               completedAt: new Date().toISOString(),
               status: 'success',
+              reviewComments: { solved: solvedReviews, skipped: skippedReviews },
             },
             null,
             2
@@ -46,11 +49,15 @@ module.exports = function registerReport(register) {
 
     state.status = 'complete';
 
+    const skipSuffix = skippedReviews
+      ? ` — ${solvedReviews} review${solvedReviews !== 1 ? 's' : ''} fixed, ${skippedReviews} skipped (see follow-up-comments.json for rationale).`
+      : '';
+
     return {
       type: 'follow_up_instruction',
       action: 'complete',
       state: { ticket: state.ticketId, currentStep: 'report', attempt: state.attempt },
-      summary: `Follow-up complete for ${state.ticketId} PR #${state.prNumber || '?'} after ${state.attempt || 1} attempt(s).`,
+      summary: `Follow-up complete for ${state.ticketId} PR #${state.prNumber || '?'} after ${state.attempt || 1} attempt(s)${skipSuffix}`,
     };
   });
 };
