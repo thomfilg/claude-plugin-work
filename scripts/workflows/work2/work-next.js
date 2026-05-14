@@ -557,10 +557,16 @@ function getNextInstruction(ticketRaw, rework) {
           // on verify functions (e.g., isPRGateReady calls checkCI which blocks).
           // Gates like follow-up-gate and check-gate read sub-orchestrator state
           // and advance directly when their sub-workflow completed.
+          // Compute the canonical worktree dir for this ticket so the gate's
+          // test commands run inside the ticket's worktree — NOT whichever
+          // shell cwd the PostToolUse hook happened to fire from. Cross-shell
+          // invocations (one shell per worktree) used to leak: the gate would
+          // run tests from worktree A but write evidence into ticket B.
+          const worktreeDir = path.join(WORKTREES_BASE, `${MAIN_WORKTREE_FOLDER}-${safeBase}`);
           const preGateResult = runGate(
             entry.step,
             safeName,
-            { ticket, stateCtx, tasksDir },
+            { ticket, stateCtx, tasksDir, worktreeDir },
             {
               loadWorkState,
               saveWorkState,
