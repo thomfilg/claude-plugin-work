@@ -122,20 +122,36 @@ module.exports = function registerMonitor(register) {
           stdio: ['pipe', 'pipe', 'pipe'],
         }).trim();
         if (mb) {
-          const tree = execFileSync(
+          // `git merge-tree` exits with code 1 when conflicts are present —
+          // execFileSync THROWS on non-zero, so we use spawnSync to capture
+          // both stdout and exit code without throwing. Conflict markers in
+          // the default output format are `CONFLICT (content): ...` lines
+          // (NOT `<<<<<<<` separator markers — those only appear with
+          // --write-tree mode against an actual workdir, not against bare
+          // refs like origin/<base>). Each conflicting file gets one
+          // `Auto-merging <path>` and one `CONFLICT (...) <path>` line.
+          const { spawnSync } = require('child_process');
+          const res = spawnSync(
             'git',
             ['merge-tree', `--merge-base=${mb}`, 'HEAD', `origin/${baseBranch}`],
             {
               encoding: 'utf8',
               cwd: ctx.worktreeDir,
               timeout: 30000,
-              stdio: ['pipe', 'pipe', 'pipe'],
             }
           );
-          if (/^<{7} |^={7}$|^>{7} /m.test(tree)) {
+          const tree = (res && (res.stdout || '')) + (res && res.stderr ? res.stderr : '');
+          // Conflict is signaled by EITHER non-zero exit code OR a CONFLICT line.
+          const hasConflictExitCode = res && res.status !== 0 && res.status !== null;
+          const hasConflictMarker = /^CONFLICT \(/m.test(tree);
+          if (hasConflictExitCode || hasConflictMarker) {
             localConflicting = true;
+            // Extract conflicting file paths from `CONFLICT (...): Merge conflict in <path>`
+            // and `Auto-merging <path>` lines.
             for (const line of tree.split('\n')) {
-              const m = line.match(/^\+\+\+ b\/(.+)$/);
+              const m =
+                line.match(/^CONFLICT \([^)]+\):.*?(?:in|on) (.+?)$/) ||
+                line.match(/^Auto-merging (.+?)$/);
               if (m && !localConflictFiles.includes(m[1])) {
                 localConflictFiles.push(m[1]);
               }
