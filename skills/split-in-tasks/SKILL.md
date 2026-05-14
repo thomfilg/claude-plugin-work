@@ -100,6 +100,16 @@ Every task must be testable in isolation. If you can't write a test for it, it's
 **Rule 4 — No Overlap:**
 No two tasks should deliver the same code or satisfy the same requirement. If a requirement needs work across multiple tasks, split the requirement's concerns explicitly so each task owns a distinct piece.
 
+**Rule 4b — Every task MUST have a testable surface of its own:**
+A task ships code OR tests that can be verified by THIS task's `### Test Command`, against ONLY files in THIS task's `### Files in scope`. Forbidden patterns (every one of these is a `split-in-tasks` authoring bug — merge with the consumer):
+
+- **Helper-only task:** ships a pure helper or seed used solely by another task's test. There is no test for this helper in isolation. Merge it INTO the consuming task and list both the helper and its consumer's tests in that task's Files in scope.
+- **Schema-narrowing-without-consumer task:** narrows a type/schema that another task's integration test depends on. The narrowing has no behavior change observable in isolation — merge it INTO the task whose test would otherwise fail without the narrowing.
+- **"Run the dependent task's test" task:** a task whose Test Command points at a test file owned by another task. This is the ECHO-4637-class deadlock — caught by the tasks_gate validator.
+- **"Run typecheck only" task:** Test Command is `pnpm typecheck` or any other compile-check that doesn't exercise behavior. Typecheck is not a behavior gate; if your task has no behavior to verify, merge it.
+
+If you cannot write a unit or properly-scoped integration test for the task in isolation, the task should NOT exist as a separate task — merge it with its consumer.
+
 **Rule 5 — Logical Ordering:**
 Tasks are ordered by dependency. Foundational/infrastructure tasks first, then core logic, then integration/UI, then validation/checkpoints.
 

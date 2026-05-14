@@ -183,8 +183,8 @@ describe('validateTaskTestScope (regression: ECHO-4637-class deadlock)', () => {
     const tasks = [
       {
         num: 1,
-        filesInScope: ['lib/foo.ts'],
-        testCommand: 'CHANGED_FILES="lib/bar.ts" eval "$TEST_UNIT_COMMAND"',
+        filesInScope: ['lib/foo/**'],
+        testCommand: 'CHANGED_FILES="lib/bar/bar.test.ts" eval "$TEST_UNIT_COMMAND"',
       },
     ];
     const r = ts.validateAll(tasks);
@@ -207,6 +207,86 @@ describe('extractChangedFilesFromTestCommand', () => {
       assert.deepEqual(ts.extractChangedFilesFromTestCommand(input), expected);
     });
   }
+});
+
+describe('Rule 4b: testable surface enforcement', () => {
+  it('blocks Test Command that is `pnpm typecheck`', () => {
+    const task = {
+      num: 6,
+      filesInScope: ['lib/foo.ts'],
+      testCommand: 'pnpm typecheck',
+    };
+    const errors = ts.validateTaskTestScope(task);
+    assert.ok(errors.length >= 1);
+    assert.match(errors[0], /typecheck-only/);
+    assert.match(errors[0], /Rule 4b/);
+  });
+
+  it('blocks Test Command that is `pnpm lint`', () => {
+    const task = { num: 7, filesInScope: ['lib/foo.ts'], testCommand: 'pnpm lint --fix' };
+    const errors = ts.validateTaskTestScope(task);
+    assert.ok(errors.length >= 1);
+    assert.match(errors[0], /lint-only/);
+  });
+
+  it('blocks Test Command that is `pnpm build`', () => {
+    const task = { num: 8, filesInScope: ['lib/foo.ts'], testCommand: 'pnpm build' };
+    const errors = ts.validateTaskTestScope(task);
+    assert.ok(errors.length >= 1);
+    assert.match(errors[0], /build-only/);
+  });
+
+  it('blocks Test Command that is `true` (noop)', () => {
+    const task = { num: 9, filesInScope: ['lib/foo.ts'], testCommand: 'true' };
+    const errors = ts.validateTaskTestScope(task);
+    assert.ok(errors.length >= 1);
+    assert.match(errors[0], /noop/);
+  });
+
+  it('blocks helper-only task: CHANGED_FILES has zero test files', () => {
+    // ECHO-4637 Task 6 shape: ships a helper, no test file, integration runner.
+    const task = {
+      num: 6,
+      filesInScope: ['tests/e2e/helpers/external-assets-filter-seed.ts'],
+      testCommand:
+        'CHANGED_FILES="tests/e2e/helpers/external-assets-filter-seed.ts" eval "$TEST_INTEGRATION_COMMAND"',
+    };
+    const errors = ts.validateTaskTestScope(task);
+    assert.ok(errors.length >= 1);
+    assert.match(errors[0], /no test files/i);
+    assert.match(errors[0], /Rule 4b/);
+  });
+
+  it('exempts checkpoint tasks (type=checkpoint)', () => {
+    const task = {
+      num: 9,
+      type: 'checkpoint',
+      filesInScope: ['*.md'],
+      testCommand: 'pnpm typecheck',
+    };
+    assert.deepEqual(ts.validateTaskTestScope(task), []);
+  });
+
+  it('exempts checkpoint tasks (isCheckpoint=true)', () => {
+    const task = {
+      num: 9,
+      isCheckpoint: true,
+      filesInScope: ['*.md'],
+      testCommand: 'true',
+    };
+    assert.deepEqual(ts.validateTaskTestScope(task), []);
+  });
+
+  it('does NOT block hardcoded runner invocations (pnpm test foo.test.ts)', () => {
+    const task = {
+      num: 1,
+      filesInScope: ['lib/foo/**'],
+      testCommand: 'pnpm test lib/foo/bar.test.ts',
+    };
+    // No CHANGED_FILES envelope to parse, so other checks short-circuit. The
+    // detectNonTestCommand check must NOT flag `pnpm test` as a non-test cmd.
+    assert.deepEqual(ts.validateTaskTestScope(task), []);
+  });
 });
 
 describe('test-file naming convention (integration / e2e)', () => {

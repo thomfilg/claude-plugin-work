@@ -163,6 +163,58 @@ function usesE2eRunner(testCommand) {
 }
 
 /**
+ * Decide whether the Test Command is a recognised test-runner invocation
+ * (unit / integration / e2e) — i.e. it would actually execute tests.
+ * Plain typecheck/lint/build commands are NOT test invocations, so they
+ * cannot serve as a task's behavior gate.
+ */
+function usesRecognisedRunner(testCommand) {
+  return (
+    usesUnitRunner(testCommand) || usesIntegrationRunner(testCommand) || usesE2eRunner(testCommand)
+  );
+}
+
+/**
+ * Detect Test Commands that pretend to be a test gate but actually run
+ * something that never asserts behavior — typecheck, lint, build, format,
+ * a bare `true`, etc. Returns a short category name when matched, null
+ * otherwise.
+ *
+ * The check is conservative: it only flags commands that are CLEARLY
+ * non-test (no test runner referenced; primary verb is a compile/lint
+ * tool). Hardcoded runner invocations like `pnpm test foo.ts` aren't
+ * touched here (handled by the opt-out clause in SKILL.md).
+ */
+function detectNonTestCommand(testCommand) {
+  if (typeof testCommand !== 'string' || !testCommand.trim()) return null;
+  if (usesRecognisedRunner(testCommand)) return null;
+  const lower = testCommand.toLowerCase();
+  // Hardcoded test-runner invocations still count as tests, even without env vars
+  if (
+    /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?(?:test|vitest|jest|playwright|cypress|pw\s+test)\b/.test(
+      lower
+    )
+  ) {
+    return null;
+  }
+  if (
+    /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?typecheck\b|\btsc\b(?!.*-p\s+tsconfig\.test)/.test(lower)
+  ) {
+    return 'typecheck-only';
+  }
+  if (/\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?(?:lint|format|prettier|biome|eslint)\b/.test(lower)) {
+    return 'lint-only';
+  }
+  if (/\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?build\b/.test(lower)) {
+    return 'build-only';
+  }
+  if (/^\s*(?:true|:|exit\s+0)\s*;?\s*$/.test(testCommand)) {
+    return 'noop';
+  }
+  return null;
+}
+
+/**
  * Verify the task's Test Command CHANGED_FILES list is fully covered by
  * this task's `### Files in scope`. When a CHANGED_FILES path is owned
  * by another task, the test will execute through that other task's code
@@ -181,7 +233,49 @@ function usesE2eRunner(testCommand) {
 function validateTaskTestScope(task) {
   const errors = [];
   if (!task || typeof task !== 'object') return errors;
+
+  // Skip checks for checkpoint tasks — they're explicit "verify integration"
+  // markers and the implement-gate exempts them from TDD evidence entirely.
+  const taskType = typeof task.type === 'string' ? task.type.toLowerCase().trim() : null;
+  if (taskType === 'checkpoint' || task.isCheckpoint === true) {
+    return errors;
+  }
+
+  // Rule 4b: Test Command must actually run tests. Typecheck / lint / build /
+  // `true` are not behavior gates. If a task has no behavior to verify, it
+  // should be merged with its consumer (SKILL.md Rule 4b).
+  const nonTest = detectNonTestCommand(task.testCommand);
+  if (nonTest) {
+    errors.push(
+      `Task ${task.num ?? '?'} \`### Test Command\` is a ${nonTest} command, not a test runner: ` +
+        `${JSON.stringify(String(task.testCommand || '').slice(0, 120))}. ` +
+        "A task's gate must execute tests that assert behavior. Use $TEST_UNIT_COMMAND / " +
+        '$TEST_INTEGRATION_COMMAND / $TEST_E2E_COMMAND with a real test file in CHANGED_FILES. ' +
+        'If this task has no testable behavior in isolation (e.g. a helper consumed only by ' +
+        'another task), MERGE IT INTO THE CONSUMING TASK — see split-in-tasks SKILL.md Rule 4b.'
+    );
+    return errors;
+  }
+
   const changed = extractChangedFilesFromTestCommand(task.testCommand);
+  // Rule 4b (helper-only): A task that uses a recognised runner but lists ZERO
+  // test files in CHANGED_FILES will never have a test to execute — the gate
+  // gets "No test files found" forever. This is the helper-only pattern.
+  if (
+    usesRecognisedRunner(task.testCommand) &&
+    changed.length > 0 &&
+    !changed.some((p) => TEST_FILE_EXT_RE.test(p))
+  ) {
+    errors.push(
+      `Task ${task.num ?? '?'} \`### Test Command\` lists CHANGED_FILES with NO test files ` +
+        `(no .test.* / .spec.* path). The runner will report "No test files found" and the ` +
+        'gate will loop forever. This is the helper-only task pattern — the task ships code ' +
+        "used by another task's tests but has no test of its own. MERGE IT INTO THE CONSUMING " +
+        "TASK (split-in-tasks SKILL.md Rule 4b), or add this task's own test file to CHANGED_FILES."
+    );
+    return errors;
+  }
+
   if (changed.length === 0) return errors;
 
   const scope =
@@ -306,5 +400,7 @@ module.exports = {
   usesIntegrationRunner,
   usesUnitRunner,
   usesE2eRunner,
+  usesRecognisedRunner,
+  detectNonTestCommand,
   TEST_FILE_EXT_RE,
 };
