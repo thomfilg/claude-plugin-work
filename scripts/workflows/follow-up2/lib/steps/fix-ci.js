@@ -19,10 +19,18 @@ module.exports = function registerFixCi(register) {
     // schema migrations, etc).
     if (state._isConflicting || state.failureCategory === 'conflict') {
       const prNum = state.prNumber || 'unknown';
+      const files = Array.isArray(state._mergeStatus && state._mergeStatus.localConflictFiles)
+        ? state._mergeStatus.localConflictFiles
+        : [];
+      const baseBranch = state._mergeStatus && state._mergeStatus.baseBranch;
+      const fileSuffix = files.length
+        ? ` Conflicting file${files.length > 1 ? 's' : ''}: ${files.join(', ')}.`
+        : '';
+      const baseSuffix = baseBranch ? ` (target: ${baseBranch})` : '';
       return {
         type: 'follow_up_instruction',
         action: 'blocked',
-        reason: `Merge conflicts found on PR #${prNum} — sync your branch with the target branch before proceeding. Then re-run /follow-up2 ${state.ticketId || ''}.`,
+        reason: `Merge conflicts found on PR #${prNum}${baseSuffix} — sync your branch with the target branch before proceeding.${fileSuffix} Then re-run /follow-up2 ${state.ticketId || ''}.`,
         state: { ticket: state.ticketId, currentStep: 'fix-ci', attempt: state.attempt || 0 },
       };
     }

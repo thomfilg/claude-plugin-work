@@ -96,10 +96,66 @@ module.exports = function registerMonitor(register) {
     // report) can check `state._isConflicting` without re-parsing the
     // formatted output. This makes merge-conflict detection authoritative:
     // it preempts CI status, review state, and pending bot reviews.
+    const apiConflicting =
+      prInfo.mergeable === 'CONFLICTING' || prInfo.mergeStateStatus === 'DIRTY';
+
+    // Cross-check via local `git merge-tree` against the PR's base branch.
+    // GitHub's `mergeable` API has known false-clean cases:
+    //   - stacked PRs (base is a sibling branch — clean to base, conflicts vs main)
+    //   - stale cached mergeability after a sibling PR merged into the base
+    // Local check is authoritative because it operates on actual tree content.
+    // Best-effort: if `git fetch` / `git merge-tree` fail, trust the API answer.
+    let localConflicting = false;
+    let localConflictFiles = [];
+    const baseBranch = prInfo.baseBranch;
+    if (baseBranch && ctx && ctx.worktreeDir) {
+      try {
+        execFileSync('git', ['fetch', 'origin', baseBranch], {
+          stdio: 'ignore',
+          cwd: ctx.worktreeDir,
+          timeout: 30000,
+        });
+        const mb = execFileSync('git', ['merge-base', 'HEAD', `origin/${baseBranch}`], {
+          encoding: 'utf8',
+          cwd: ctx.worktreeDir,
+          timeout: 10000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim();
+        if (mb) {
+          const tree = execFileSync(
+            'git',
+            ['merge-tree', `--merge-base=${mb}`, 'HEAD', `origin/${baseBranch}`],
+            {
+              encoding: 'utf8',
+              cwd: ctx.worktreeDir,
+              timeout: 30000,
+              stdio: ['pipe', 'pipe', 'pipe'],
+            }
+          );
+          if (/^<{7} |^={7}$|^>{7} /m.test(tree)) {
+            localConflicting = true;
+            for (const line of tree.split('\n')) {
+              const m = line.match(/^\+\+\+ b\/(.+)$/);
+              if (m && !localConflictFiles.includes(m[1])) {
+                localConflictFiles.push(m[1]);
+              }
+              if (localConflictFiles.length >= 3) break;
+            }
+          }
+        }
+      } catch {
+        /* network/auth failure → trust API */
+      }
+    }
+
     state._mergeStatus = {
       mergeable: prInfo.mergeable || 'UNKNOWN',
       mergeStateStatus: prInfo.mergeStateStatus || 'UNKNOWN',
-      isConflicting: prInfo.mergeable === 'CONFLICTING' || prInfo.mergeStateStatus === 'DIRTY',
+      baseBranch: baseBranch || null,
+      apiConflicting,
+      localConflicting,
+      localConflictFiles,
+      isConflicting: apiConflicting || localConflicting,
       retries: mergeableRetries,
     };
     state._isConflicting = state._mergeStatus.isConflicting;
