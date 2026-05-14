@@ -16,8 +16,21 @@ cleanup_test_artifacts() {
   node -e "require('./scripts/workflows/lib/__tests__/test-cleanup').cleanupTestArtifacts()" 2>/dev/null || true
 }
 
+# On signal: clean up, then re-raise the signal so the script exits with the
+# correct conventional code (130 for SIGINT, 143 for SIGTERM). Without
+# re-raising, cleanup's `|| true` would mask `$?` to 0 and CI would falsely
+# report success on an interrupted run.
+on_signal() {
+  local signal="$1"
+  cleanup_test_artifacts
+  trap - EXIT INT TERM
+  kill -s "$signal" "$$"
+}
+
 # Fire on ANY exit path — clean shutdown, SIGINT (Ctrl+C), SIGTERM, error.
-trap cleanup_test_artifacts EXIT INT TERM
+trap cleanup_test_artifacts EXIT
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
 
 # Build space-separated file list (node --test expects positional args, not newlines)
 mapfile -t FILES < <(find scripts/workflows agents skills -type f \( -name '*.test.js' -o -name '*.spec.js' \) | sort)
