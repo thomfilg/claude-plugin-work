@@ -158,7 +158,10 @@ function writeTestLog(taskDir, phase, cmd, exitCode, output, nowIso) {
       /* fail-open */
     }
 
-    return { logPath: path.join('logs', filename), logBytes: Buffer.byteLength(body) };
+    return {
+      logPath: path.join('logs', filename),
+      logBytes: Buffer.byteLength(header) + Buffer.byteLength(body),
+    };
   } catch {
     return null;
   }
