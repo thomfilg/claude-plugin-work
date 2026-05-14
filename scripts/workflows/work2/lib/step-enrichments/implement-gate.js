@@ -74,8 +74,11 @@ function reconcileTasksMetaWithFile(ws, tasksDir, saveWorkState, safeName, log) 
     delete ws._tddRetryOutputTail;
     delete ws._tddRetryTask;
   }
-  if (typeof ws._preTestForTask === 'number' && ws._preTestForTask > fileCount) {
-    delete ws._preTestForTask;
+  if (ws._preTestForTask !== undefined && ws._preTestForTask !== null) {
+    const preTestNum = Number(ws._preTestForTask);
+    if (Number.isFinite(preTestNum) && preTestNum > fileCount) {
+      delete ws._preTestForTask;
+    }
   }
 
   try {
