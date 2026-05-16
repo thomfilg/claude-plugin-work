@@ -208,25 +208,47 @@ function readPhaseState(ticketsDir, ticket, taskNum) {
 
 function currentPhase(state) {
   if (!state) return 'red';
+  // A task is "done" when the latest cycle has red, green, AND refactor
+  // evidence recorded. The recorder's transition table has no terminal
+  // "done" state — refactor→done isn't valid — so we derive doneness here.
+  const cycles = Array.isArray(state.cycles) ? state.cycles : [];
+  const latest = cycles[cycles.length - 1];
+  if (latest && latest.red && latest.green && latest.refactor) return 'done';
   if (state.currentPhase) return state.currentPhase;
   return 'red';
 }
 
-// Refresh the companion token's timestamp so the inner tdd-phase-state.js
-// call has a fresh 10s window. The token was minted by the PreToolUse hook
-// when the agent invoked task-next.js; by the time the test command has
-// finished running (potentially 60s+ for E2E suites), the original timestamp
-// is stale. We are the trusted intermediary — preserving the agent identity
-// from the existing token and bumping only the timestamp keeps the security
-// invariant: "the recorder must be called within 10s of an authorized intent."
-function refreshCompanionToken(scriptBasename) {
+// Snapshot the companion token once at startup. consumeToken atomically
+// deletes the file on read, so after the first child spawn we lose the
+// agent identity unless we cached it. Subsequent spawns will re-mint the
+// token from this snapshot with a fresh timestamp.
+let _companionTokenSnapshot = null;
+function snapshotCompanionToken(scriptBasename) {
   try {
     const { tokenPath } = require('../lib/scripts/write-report');
     const tp = tokenPath(scriptBasename);
     if (!fs.existsSync(tp)) return false;
-    const data = JSON.parse(fs.readFileSync(tp, 'utf8'));
-    data.timestamp = Date.now();
-    fs.writeFileSync(tp, JSON.stringify(data), { mode: 0o600 });
+    _companionTokenSnapshot = {
+      basename: scriptBasename,
+      path: tp,
+      data: JSON.parse(fs.readFileSync(tp, 'utf8')),
+    };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Re-mint the companion token before each inner spawn. Two reasons it might
+// be missing or stale: (1) the previous spawn consumed (deleted) it; (2) the
+// test command took 60s+ and the original timestamp expired. Re-writing from
+// the snapshot with a current timestamp keeps the security invariant intact
+// — same agent identity, "fresh within 10s of recorder call".
+function mintCompanionToken() {
+  if (!_companionTokenSnapshot) return false;
+  try {
+    const data = { ..._companionTokenSnapshot.data, timestamp: Date.now() };
+    fs.writeFileSync(_companionTokenSnapshot.path, JSON.stringify(data), { mode: 0o600 });
     return true;
   } catch {
     return false;
@@ -235,23 +257,61 @@ function refreshCompanionToken(scriptBasename) {
 
 function recordEvidence(phase, ticket, taskNum, cmd, cwd) {
   // Delegate to tdd-phase-state.js — the only authorized writer. Forward
-  // `--task N` so the recorder resolves the per-task state path
-  // (TASKS_BASE/<ticket>/taskN/tdd-phase.json) rather than the legacy
-  // ticket-root path. Without this the writer errors "No TDD phase state
-  // found, run init first" even though the reader on the same file works.
-  refreshCompanionToken('tdd-phase-state.js');
+  // `--task N` so the recorder resolves the per-task state path. Records
+  // evidence for the just-completed phase, then (for red/green only)
+  // transitions currentPhase to the next phase.
+  //
+  // The TDD model here is cycle-based: valid transitions are red→green,
+  // green→refactor, refactor→red (start a new cycle). There is no
+  // "refactor→done" transition. A task is considered complete when its
+  // latest cycle has evidence for all three phases — that's an in-script
+  // determination, not a state-machine target. So after recording refactor,
+  // we stop. currentPhase remains "refactor" on disk, but task-next.js's
+  // currentPhase() helper treats a fully-evidenced cycle as `done`.
   const sub =
     phase === 'red' ? 'record-red' : phase === 'green' ? 'record-green' : 'record-refactor';
-  const args = [TDD_CLI, sub, ticket, '--task', String(taskNum), '--cmd', cmd];
-  const r = spawnSync(process.execPath, args, {
+  const target = phase === 'red' ? 'green' : phase === 'green' ? 'refactor' : null;
+
+  mintCompanionToken();
+  const recordArgs = [TDD_CLI, sub, ticket, '--task', String(taskNum), '--cmd', cmd];
+  const r = spawnSync(process.execPath, recordArgs, {
     cwd,
     stdio: 'pipe',
     encoding: 'utf8',
   });
+  if (r.status !== 0) {
+    return { ok: false, out: (r.stdout || '') + (r.stderr || ''), exitCode: r.status };
+  }
+
+  if (!target) {
+    // refactor recorded — cycle complete, no transition needed
+    return { ok: true, out: (r.stdout || '') + (r.stderr || ''), exitCode: 0 };
+  }
+
+  mintCompanionToken();
+  const transitionArgs = [TDD_CLI, 'transition', ticket, target, '--task', String(taskNum)];
+  const t = spawnSync(process.execPath, transitionArgs, {
+    cwd,
+    stdio: 'pipe',
+    encoding: 'utf8',
+  });
+  if (t.status !== 0) {
+    return {
+      ok: false,
+      out:
+        (r.stdout || '') +
+        (r.stderr || '') +
+        `\n--- transition ${phase}→${target} failed ---\n` +
+        (t.stdout || '') +
+        (t.stderr || ''),
+      exitCode: t.status,
+    };
+  }
+
   return {
-    ok: r.status === 0,
-    out: (r.stdout || '') + (r.stderr || ''),
-    exitCode: r.status,
+    ok: true,
+    out: (r.stdout || '') + (r.stderr || '') + (t.stdout || '') + (t.stderr || ''),
+    exitCode: 0,
   };
 }
 
@@ -389,6 +449,12 @@ function main() {
   }
   const ticket = sanitizeTicketId(ticketRaw);
   const taskNum = parseTaskId(taskRaw);
+
+  // Snapshot the companion token NOW, before any child spawn could consume it.
+  // The hook minted this token when the agent invoked `node task-next.js ...`;
+  // we'll re-mint it from this snapshot before every inner tdd-phase-state.js
+  // spawn so consumed/expired tokens don't strand a transition mid-cycle.
+  snapshotCompanionToken('tdd-phase-state.js');
 
   const tasksBase = resolveTasksBase();
   const tasksDir = path.join(tasksBase, ticket);

@@ -494,7 +494,11 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
             }
 
             const pr = JSON.parse(execFileSync('gh', ghArgs, opts).trim()); // GH-203: positional arg, not --head
-            return pr.number > 0 && pr.state === 'OPEN';
+            // Accept OPEN or MERGED — a merged PR is even stronger evidence
+            // that the pr step succeeded than an open one. Rejecting MERGED
+            // permanently strands tickets whose PR shipped before the
+            // workflow finished its remaining steps.
+            return pr.number > 0 && (pr.state === 'OPEN' || pr.state === 'MERGED');
           } catch {
             return false;
           }
