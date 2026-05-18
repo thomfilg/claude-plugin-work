@@ -69,11 +69,26 @@ function tasksGateStep(add, s, ctx) {
     if (fs.existsSync(gherkinPath) && fs.existsSync(tasksMdPath)) {
       let gherkinText = '';
       let tasksMdText = '';
+      let readOk = true;
       try {
         gherkinText = fs.readFileSync(gherkinPath, 'utf8');
         tasksMdText = fs.readFileSync(tasksMdPath, 'utf8');
       } catch {
-        /* fall through — files exist but unreadable, defer */
+        // Files exist but unreadable (transient I/O error, permission flip,
+        // mid-write). Defer the gate — re-running the orchestrator will
+        // retry the read. Do NOT continue with empty strings, which would
+        // make validateGherkinTaskRefs report a false-positive "invalid"
+        // and trigger needless task regeneration.
+        readOk = false;
+      }
+      if (!readOk) {
+        add(
+          STEPS.tasks_gate,
+          'DEFER',
+          null,
+          'gherkin.feature and tasks.md exist but were unreadable; defer for retry'
+        );
+        return;
       }
       const refResult = validateGherkinTaskRefs({
         gherkinText,

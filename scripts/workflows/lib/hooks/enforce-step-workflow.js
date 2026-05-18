@@ -656,6 +656,15 @@ function handlePreToolUse(hookData) {
       const scriptPath = expandPluginRoot(nodeExec[1] || nodeExec[2] || nodeExec[3]);
       const scriptBase = path.basename(scriptPath);
       const gatedEntry = AGENT_GATED_SCRIPTS[scriptBase];
+      // Telemetry: log EVERY node-invocation seen by Rule 5, gated or not.
+      // Helps diagnose why a gated script's mint path isn't being reached.
+      _tokenLog('rule5-checked', {
+        scriptBase,
+        scriptPath,
+        gated: Boolean(gatedEntry),
+        gatedKeys: Object.keys(AGENT_GATED_SCRIPTS).slice(0, 20),
+        ticketId: ticketId || null,
+      });
       if (gatedEntry) {
         _tokenLog('rule5-match', {
           scriptBase,
