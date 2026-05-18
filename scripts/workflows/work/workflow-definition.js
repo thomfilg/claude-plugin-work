@@ -190,6 +190,19 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
       agents: ['brief-writer'],
       step: STEPS.brief,
     },
+    // Self-paced spec runner: same companion pattern as brief-next.js.
+    // spec-next.js spawns spec-phase-state.js internally to record/transition
+    // phase evidence. The hook mints tokens for both when the spec-writer
+    // agent invokes spec-next.js during the `spec` step.
+    'spec-next.js': {
+      agents: ['spec-writer'],
+      step: STEPS.spec,
+      companionScripts: ['spec-phase-state.js'],
+    },
+    'spec-phase-state.js': {
+      agents: ['spec-writer'],
+      step: STEPS.spec,
+    },
   };
 
   const workflow = {
