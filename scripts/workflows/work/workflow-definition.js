@@ -203,6 +203,19 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
       agents: ['spec-writer'],
       step: STEPS.spec,
     },
+    // Self-paced tasks runner: same companion pattern. tasks-next.js spawns
+    // tasks-phase-state.js internally. Allow-list includes both the skill
+    // name and the optional task-decomposer agent so future routing changes
+    // don't break the gate.
+    'tasks-next.js': {
+      agents: ['split-in-tasks', 'task-decomposer'],
+      step: STEPS.tasks,
+      companionScripts: ['tasks-phase-state.js'],
+    },
+    'tasks-phase-state.js': {
+      agents: ['split-in-tasks', 'task-decomposer'],
+      step: STEPS.tasks,
+    },
   };
 
   const workflow = {
