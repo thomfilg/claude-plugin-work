@@ -74,11 +74,17 @@ function die(msg) {
 
 let _companionTokenSnapshot = null;
 
-function snapshotCompanionToken(scriptBasename) {
+function snapshotCompanionToken(scriptBasename, ticketId) {
   try {
     const dir = process.env.CLAUDE_WRITE_TOKEN_DIR || '/tmp/.claude-write-tokens';
-    const file = path.join(dir, scriptBasename);
-    if (!fs.existsSync(file)) return;
+    // Per-ticket keyed path first (matches what the PreToolUse hook mints
+    // post commit 2f37f34b). Fall back to the legacy unkeyed path for
+    // backwards-compat (e.g. older hook versions still in transit).
+    const bareTicket = ticketId ? String(ticketId).split('/')[0] : null;
+    const keyed = bareTicket ? path.join(dir, `${scriptBasename}.${bareTicket}`) : null;
+    const legacy = path.join(dir, scriptBasename);
+    const file = keyed && fs.existsSync(keyed) ? keyed : fs.existsSync(legacy) ? legacy : null;
+    if (!file) return;
     _companionTokenSnapshot = { path: file, data: JSON.parse(fs.readFileSync(file, 'utf8')) };
   } catch {
     /* fail-open — phase recording will surface the missing token */
@@ -198,7 +204,7 @@ function main(argv) {
     agent: process.env.CLAUDE_CURRENT_AGENT || null,
   });
 
-  snapshotCompanionToken('brief-phase-state.js');
+  snapshotCompanionToken('brief-phase-state.js', ticket);
 
   const tasksBase = resolveTasksBase();
   const tasksDir = path.join(tasksBase, ticket);
