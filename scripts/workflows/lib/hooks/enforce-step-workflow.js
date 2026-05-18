@@ -653,9 +653,14 @@ function handlePreToolUse(hookData) {
         const allowedAgents = gatedEntry.agents;
         if (!isTrustedScriptPath(scriptPath, TRUSTED_SCRIPT_DIRS)) {
           didBlock = true;
+          const trustedSample = TRUSTED_SCRIPT_DIRS[0] || '<plugin>/scripts/workflows';
           process.stderr.write(
             `BLOCKED: Script ${scriptBase} is not in a trusted directory.\n` +
-              `Resolved path must be under a trusted workflows directory.\n`
+              `  Resolved path: ${scriptPath}\n` +
+              `  Trusted root example: ${trustedSample}\n` +
+              `\nWHAT TO DO INSTEAD:\n` +
+              `  Use an ABSOLUTE path under \${CLAUDE_PLUGIN_ROOT}/scripts/workflows/...\n` +
+              `  Avoid relative paths like ../../scripts/... — they may not normalize to a trusted dir.\n`
           );
           process.exit(2);
         }
@@ -664,10 +669,21 @@ function handlePreToolUse(hookData) {
         const transcriptPath = hookData?.transcript_path;
         if (!isRunningInAgent(transcriptPath, allowedAgents, hookData)) {
           didBlock = true;
+          const primaryAgent = allowedAgents[0];
           process.stderr.write(
             `BLOCKED: Cannot call ${scriptBase} — not running in an authorized agent.\n` +
-              `Allowed agents: ${allowedAgents.join(', ')}\n` +
-              `Only these agents may invoke this writer script.\n`
+              `  Allowed agents: ${allowedAgents.join(', ')}\n` +
+              `\nWHAT TO DO INSTEAD:\n` +
+              `  Re-dispatch this invocation through the Task tool so it runs inside the\n` +
+              `  authorized agent's subprocess (where the hook can mint the write token).\n` +
+              `\n  Example:\n` +
+              `    Task(\n` +
+              `      subagent_type: "${primaryAgent}",\n` +
+              `      prompt: "node ${scriptBase} ${ticketId || '<TICKET>'} ...your args..."\n` +
+              `    )\n` +
+              `\n  Do NOT invoke ${scriptBase} directly from the orchestrator/main session.\n` +
+              `  Do NOT stash source files to /tmp to fake test failures — that is fabricated\n` +
+              `  TDD evidence and forbidden by user rules.\n`
           );
           process.exit(2);
         }
@@ -683,7 +699,13 @@ function handlePreToolUse(hookData) {
             didBlock = true;
             process.stderr.write(
               `BLOCKED: Cannot issue write token — step '${currentStep}' is active, not '${requiredStep}'.\n` +
-                `Script ${scriptBase} can only be called during the ${requiredStep} step.\n`
+                `  Script ${scriptBase} can only be called during the ${requiredStep} step.\n` +
+                `\nWHAT TO DO INSTEAD:\n` +
+                `  The workflow has moved past '${requiredStep}'. Do NOT try to record evidence\n` +
+                `  for a previous step now — that artifact window has closed.\n` +
+                `  If the workflow is genuinely stuck, run:\n` +
+                `    node \${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work2/work-next.js ${ticketId || '<TICKET>'}\n` +
+                `  and follow the action it prints for the CURRENT step ('${currentStep}').\n`
             );
             process.exit(2);
           }
