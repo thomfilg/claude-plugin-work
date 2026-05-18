@@ -106,9 +106,19 @@ function parseTaskId(raw) {
 }
 
 function extractTaskSection(tasksMd, taskNum) {
-  const re = new RegExp(`(^## *Task ${taskNum}\\b[\\s\\S]*?)(?=^## *Task \\d+\\b|\\Z)`, 'm');
-  const m = tasksMd.match(re);
-  return m ? m[1] : null;
+  // JS regex does NOT support \Z. Previously the pattern used `(?=^## *Task
+  // \d+\b|\Z)` which treated \Z as a literal Z, so the lookahead never
+  // matched the final task in tasks.md and the last task was unextractable.
+  // Slice manually instead: find the start of "## Task N", then the start
+  // of the next "## Task M" (or end-of-string), and slice between them.
+  const startRe = new RegExp(`^## *Task ${taskNum}\\b`, 'm');
+  const startMatch = tasksMd.match(startRe);
+  if (!startMatch) return null;
+  const startIdx = startMatch.index;
+  const after = tasksMd.slice(startIdx + startMatch[0].length);
+  const endMatch = after.match(/^## *Task \d+\b/m);
+  const endIdx = endMatch ? startIdx + startMatch[0].length + endMatch.index : tasksMd.length;
+  return tasksMd.slice(startIdx, endIdx);
 }
 
 function extractField(section, header) {
