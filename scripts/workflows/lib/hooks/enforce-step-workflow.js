@@ -578,8 +578,12 @@ function handlePreToolUse(hookData) {
   const ticketId = getTicketId(hookData);
 
   // Rule 3: Block direct writes to workflow state files
-  // Prevents agents from bypassing the state machine by directly editing state files
-  const rule3 = stateFileProtector.check(toolName, toolInput);
+  // Prevents agents from bypassing the state machine by directly editing state files.
+  // Fail-open when no ticket context: without a workflow there is nothing to protect,
+  // and the hook should not block tool use it cannot reason about. Rule 5 below still
+  // runs unconditionally so agent-gated writer-script token minting works when the
+  // hook is invoked outside a worktree (e.g. plugin source tree parent sessions).
+  const rule3 = ticketId ? stateFileProtector.check(toolName, toolInput) : { blocked: false };
   if (rule3.blocked) {
     if (toolName === 'Bash') {
       const cmd = String(toolInput?.command || '').trim();
@@ -604,7 +608,8 @@ function handlePreToolUse(hookData) {
   // Defense-in-depth: the stateFileProtector's isExempt/Vector 3 may miss the script when
   // multi-arg flags (--require, -r, etc.) cause INTERPRETER_PATTERN to capture the flag
   // argument instead of the actual script. This rule uses the improved nodePattern directly.
-  if (toolName === 'Bash') {
+  // Fail-open when no ticket context — see Rule 3 comment above.
+  if (toolName === 'Bash' && ticketId) {
     const cmd = String(toolInput?.command || '').trim();
     const stateMatches = getNodeInvocations(cmd);
     for (const m of stateMatches) {
