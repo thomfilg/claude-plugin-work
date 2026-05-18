@@ -483,17 +483,32 @@ function main() {
   // Checkpoint tasks are verification-only — no source change, no test
   // authorship, no gherkin scenarios. Asking the agent to satisfy a TDD
   // RED gate ("write a failing test for each scenario") is contradictory
-  // when there are 0 scenarios by design. Short-circuit: print the
-  // checkpoint instructions and exit cleanly. No phase, no evidence,
-  // no transition. The orchestrator's implement-gate already routes
-  // checkpoint tasks to the code-checker agent with a verify-only prompt
-  // (see implement.js); this branch is the safety net when the script
-  // is invoked directly.
+  // when there are 0 scenarios by design. We short-circuit the TDD flow
+  // AND advance the task in tasksMeta via the authorized work-state.js
+  // task-advance writer — without that bookkeeping, work-next.js refuses
+  // to complete the workflow ("Cannot complete: 1 tasks still pending").
   if (type === 'checkpoint') {
+    const workStateCli = path.resolve(__dirname, '..', 'work', 'work-state.js');
+    let advanceOut = '';
+    let advanceCode = -1;
+    try {
+      const r = spawnSync(process.execPath, [workStateCli, 'task-advance', ticket], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+      advanceOut = (r.stdout || '') + (r.stderr || '');
+      advanceCode = r.status ?? -1;
+    } catch (e) {
+      advanceOut = `(spawn failed: ${e.message})`;
+    }
     process.stdout.write(
       [
         `task-next: ${ticket} task${taskNum} — ${taskTitle}`,
         '  type: checkpoint (verification only, no TDD cycle)',
+        advanceCode === 0
+          ? `  tasksMeta: task ${taskNum} marked completed`
+          : `  tasksMeta: task-advance failed (exit=${advanceCode}) — workflow may still block on complete step`,
         '',
         `# Checkpoint — Task ${taskNum}`,
         '',
@@ -504,12 +519,14 @@ function main() {
         '2. Run each verification command listed under "### Acceptance" / "### Test Command" exactly as written.',
         '3. Report which commands passed and which (if any) did not.',
         '',
-        'When all verifications pass, the orchestrator will advance the workflow on its next tick.',
-        'No TDD evidence is recorded for checkpoint tasks — that is by design.',
+        advanceCode === 0
+          ? 'tasksMeta has been advanced — re-invoke /work2 to drive the workflow to complete.'
+          : 'tasksMeta advance failed — paste the output below and let the monitor know:',
+        advanceCode === 0 ? '' : '```\n' + advanceOut.slice(-1000) + '\n```',
         '',
       ].join('\n')
     );
-    process.exit(0);
+    process.exit(advanceCode === 0 ? 0 : 2);
   }
 
   const gherkin = readFile(path.join(tasksDir, 'gherkin.feature')) || '';
