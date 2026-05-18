@@ -36,6 +36,8 @@ const { spawnSync } = require('node:child_process');
 
 const BRIEF_PHASE_CLI = path.resolve(__dirname, 'brief-phase-state.js');
 
+const { BRIEF_PHASES, BRIEF_INITIAL_PHASE, briefNextPhases } = require('./brief-phase-registry');
+
 let logNextScriptEvent;
 try {
   ({ logNextScriptEvent } = require('../lib/next-script-log'));
@@ -586,7 +588,7 @@ function main(argv) {
   const worktreeRoot = resolveWorktreeRoot() || path.dirname(tasksBase);
 
   ensureInit(ticket);
-  let phase = getCurrentPhase(ticket) || 'inputs';
+  let phase = getCurrentPhase(ticket) || BRIEF_INITIAL_PHASE;
 
   const ctx = { ticket, tasksDir, tasksBase, manifest, linkedIds, memory, worktreeRoot };
 
@@ -595,108 +597,72 @@ function main(argv) {
   let blockReason = '';
   let advanced = false;
 
-  if (phase === 'inputs') {
+  // advanceAfter(target, summary) — record current phase + transition to target.
+  // Returns true on success; on failure sets blockReason and returns false.
+  const advanceAfter = (target, summary) => {
+    const r = recordPhase(ticket, phase, summary);
+    if (r.code !== 0) {
+      blockReason = `Could not record phase ${phase}:\n${r.out}`;
+      return false;
+    }
+    const t = transitionPhase(ticket, target);
+    if (t.code !== 0) {
+      blockReason = `Could not transition to ${target}:\n${t.out}`;
+      return false;
+    }
+    advanced = true;
+    phase = target;
+    return true;
+  };
+
+  if (phase === BRIEF_PHASES.inputs) {
     if (!manifest) {
       blockReason = `related-tickets.json missing at ${path.join(tasksDir, 'related-tickets.json')}. Cannot proceed without sibling context.`;
     } else {
       const errs = validateInputs(tasksDir, manifest, linkedIds);
-      if (errs.length === 0 && linkedIds.length >= 0) {
-        const r = recordPhase(
-          ticket,
-          'inputs',
+      if (errs.length === 0) {
+        advanceAfter(
+          briefNextPhases(BRIEF_PHASES.inputs)[0],
           `linked=${linkedIds.length} memory=${memory ? memory.name : 'none'}`
         );
-        if (r.code !== 0) blockReason = `Could not record phase inputs:\n${r.out}`;
-        else {
-          const t = transitionPhase(ticket, 'overlap');
-          if (t.code !== 0) blockReason = `Could not transition to overlap:\n${t.out}`;
-          else {
-            advanced = true;
-            phase = 'overlap';
-          }
-        }
-      } else if (errs.length > 0) {
+      } else {
         blockReason = errs.join('\n');
       }
     }
-  } else if (phase === 'overlap') {
+  } else if (phase === BRIEF_PHASES.overlap) {
     const errs = validateOverlap(tasksDir, linkedIds);
     if (errs.length === 0) {
-      const r = recordPhase(ticket, 'overlap', `siblings=${linkedIds.length}`);
-      if (r.code !== 0) blockReason = `Could not record phase overlap:\n${r.out}`;
-      else {
-        const t = transitionPhase(ticket, 'draft');
-        if (t.code !== 0) blockReason = `Could not transition to draft:\n${t.out}`;
-        else {
-          advanced = true;
-          phase = 'draft';
-        }
-      }
+      advanceAfter(briefNextPhases(BRIEF_PHASES.overlap)[0], `siblings=${linkedIds.length}`);
     } else {
       blockReason = errs.join('\n');
     }
-  } else if (phase === 'draft') {
+  } else if (phase === BRIEF_PHASES.draft) {
     const errs = validateDraft(tasksDir);
     if (errs.length === 0) {
-      const r = recordPhase(ticket, 'draft', 'brief.md drafted');
-      if (r.code !== 0) blockReason = `Could not record phase draft:\n${r.out}`;
-      else {
-        const t = transitionPhase(ticket, 'validate');
-        if (t.code !== 0) blockReason = `Could not transition to validate:\n${t.out}`;
-        else {
-          advanced = true;
-          phase = 'validate';
-        }
-      }
+      advanceAfter(briefNextPhases(BRIEF_PHASES.draft)[0], 'brief.md drafted');
     } else {
       blockReason = errs.join('\n');
     }
-  } else if (phase === 'validate') {
+  } else if (phase === BRIEF_PHASES.validate) {
     const errs = validateValidate(tasksDir, linkedIds);
     if (errs.length === 0) {
-      const r = recordPhase(ticket, 'validate', 'cross-checks ok');
-      if (r.code !== 0) blockReason = `Could not record phase validate:\n${r.out}`;
-      else {
-        const t = transitionPhase(ticket, 'memorize');
-        if (t.code !== 0) blockReason = `Could not transition to memorize:\n${t.out}`;
-        else {
-          advanced = true;
-          phase = 'memorize';
-        }
-      }
+      advanceAfter(briefNextPhases(BRIEF_PHASES.validate)[0], 'cross-checks ok');
     } else {
       blockReason = errs.join('\n');
     }
-  } else if (phase === 'memorize') {
+  } else if (phase === BRIEF_PHASES.memorize) {
     // We can't verify memory writes (no introspection across plugins).
     // Record on re-invoke; if no memory plugin, auto-advance.
+    const target = briefNextPhases(BRIEF_PHASES.memorize)[0];
     if (!memory) {
-      const r = recordPhase(ticket, 'memorize', 'no-memory-plugin');
-      if (r.code !== 0) blockReason = `Could not record phase memorize:\n${r.out}`;
-      else {
-        const t = transitionPhase(ticket, 'done');
-        if (t.code !== 0) blockReason = `Could not transition to done:\n${t.out}`;
-        else {
-          advanced = true;
-          phase = 'done';
-        }
-      }
+      advanceAfter(target, 'no-memory-plugin');
     } else {
       // First call in memorize prints instructions. Second call (when agent
       // has finished saving) advances. We detect "second call" by the
       // presence of a sentinel file the agent must touch after persisting.
       const sentinel = path.join(tasksDir, '.brief-memorized');
       if (fs.existsSync(sentinel)) {
-        const r = recordPhase(ticket, 'memorize', `via=${memory.name}`);
-        if (r.code !== 0) blockReason = `Could not record phase memorize:\n${r.out}`;
-        else {
-          const t = transitionPhase(ticket, 'done');
-          if (t.code !== 0) blockReason = `Could not transition to done:\n${t.out}`;
-          else {
-            advanced = true;
-            phase = 'done';
-          }
-        }
+        advanceAfter(target, `via=${memory.name}`);
       }
     }
   }
@@ -712,6 +678,16 @@ function main(argv) {
     '',
   ].join('\n');
 
+  const INSTRUCTORS = {
+    [BRIEF_PHASES.inputs]: instructInputs,
+    [BRIEF_PHASES.overlap]: instructOverlap,
+    [BRIEF_PHASES.draft]: instructDraft,
+    [BRIEF_PHASES.validate]: instructValidate,
+    [BRIEF_PHASES.memorize]: instructMemorize,
+    [BRIEF_PHASES.done]: instructDone,
+  };
+  const instructFor = (p) => (INSTRUCTORS[p] || instructMemorize)(ctx);
+
   let body;
   if (blockReason && !advanced) {
     body = [
@@ -723,29 +699,10 @@ function main(argv) {
       '',
       '---',
       '',
-      phase === 'inputs'
-        ? instructInputs(ctx)
-        : phase === 'overlap'
-          ? instructOverlap(ctx)
-          : phase === 'draft'
-            ? instructDraft(ctx)
-            : phase === 'validate'
-              ? instructValidate(ctx)
-              : instructMemorize(ctx),
+      instructFor(phase),
     ].join('\n');
   } else {
-    body =
-      phase === 'inputs'
-        ? instructInputs(ctx)
-        : phase === 'overlap'
-          ? instructOverlap(ctx)
-          : phase === 'draft'
-            ? instructDraft(ctx)
-            : phase === 'validate'
-              ? instructValidate(ctx)
-              : phase === 'memorize'
-                ? instructMemorize(ctx)
-                : instructDone(ctx);
+    body = instructFor(phase);
   }
 
   process.stdout.write(header + '\n' + body);
@@ -773,4 +730,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { detectMemoryPlugin };
+module.exports = { detectMemoryPlugin, BRIEF_PHASES };

@@ -41,6 +41,29 @@ try {
 
 const TDD_CLI = path.join(__dirname, 'tdd-phase-state.js');
 
+const { TDD_PHASES, TDD_PHASE_TRANSITIONS } = require('./tdd-phase-registry');
+
+// `done` is derived in this script (a cycle with red+green+refactor evidence
+// is treated as complete). It is NOT a state-machine target in the registry.
+const TDD_DERIVED_DONE = 'done';
+
+/** record-* subcommand name for a phase. */
+function recordSubcommandFor(phase) {
+  return `record-${phase}`;
+}
+
+/**
+ * Next phase target for task-next's linear walk: red→green→refactor→null.
+ * Sourced from the registry's transition graph, with refactor explicitly
+ * stopping (the registry's refactor→red edge starts a *new* cycle, which
+ * task-next.js doesn't drive — that's external work).
+ */
+function nextPhaseTarget(phase) {
+  if (phase === TDD_PHASES.refactor) return null;
+  const successors = TDD_PHASE_TRANSITIONS[phase] || [];
+  return successors[0] || null;
+}
+
 function die(msg, code = 2) {
   process.stderr.write(`task-next: ${msg}\n`);
   process.exit(code);
@@ -247,15 +270,15 @@ function readPhaseState(ticketsDir, ticket, taskNum) {
 }
 
 function currentPhase(state) {
-  if (!state) return 'red';
+  if (!state) return TDD_PHASES.red;
   // A task is "done" when the latest cycle has red, green, AND refactor
   // evidence recorded. The recorder's transition table has no terminal
   // "done" state — refactor→done isn't valid — so we derive doneness here.
   const cycles = Array.isArray(state.cycles) ? state.cycles : [];
   const latest = cycles[cycles.length - 1];
-  if (latest && latest.red && latest.green && latest.refactor) return 'done';
+  if (latest && latest.red && latest.green && latest.refactor) return TDD_DERIVED_DONE;
   if (state.currentPhase) return state.currentPhase;
-  return 'red';
+  return TDD_PHASES.red;
 }
 
 // Snapshot the companion token once at startup. consumeToken atomically
@@ -312,9 +335,8 @@ function recordEvidence(phase, ticket, taskNum, cmd, cwd, scope) {
   // determination, not a state-machine target. So after recording refactor,
   // we stop. currentPhase remains "refactor" on disk, but task-next.js's
   // currentPhase() helper treats a fully-evidenced cycle as `done`.
-  const sub =
-    phase === 'red' ? 'record-red' : phase === 'green' ? 'record-green' : 'record-refactor';
-  const target = phase === 'red' ? 'green' : phase === 'green' ? 'refactor' : null;
+  const sub = recordSubcommandFor(phase);
+  const target = nextPhaseTarget(phase);
 
   // tdd-phase-state.js record-* requires the per-task state file to exist;
   // it does NOT auto-init, and `init` itself overwrites existing state (so
@@ -487,7 +509,7 @@ function scenariosCoveredByTests(scenarios, testFiles) {
 function printPhaseInstructions(phase, ctx) {
   const lines = [];
   const { taskNum, totalScenarios, scenarios, scope, testCmd, testCmdSource } = ctx;
-  if (phase === 'red') {
+  if (phase === TDD_PHASES.red) {
     lines.push(`# RED phase — Task ${taskNum}`);
     lines.push('');
     lines.push('Write failing tests for the scenarios below. **Only test/fixture files.**');
@@ -511,7 +533,7 @@ function printPhaseInstructions(phase, ctx) {
     lines.push(
       'You advance to GREEN when (1) the test command exits non-zero AND (2) every scenario above appears in at least one test file.'
     );
-  } else if (phase === 'green') {
+  } else if (phase === TDD_PHASES.green) {
     lines.push(`# GREEN phase — Task ${taskNum}`);
     lines.push('');
     lines.push('Make the failing tests pass. **Only source files.** No edits to tests/fixtures.');
@@ -524,7 +546,7 @@ function printPhaseInstructions(phase, ctx) {
     lines.push(`Run: \`node ${path.relative(process.cwd(), __filename)} <TICKET> task${taskNum}\``);
     lines.push(`I will run: \`${testCmd}\` (from ${testCmdSource})`);
     lines.push('You advance to REFACTOR when the test command exits 0.');
-  } else if (phase === 'refactor') {
+  } else if (phase === TDD_PHASES.refactor) {
     lines.push(`# REFACTOR phase — Task ${taskNum}`);
     lines.push('');
     lines.push(
@@ -694,7 +716,7 @@ function main() {
         event: 'completed',
         ticket: globalThis.__taskNextCtx?.ticket,
         taskNum: globalThis.__taskNextCtx?.taskNum,
-        phase: 'done',
+        phase: TDD_DERIVED_DONE,
         advanced: false,
         blocked: false,
         exitCode: 0,
@@ -718,7 +740,7 @@ function main() {
   let advanced = false;
   let blockReason = '';
 
-  if (phase === 'red') {
+  if (phase === TDD_PHASES.red) {
     if (passed) {
       blockReason =
         'Your test command exits 0. RED requires a real failing test. Rewrite the assertion so it actually fails before re-invoking me.';
@@ -738,12 +760,12 @@ function main() {
           if (totalBlocks === 0) {
             blockReason = `No gherkin scenarios tagged @task:${taskNum}. Found ${testFiles.length} test file(s) in Suggested Scope but none contain it()/test() blocks. Add at least one failing test, then re-invoke me.`;
           } else {
-            const rec = recordEvidence('red', ticket, taskNum, testCmd, repoRoot, scope);
+            const rec = recordEvidence(TDD_PHASES.red, ticket, taskNum, testCmd, repoRoot, scope);
             if (!rec.ok) {
               blockReason = `Could not record RED evidence:\n${rec.out}`;
             } else {
               advanced = true;
-              phase = 'green';
+              phase = TDD_PHASES.green;
               process.stdout.write(
                 `task-next: RED accepted via unit-only fallback (no @task:${taskNum} gherkin tags; ${filesWithBlocks} test file(s) under Suggested Scope, ${totalBlocks} test block(s)).\n`
               );
@@ -753,37 +775,37 @@ function main() {
       } else if (missing.length > 0) {
         blockReason = `Tests do not yet cover these scenarios (verbatim title match against test files in Suggested Scope):\n  - ${missing.join('\n  - ')}\nAdd a test for each (failing) before re-invoking me.`;
       } else {
-        const rec = recordEvidence('red', ticket, taskNum, testCmd, repoRoot, scope);
+        const rec = recordEvidence(TDD_PHASES.red, ticket, taskNum, testCmd, repoRoot, scope);
         if (!rec.ok) {
           blockReason = `Could not record RED evidence:\n${rec.out}`;
         } else {
           advanced = true;
-          phase = 'green';
+          phase = TDD_PHASES.green;
         }
       }
     }
-  } else if (phase === 'green') {
+  } else if (phase === TDD_PHASES.green) {
     if (!passed) {
       blockReason = `Test command still failing (exit ${run.exitCode}). Last output:\n\n${run.combined}`;
     } else {
-      const rec = recordEvidence('green', ticket, taskNum, testCmd, repoRoot, scope);
+      const rec = recordEvidence(TDD_PHASES.green, ticket, taskNum, testCmd, repoRoot, scope);
       if (!rec.ok) {
         blockReason = `Could not record GREEN evidence:\n${rec.out}`;
       } else {
         advanced = true;
-        phase = 'refactor';
+        phase = TDD_PHASES.refactor;
       }
     }
-  } else if (phase === 'refactor') {
+  } else if (phase === TDD_PHASES.refactor) {
     if (!passed) {
       blockReason = `Regression detected — tests failed during refactor (exit ${run.exitCode}). Revert the breaking change before re-invoking me.\n\n${run.combined}`;
     } else {
-      const rec = recordEvidence('refactor', ticket, taskNum, testCmd, repoRoot, scope);
+      const rec = recordEvidence(TDD_PHASES.refactor, ticket, taskNum, testCmd, repoRoot, scope);
       if (!rec.ok) {
         blockReason = `Could not record REFACTOR evidence:\n${rec.out}`;
       } else {
         advanced = true;
-        phase = 'done';
+        phase = TDD_DERIVED_DONE;
       }
     }
   }

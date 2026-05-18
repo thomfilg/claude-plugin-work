@@ -31,6 +31,13 @@ const path = require('node:path');
 
 const { consumeToken } = require('../lib/scripts/write-report');
 const { normalizeAgentName } = require('../lib/agent-detection');
+const {
+  BRIEF_PHASE_ORDER,
+  BRIEF_INITIAL_PHASE,
+  briefNextPhases,
+  briefCanTransition,
+  isBriefPhase,
+} = require('./brief-phase-registry');
 
 let config;
 try {
@@ -44,14 +51,8 @@ const ALLOWED_AGENTS = ['brief-writer'];
 const GATED_SUBCOMMANDS = ['init', 'record', 'transition'];
 const TOKEN_MAX_AGE_MS = 10_000;
 
-const PHASES = ['inputs', 'overlap', 'draft', 'validate', 'memorize', 'done'];
-const VALID_TRANSITIONS = new Map([
-  ['inputs', new Set(['overlap'])],
-  ['overlap', new Set(['draft'])],
-  ['draft', new Set(['validate'])],
-  ['validate', new Set(['memorize'])],
-  ['memorize', new Set(['done'])],
-]);
+// Exported for back-compat with existing tests / importers.
+const PHASES = BRIEF_PHASE_ORDER;
 
 function errorExit(message) {
   process.stderr.write(JSON.stringify({ error: true, message }) + '\n');
@@ -155,7 +156,7 @@ function cmdInit(ticket) {
     ticket,
     createdAt: now,
     updatedAt: now,
-    currentPhase: 'inputs',
+    currentPhase: BRIEF_INITIAL_PHASE,
     phases: {},
   };
   writeState(ticket, state);
@@ -172,8 +173,8 @@ function cmdCurrent(ticket) {
 }
 
 function cmdRecord(ticket, phase, args) {
-  if (!PHASES.includes(phase)) {
-    errorExit(`Unknown phase "${phase}". Valid: ${PHASES.join(', ')}.`);
+  if (!isBriefPhase(phase)) {
+    errorExit(`Unknown phase "${phase}". Valid: ${BRIEF_PHASE_ORDER.join(', ')}.`);
   }
   const state = readState(ticket);
   if (!state) errorExit(`No brief-phase state for ${ticket}. Run \`init\` first.`);
@@ -186,16 +187,16 @@ function cmdRecord(ticket, phase, args) {
 }
 
 function cmdTransition(ticket, target) {
-  if (!PHASES.includes(target)) {
-    errorExit(`Unknown target phase "${target}". Valid: ${PHASES.join(', ')}.`);
+  if (!isBriefPhase(target)) {
+    errorExit(`Unknown target phase "${target}". Valid: ${BRIEF_PHASE_ORDER.join(', ')}.`);
   }
   const state = readState(ticket);
   if (!state) errorExit(`No brief-phase state for ${ticket}. Run \`init\` first.`);
-  const allowed = VALID_TRANSITIONS.get(state.currentPhase);
-  if (!allowed || !allowed.has(target)) {
+  if (!briefCanTransition(state.currentPhase, target)) {
+    const allowed = briefNextPhases(state.currentPhase);
     errorExit(
       `Invalid transition ${state.currentPhase} → ${target}. Allowed from ${state.currentPhase}: ${
-        allowed ? [...allowed].join(', ') : '(terminal)'
+        allowed.length ? allowed.join(', ') : '(terminal)'
       }.`
     );
   }
@@ -245,4 +246,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { PHASES, VALID_TRANSITIONS };
+module.exports = { PHASES, briefCanTransition, briefNextPhases };
