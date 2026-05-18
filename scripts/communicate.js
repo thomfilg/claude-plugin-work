@@ -111,22 +111,25 @@ if (watchMode) {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
-}
+} else {
+  // Send mode — wrapped in else so watch mode does NOT fall through into
+  // this block (which would write an empty timestamped line and exit(3),
+  // killing the watch interval set up above).
+  if (!fs.existsSync(inbox)) fs.closeSync(fs.openSync(inbox, 'a'));
+  const listenersBefore = findListeners(inbox);
 
-if (!fs.existsSync(inbox)) fs.closeSync(fs.openSync(inbox, 'a'));
-const listenersBefore = findListeners(inbox);
+  const message = rest.join(' ');
+  const ts = new Date().toISOString();
+  const line = `[${ts}] ${message}\n`;
+  fs.appendFileSync(inbox, line, { mode: 0o644 });
 
-const message = rest.join(' ');
-const ts = new Date().toISOString();
-const line = `[${ts}] ${message}\n`;
-fs.appendFileSync(inbox, line, { mode: 0o644 });
-
-process.stdout.write(
-  `sent → ${inbox} (${listenersBefore.length} listener(s)${listenersBefore.length ? `, pids: ${listenersBefore.join(', ')}` : ''})\n${line}`
-);
-if (listenersBefore.length === 0) {
-  process.stderr.write(
-    'warning: no active listeners detected — message written but no one is tailing.\n'
+  process.stdout.write(
+    `sent → ${inbox} (${listenersBefore.length} listener(s)${listenersBefore.length ? `, pids: ${listenersBefore.join(', ')}` : ''})\n${line}`
   );
-  process.exit(3);
+  if (listenersBefore.length === 0) {
+    process.stderr.write(
+      'warning: no active listeners detected — message written but no one is tailing.\n'
+    );
+    process.exit(3);
+  }
 }
