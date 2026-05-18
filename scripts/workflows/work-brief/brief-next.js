@@ -31,6 +31,7 @@ const BRIEF_PHASE_CLI = path.resolve(__dirname, 'brief-phase-state.js');
 
 const { BRIEF_INITIAL_PHASE } = require('./brief-phase-registry');
 const { getPhase } = require('./lib/phase-registry');
+const { loadMemoryPluginCandidates } = require('./lib/memory-plugin-config');
 
 let logNextScriptEvent;
 try {
@@ -99,30 +100,15 @@ function mintCompanionToken() {
 // ─── Memory plugin detection ───────────────────────────────────────────────
 
 /**
- * Detect installed memory plugins (cortex, mem0, anything that exposes
- * recall/remember tools). Returns { name, recallTool, rememberTool } or null.
+ * Detect installed memory plugins (cortex, mem0, or any operator-defined
+ * plugin from BRIEF_MEMORY_PLUGINS_JSON). The candidate list comes from
+ * `lib/memory-plugin-config.js` so detection rules are configurable via env.
+ * Returns `{ name, recallTool, rememberTool, saveTool }` or null.
  * Exported for test coverage.
  */
-function detectMemoryPlugin() {
+function detectMemoryPlugin(env = process.env) {
   const home = require('node:os').homedir();
-  const candidates = [
-    {
-      manifestGlob: ['.claude/plugins/marketplaces', '.claude/plugins/cache'],
-      probe: /cortex/i,
-      name: 'cortex',
-      recallTool: 'mcp__plugin_cortex_cortex__cortex_recall',
-      rememberTool: 'mcp__plugin_cortex_cortex__cortex_remember',
-      saveTool: 'mcp__plugin_cortex_cortex__cortex_save',
-    },
-    {
-      manifestGlob: ['.claude/plugins/marketplaces', '.claude/plugins/cache'],
-      probe: /mem0/i,
-      name: 'mem0',
-      recallTool: 'mem0_recall',
-      rememberTool: 'mem0_remember',
-      saveTool: null,
-    },
-  ];
+  const candidates = loadMemoryPluginCandidates(env);
   for (const c of candidates) {
     for (const base of c.manifestGlob) {
       const dir = path.join(home, base);
