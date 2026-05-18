@@ -357,35 +357,41 @@ function getTicketId(hookData) {
     }
     return _cachedTicketId;
   }
-  // (Patch 6+9) Worktree-aware .git/HEAD read — no subprocess spawn
-  try {
-    let head;
-    try {
-      // Try worktree-aware read first (.git as file)
-      head = resolveGitHead();
-    } catch {
-      // Fallback: normal repo (.git is a directory)
-      head = fs.readFileSync(path.join('.git', 'HEAD'), 'utf-8').trim();
-    }
-    const ref = head.startsWith('ref: ') ? head.slice(5) : head;
-    const match = ref.match(/[A-Z]+-\d+/);
-    _cachedTicketId = match ? match[0] : null;
-  } catch {
-    _cachedTicketId = null;
-  }
-  // Fallback chain when CWD-based detection fails: derive ticket from
-  // hookData. Needed when the hook is spawned with a CWD that is not the
-  // agent's worktree (e.g. parent session in the plugin source tree).
-  if (!_cachedTicketId && hookData) {
+  // Priority order: command > .git/HEAD > transcript_path.
+  // The Bash command itself (when present) is the most explicit signal —
+  // a developer running `node task-next.js ECHO-XXXX taskN` literally
+  // states which ticket they're working on. .git/HEAD is *usually* right
+  // but breaks in symlinked-worktree setups where the worktree directory
+  // name doesn't match the checked-out branch (e.g. tabwoah-ECHO-4628/
+  // with branch ECHO-4465 checked out — observed in real incidents).
+  // transcript_path is the weakest signal but a useful last resort when
+  // neither command nor cwd identify a ticket.
+  if (hookData) {
     const cmd = hookData?.tool_input?.command;
     if (typeof cmd === 'string') {
       const m = cmd.match(/\b[A-Z]+-\d+\b/);
       if (m) _cachedTicketId = m[0];
     }
-    if (!_cachedTicketId && typeof hookData?.transcript_path === 'string') {
-      const m = hookData.transcript_path.match(/\b[A-Z]+-\d+\b/);
-      if (m) _cachedTicketId = m[0];
+  }
+  if (!_cachedTicketId) {
+    // (Patch 6+9) Worktree-aware .git/HEAD read — no subprocess spawn
+    try {
+      let head;
+      try {
+        head = resolveGitHead();
+      } catch {
+        head = fs.readFileSync(path.join('.git', 'HEAD'), 'utf-8').trim();
+      }
+      const ref = head.startsWith('ref: ') ? head.slice(5) : head;
+      const match = ref.match(/[A-Z]+-\d+/);
+      _cachedTicketId = match ? match[0] : null;
+    } catch {
+      _cachedTicketId = null;
     }
+  }
+  if (!_cachedTicketId && hookData && typeof hookData?.transcript_path === 'string') {
+    const m = hookData.transcript_path.match(/\b[A-Z]+-\d+\b/);
+    if (m) _cachedTicketId = m[0];
   }
   // Compose with suffix when present (GH-146: phase-aware state paths)
   // Only append if ticketId doesn't already contain a '/' (prevent double-suffixing)
