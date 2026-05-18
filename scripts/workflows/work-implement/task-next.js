@@ -200,11 +200,24 @@ function resolveTestCommand(taskTestCmd, suiteEnvVar) {
   return { cmd: envCmd, source: `$${suiteEnvVar}` };
 }
 
-function runTest(cmd, cwd) {
+function runTest(cmd, cwd, scope) {
   // Bound the test command so a hung subprocess (watch mode, dev server,
   // interactive prompt waiting on stdin, etc.) doesn't strand the whole
   // workflow. Override via TASK_NEXT_TEST_TIMEOUT_MS env var.
   const timeoutMs = Number(process.env.TASK_NEXT_TEST_TIMEOUT_MS) || 5 * 60 * 1000;
+  // Inject CHANGED_FILES into the subprocess env from the task's
+  // Suggested Scope. Many tasks.md test commands use a pattern like
+  // `CHANGED_FILES="..." eval "$TEST_UNIT_COMMAND"` — but in some bash
+  // configurations (login shells, posix mode) the inline env-assignment
+  // does not propagate into the eval's variable scope, so $CHANGED_FILES
+  // inside the eval'd command expands to empty and the test runner
+  // executes the entire suite (timeout). Setting CHANGED_FILES in the
+  // spawned process env makes both patterns work — inline assignment
+  // overrides if present, otherwise this fallback wins. Only test-/spec-
+  // files from scope are included (source files are not test targets).
+  const changedFiles = Array.isArray(scope)
+    ? scope.filter((p) => /\.(test|spec)\.[jt]sx?$/i.test(p)).join(' ')
+    : '';
   const result = spawnSync('bash', ['-lc', cmd], {
     cwd,
     encoding: 'utf8',
@@ -212,6 +225,7 @@ function runTest(cmd, cwd) {
     timeout: timeoutMs,
     killSignal: 'SIGKILL',
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, CHANGED_FILES: changedFiles },
   });
   const stdout = result.stdout || '';
   const stderr = result.stderr || '';
@@ -677,7 +691,7 @@ function main() {
   }
 
   // Run the test command.
-  const run = runTest(testCmd, repoRoot);
+  const run = runTest(testCmd, repoRoot, scope);
   const passed = run.exitCode === 0;
 
   // Decide whether we can advance.
