@@ -339,7 +339,7 @@ function resolveGitHead() {
   throw new Error('unexpected .git content');
 }
 
-function getTicketId() {
+function getTicketId(hookData) {
   if (_ticketIdResolved) return _cachedTicketId;
   _ticketIdResolved = true;
   // Allow override for testing — empty string explicitly opts out (no git fallback)
@@ -372,6 +372,20 @@ function getTicketId() {
     _cachedTicketId = match ? match[0] : null;
   } catch {
     _cachedTicketId = null;
+  }
+  // Fallback chain when CWD-based detection fails: derive ticket from
+  // hookData. Needed when the hook is spawned with a CWD that is not the
+  // agent's worktree (e.g. parent session in the plugin source tree).
+  if (!_cachedTicketId && hookData) {
+    const cmd = hookData?.tool_input?.command;
+    if (typeof cmd === 'string') {
+      const m = cmd.match(/\b[A-Z]+-\d+\b/);
+      if (m) _cachedTicketId = m[0];
+    }
+    if (!_cachedTicketId && typeof hookData?.transcript_path === 'string') {
+      const m = hookData.transcript_path.match(/\b[A-Z]+-\d+\b/);
+      if (m) _cachedTicketId = m[0];
+    }
   }
   // Compose with suffix when present (GH-146: phase-aware state paths)
   // Only append if ticketId doesn't already contain a '/' (prevent double-suffixing)
@@ -550,9 +564,12 @@ function handlePreToolUse(hookData) {
   const toolName = hookData.tool_name || '';
   const toolInput = hookData.tool_input || {};
 
-  // 1. Find active ticket
-  const ticketId = getTicketId();
-  if (!ticketId) return; // No ticket context → allow
+  // 1. Find active ticket. May be null when the hook's own CWD is not a
+  //    worktree (e.g. parent session lives in the plugin source tree).
+  //    Do NOT early-return on null — Rule 5 (agent-gated writer-script
+  //    token mint) does not need a ticket. Rules that genuinely require
+  //    one already guard with `if (ticketId) { ... }` below.
+  const ticketId = getTicketId(hookData);
 
   // Rule 3: Block direct writes to workflow state files
   // Prevents agents from bypassing the state machine by directly editing state files
@@ -793,6 +810,11 @@ function handlePreToolUse(hookData) {
   }
 
   if (rule3.skipRemainingChecks) return; // Edit/Write/MultiEdit — skip per-workflow loop
+
+  // The per-workflow state/transition loop below needs a ticketId to load
+  // any state. Skip it entirely when ticketId could not be resolved (Rule 5
+  // and earlier rules already ran above with their own null-guards).
+  if (!ticketId) return;
 
   // 2. Check each workflow independently
   for (const wf of WORKFLOWS) {
