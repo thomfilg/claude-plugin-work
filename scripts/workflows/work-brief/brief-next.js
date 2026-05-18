@@ -216,6 +216,9 @@ function transitionPhase(ticket, target) {
 
 function validateInputs(tasksDir, manifest, linkedIds) {
   const errors = [];
+  // No linked tickets => nothing to put in _related/ => nothing to check.
+  if (linkedIds.length === 0) return errors;
+
   const relDir = path.join(tasksDir, '_related');
   if (!fs.existsSync(relDir)) {
     errors.push(
@@ -262,15 +265,19 @@ function validateOverlap(tasksDir, linkedIds) {
   return errors;
 }
 
+// NOTE: trailing terminator must match a non-word char OR end-of-line.
+// Headings ending in `)` (like `### Must Have (P0)`) followed by `\n` are
+// two non-word chars in a row, where `\b` does NOT match. Using
+// `(?=\s|$)` is correct for both word-ending and paren-ending headings.
 const REQUIRED_BRIEF_SECTIONS = [
-  /^##\s+Problem Statement\b/im,
-  /^##\s+Goal\b/im,
-  /^##\s+Target Users\b/im,
-  /^###\s+Must Have\s*\(P0\)\b/im,
-  /^##\s+Constraints\b/im,
-  /^##\s+Out of scope\s*\(sibling-owned\)\b/im,
-  /^##\s+Success Metrics\b/im,
-  /^##\s+Open Questions\b/im,
+  /^##\s+Problem Statement(?=\s|$)/im,
+  /^##\s+Goal(?=\s|$)/im,
+  /^##\s+Target Users(?=\s|$)/im,
+  /^###\s+Must Have\s*\(P0\)(?=\s|$)/im,
+  /^##\s+Constraints(?=\s|$)/im,
+  /^##\s+Out of scope\s*\(sibling-owned\)(?=\s|$)/im,
+  /^##\s+Success Metrics(?=\s|$)/im,
+  /^##\s+Open Questions(?=\s|$)/im,
 ];
 
 function sliceSection(text, headerRe) {
@@ -293,12 +300,17 @@ function validateDraft(tasksDir) {
     if (!re.test(c)) errors.push(`brief.md missing required section: ${re}.`);
   }
   // Open Questions: each non-empty entry must carry a `Searched:` line.
+  // The "no open questions" placeholder is `- _None._` (or `- None.`,
+  // `- N/A`) — recognised and exempt from the annotation requirement.
   const oq = sliceSection(c, /^##\s+Open Questions\b/im) || '';
+  const EMPTY_PLACEHOLDER_RE = /^[-*+]\s+(?:_?(?:none|n\/a|nothing)\b\.?_?|—|-)\s*$/i;
   const bullets = oq
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => /^[-*+]\s+/.test(l));
   for (const b of bullets) {
+    // Skip the empty-placeholder marker — the section is intentionally empty.
+    if (EMPTY_PLACEHOLDER_RE.test(b)) continue;
     // Each bullet must either close with "Searched:" inline or be followed
     // by an indented sub-bullet starting with "Searched:". Accept either.
     if (!/Searched:/i.test(b)) {
@@ -307,7 +319,7 @@ function validateDraft(tasksDir) {
       const tail = oq.slice(idx + b.length, idx + b.length + 400);
       if (!/Searched:/i.test(tail)) {
         errors.push(
-          `Open Question without 'Searched:' annotation: "${b.slice(0, 100)}". Each open question must list what docs/code you searched (paths + patterns) before leaving it open.`
+          `Open Question without 'Searched:' annotation: "${b.slice(0, 100)}". Each open question must list what docs/code you searched (paths + patterns) before leaving it open. If you have no open questions, write '- _None._' under the heading.`
         );
       }
     }
