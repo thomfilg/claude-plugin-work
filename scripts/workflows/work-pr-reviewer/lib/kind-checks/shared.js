@@ -36,8 +36,12 @@ function readChangedFiles(ctx) {
   const j = readPrContext(ctx.tasksDir);
   if (j && Array.isArray(j.files)) return j.files.slice();
   // Fallback: local git diff (when running locally without a real PR).
+  // Use the centralized config.getBaseBranch() resolution (env → git
+  // symbolic-ref → probe → fallback) instead of a hardcoded list, so
+  // repos using `dev`/`master`/non-standard default branches work.
   const root = ctx.worktreeRoot || process.cwd();
-  for (const base of ['origin/main', 'main', 'origin/dev', 'dev']) {
+  const candidates = resolveBaseCandidates(root);
+  for (const base of candidates) {
     const r = spawnSync('git', ['diff', '--name-only', `${base}...HEAD`], {
       cwd: root,
       encoding: 'utf8',
@@ -50,6 +54,25 @@ function readChangedFiles(ctx) {
     }
   }
   return [];
+}
+
+/**
+ * Build ordered diff-base candidates from `config.getBaseBranch()`. The
+ * helper returns refs like `origin/main` — we also probe the bare name so
+ * environments without a fetched remote still work. Deduped + ordered.
+ */
+function resolveBaseCandidates(cwd) {
+  let base = '';
+  try {
+    const config = require('../../../lib/config');
+    if (config && typeof config.getBaseBranch === 'function') {
+      base = config.getBaseBranch({ cwd }) || '';
+    }
+  } catch {
+    /* fall through */
+  }
+  const bare = String(base || 'main').replace(/^origin\//, '');
+  return [...new Set([`origin/${bare}`, bare])];
 }
 
 function readFileFromWorktree(ctx, relPath) {
@@ -86,6 +109,7 @@ module.exports = {
   readFile,
   readPrContext,
   readChangedFiles,
+  resolveBaseCandidates,
   readFileFromWorktree,
   scanTypeScriptViolations,
   TS_VIOLATIONS,
