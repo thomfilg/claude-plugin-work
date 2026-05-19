@@ -18,7 +18,7 @@ function validate(ctx) {
     return {
       ok: false,
       errors: [
-        `Memory plugin "${ctx.memory.name}" available but \`${SENTINEL}\` is missing. Call \`${ctx.memory.remember}\` with the QA verdict, then \`touch ${p}\`.`,
+        `Memory plugin "${ctx.memory.name}" available but \`${SENTINEL}\` is missing. Call \`${ctx.memory.rememberTool}\` with the QA verdict, then \`touch ${p}\`.`,
       ],
     };
   }
@@ -37,7 +37,7 @@ function instructions(ctx) {
     '',
     `Memory: **${ctx.memory.name}**`,
     '',
-    `1. Call \`${ctx.memory.remember}\` with: ticket id, APPROVED/BLOCKED, key kind verdicts, any flaky scenarios.`,
+    `1. Call \`${ctx.memory.rememberTool}\` with: ticket id, APPROVED/BLOCKED, key kind verdicts, any flaky scenarios.`,
     `2. \`touch ${path.join(ctx.tasksDir, SENTINEL)}\`.`,
     '',
   ].join('\n');
