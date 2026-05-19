@@ -32,10 +32,11 @@ function readContext(tasksDir, file) {
 }
 
 function fetchPrState(worktreeRoot, prNumber) {
+  const { buildChildEnv } = require('../../../work/scripts/gh-exec');
   const r = spawnSync(
     'gh',
     ['pr', 'view', String(prNumber), '--json', 'state,mergedAt,mergeCommit'],
-    { cwd: worktreeRoot, encoding: 'utf8' }
+    { cwd: worktreeRoot, encoding: 'utf8', env: buildChildEnv() }
   );
   if (r.status !== 0) return null;
   try {

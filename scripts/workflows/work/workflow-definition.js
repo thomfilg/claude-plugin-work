@@ -626,7 +626,13 @@ module.exports = function createWorkflowDefinition({ TASKS_BASE, safeTicketPath,
           // PR is proven if an open PR exists for the current branch
           try {
             const { execFileSync } = require('child_process');
-            const opts = { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] };
+            const { buildChildEnv } = require('../lib/scripts/gh-exec');
+            const opts = {
+              encoding: 'utf-8',
+              timeout: 10000,
+              stdio: ['pipe', 'pipe', 'pipe'],
+              env: buildChildEnv(),
+            };
 
             // Resolve branch to support worktree contexts (GH-191, GH-203)
             // Note: gh pr view uses positional branch arg, not --head flag
