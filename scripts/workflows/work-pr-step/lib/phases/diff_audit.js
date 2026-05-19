@@ -18,7 +18,20 @@ function git(args, cwd) {
 }
 
 function resolveBase(worktreeRoot) {
-  // Prefer origin/main, fall back to main.
+  // Use the canonical config.getBaseBranch() which honors the full priority
+  // chain: $BASE_BRANCH env → git symbolic-ref → probe origin/main, dev,
+  // master → fallback. Repos using `dev` or `master` as default would
+  // otherwise always fail diff_audit with "Cannot resolve a base branch."
+  try {
+    const config = require('../../../lib/config');
+    if (typeof config.getBaseBranch === 'function') {
+      const base = config.getBaseBranch({ cwd: worktreeRoot });
+      if (base) return base;
+    }
+  } catch {
+    /* fall through to legacy probe */
+  }
+  // Legacy fallback: probe origin/main, main directly.
   if (git(['rev-parse', '--verify', '--quiet', 'origin/main'], worktreeRoot).code === 0)
     return 'origin/main';
   if (git(['rev-parse', '--verify', '--quiet', 'main'], worktreeRoot).code === 0) return 'main';
