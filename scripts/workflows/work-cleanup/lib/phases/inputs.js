@@ -49,14 +49,30 @@ function validate(ctx) {
   } catch {
     /* hook-gated */
   }
-  const warnings = [];
-  if (!branch) warnings.push('Could not resolve current git branch.');
-  if (!prNumber)
-    warnings.push('Could not resolve PR number from branch — pr_merged_check will fail.');
+  // BLOCK (don't advance) when branch/prNumber are missing — downstream phases
+  // can't recover, and the agent would hit a dead-end "re-run inputs" loop if
+  // we advanced past this point with incomplete context.
+  const errors = [];
+  if (!branch) {
+    errors.push(
+      'Could not resolve current git branch. Ensure you are inside a git worktree (`git rev-parse --abbrev-ref HEAD` must succeed).'
+    );
+  }
+  if (!prNumber) {
+    errors.push(
+      `Could not resolve PR number for branch \`${branch || '(unknown)'}\`. Either (a) create the PR first (\`gh pr create\`), (b) verify \`gh pr view ${branch || '<branch>'} --json number\` succeeds, or (c) abort cleanup — there's nothing to clean up for a branch with no PR.`
+    );
+  }
+  if (errors.length) {
+    return {
+      ok: false,
+      errors,
+      summary: `branch=${branch || '(none)'} pr=${prNumber || '(none)'}`,
+    };
+  }
   return {
     ok: true,
-    warnings,
-    summary: `branch=${branch || '(unknown)'} pr=${prNumber || '(unknown)'}`,
+    summary: `branch=${branch} pr=${prNumber}`,
   };
 }
 
