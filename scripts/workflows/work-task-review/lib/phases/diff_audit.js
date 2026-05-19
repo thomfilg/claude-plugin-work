@@ -19,6 +19,27 @@ try {
   taskReviewGate = null;
 }
 
+let config;
+try {
+  config = require('../../../lib/config');
+} catch {
+  config = null;
+}
+
+function resolveFallbackBase(ctx) {
+  // Defer to config.getBaseBranch() so repos using `dev`/`master`/etc. work.
+  // Mirrors work-pr-reviewer/lib/kind-checks/shared.js::resolveBaseCandidates.
+  try {
+    if (config && typeof config.getBaseBranch === 'function') {
+      const b = config.getBaseBranch({ cwd: ctx.worktreeRoot || process.cwd() });
+      if (b) return b;
+    }
+  } catch {
+    /* fall through */
+  }
+  return 'origin/main';
+}
+
 function gitDiffNameOnly(base, head, cwd) {
   const r = spawnSync('git', ['diff', '--name-only', `${base}...${head}`], {
     cwd,
@@ -39,7 +60,7 @@ function computeDiff(ctx) {
       /* fall through */
     }
   }
-  return { base: 'origin/main', head: 'HEAD', fallback: true };
+  return { base: resolveFallbackBase(ctx), head: 'HEAD', fallback: true };
 }
 
 function writeContext(ctx, diff, files) {
