@@ -66,8 +66,8 @@ function sanitizeId(ticketId) {
 
 function resolveTasksBase() {
   return (
-    process.env.CI_BASE ||
-    (config && config.CI_BASE) ||
+    process.env.TASKS_BASE ||
+    (config && config.TASKS_BASE) ||
     path.join(require('node:os').homedir(), 'worktrees', 'tasks')
   );
 }

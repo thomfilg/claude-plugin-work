@@ -36,8 +36,8 @@ try {
 
 function resolveTasksBase() {
   return (
-    process.env.PR_BASE ||
-    (config && config.PR_BASE) ||
+    process.env.TASKS_BASE ||
+    (config && config.TASKS_BASE) ||
     path.join(require('node:os').homedir(), 'worktrees', 'tasks')
   );
 }
