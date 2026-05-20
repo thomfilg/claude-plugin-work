@@ -33,6 +33,7 @@ const { execSync } = require('child_process');
 const { tddCanTransition, isTestFile } = require('./tdd-phase-registry');
 const { consumeToken, tokenPath } = require('../lib/scripts/write-report');
 const { normalizeAgentName } = require('../lib/agent-detection');
+const { resolveTasksBaseWithFallback } = require('../lib/ticket-validation');
 
 let config;
 try {
@@ -70,18 +71,6 @@ function sanitizeId(ticketId) {
     if (e && e.code !== 'MODULE_NOT_FOUND') throw e;
     return ticketId;
   }
-}
-
-/**
- * Resolve TASKS_BASE from env, config, or HOME fallback.
- * @returns {string}
- */
-function resolveTasksBase() {
-  return (
-    process.env.TASKS_BASE ||
-    (config && config.TASKS_BASE) ||
-    path.join(require('os').homedir(), 'worktrees', 'tasks')
-  );
 }
 
 /**
@@ -200,7 +189,7 @@ function getStatePath(ticketId, opts) {
     throw new Error(`Invalid ticket ID: ${ticketId}`);
   }
   rejectMalformedTicketId(ticketId);
-  const base = resolveTasksBase();
+  const base = resolveTasksBaseWithFallback();
   const safeId = sanitizeId(ticketId);
   const taskNum = opts && opts.taskNum;
 
@@ -746,7 +735,7 @@ function cmdException(ticketId, args) {
       );
     }
     const { isCheckpointTask } = require('./exception-validator');
-    const resolvedTasksBase = resolveTasksBase();
+    const resolvedTasksBase = resolveTasksBaseWithFallback();
     const safeId = sanitizeId(ticketId);
     if (!isCheckpointTask(safeId, taskNum, resolvedTasksBase)) {
       auditException(ticketId, taskNum, category, null, false);
