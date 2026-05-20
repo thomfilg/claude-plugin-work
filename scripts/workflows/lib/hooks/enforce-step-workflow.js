@@ -199,7 +199,6 @@ const EXEMPT_SCRIPTS = new Set([
   'follow-up-next.js',
   'follow-up-pr-comments.js',
   'work-next.js',
-  'rewind-to-step.js',
 ]);
 
 // Sub-command filtering for state scripts (GH-89).
