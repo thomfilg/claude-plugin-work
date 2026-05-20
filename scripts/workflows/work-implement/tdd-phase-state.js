@@ -29,7 +29,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 const { tddCanTransition, isTestFile } = require('./tdd-phase-registry');
 const { consumeToken, tokenPath } = require('../lib/scripts/write-report');
 const { normalizeAgentName } = require('../lib/agent-detection');
@@ -317,23 +317,32 @@ function runTestCommand(cmd) {
  * exits 0 and used to silently record as legitimate GREEN evidence).
  */
 function runTestCommandWithOutput(cmd) {
-  try {
-    const stdout = execSync(cmd, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 300000,
-    });
-    return { exitCode: 0, stdout: stdout || '', stderr: '' };
-  } catch (err) {
-    if (err.killed) {
+  // Use spawnSync (not execSync) so we capture BOTH stdout AND stderr on
+  // success. execSync only returns stdout when exit code is 0, which means
+  // the RC-B "all-skipped" guard silently fails for Jest/Vitest — both
+  // print their summary lines to stderr. spawnSync via shell preserves the
+  // same command-parsing behavior as execSync.
+  const result = spawnSync(cmd, {
+    encoding: 'utf8',
+    shell: true,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 300000,
+  });
+  if (result.error) {
+    if (result.error.code === 'ETIMEDOUT' || result.signal === 'SIGTERM') {
       process.stderr.write(`Test command timed out after 5 minutes: ${cmd}\n`);
     }
     return {
-      exitCode: err.status || 1,
-      stdout: err.stdout ? err.stdout.toString() : '',
-      stderr: err.stderr ? err.stderr.toString() : '',
+      exitCode: result.status === null ? 1 : result.status,
+      stdout: result.stdout || '',
+      stderr: result.stderr || '',
     };
   }
+  return {
+    exitCode: result.status === null ? 1 : result.status,
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+  };
 }
 
 /**
