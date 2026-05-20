@@ -41,15 +41,18 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
   // PR (#1826) still had 2 checks running and merge was BLOCKED awaiting
   // approvals; the outer workflow advanced anyway.
   //
-  // Fail-safe: if we can't read the rollup (network/gh error), DO NOT
-  // advance — fall through so the ci step's agent runs the real verifier.
+  // Fail-safe: if we can't read the rollup (network/gh error, missing
+  // workDir, or missing prNumber), DO NOT advance — fall through so the
+  // ci step's agent runs the real verifier. Treat any inability to
+  // independently verify as "can't verify, don't advance" (ECHO-4451).
+  if (!workDir || !followUpState.prNumber) {
+    return null;
+  }
   try {
-    if (workDir && followUpState.prNumber) {
-      const { checkCI } = require(path.join(workDir, 'scripts', 'follow-up-pr.js'));
-      const ci = checkCI(followUpState.prNumber);
-      if (!ci || ci.status !== 'passing') {
-        return null;
-      }
+    const { checkCI } = require(path.join(workDir, 'scripts', 'follow-up-pr.js'));
+    const ci = checkCI(followUpState.prNumber);
+    if (!ci || ci.status !== 'passing') {
+      return null;
     }
   } catch {
     return null;
