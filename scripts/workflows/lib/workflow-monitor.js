@@ -46,63 +46,20 @@ const dryRun = argv.includes('--dry-run');
 const tasksBaseArg = argv.indexOf('--tasks-base');
 const explicitBase = tasksBaseArg !== -1 ? argv[tasksBaseArg + 1] : null;
 
-// Discover TASKS_BASE candidates with NO hardcoded paths:
-//   1. Explicit --tasks-base arg
-//   2. $TASKS_BASE env (single base)
-//   3. $WORKTREES_BASES env (colon-separated list of *.../tasks dirs)
-//   4. Parse `.envrc` files matching $WORKTREES_GLOB (default ~/g2i/w-*) for
-//      `export TASKS_BASE=...`. Glob is user-configurable via env.
-function parseTasksBaseFromEnvrc(envrcPath) {
-  try {
-    const content = fs.readFileSync(envrcPath, 'utf8');
-    const m = content.match(/^\s*export\s+TASKS_BASE\s*=\s*["']?([^"'\n]+)["']?/m);
-    if (!m) return null;
-    let p = m[1].trim();
-    // Strip inline shell comments (# ...) — common in .envrc files.
-    const hashIdx = p.indexOf('#');
-    if (hashIdx !== -1) p = p.slice(0, hashIdx).trim();
-    // Resolve ~ and $HOME minimally.
-    p = p.replace(/^~/, process.env.HOME || '');
-    p = p.replace(/\$\{?HOME\}?/g, process.env.HOME || '');
-    return p;
-  } catch {
-    return null;
-  }
-}
+// Discover TASKS_BASE candidates. Single-base case uses the canonical
+// `resolveTasksBase()` from lib/ticket-validation. Multi-base (monitoring
+// across worktrees) uses an explicit colon-separated $WORKTREES_BASES env.
+// No bespoke .envrc parsing — that's already the job of `resolveTasksBase`
+// via direnv/shell loading.
+const { resolveTasksBaseOrNull } = require('./ticket-validation');
 
 function discoverTasksBases() {
   if (explicitBase) return [explicitBase];
-  if (process.env.TASKS_BASE) return [process.env.TASKS_BASE];
   if (process.env.WORKTREES_BASES) {
     return process.env.WORKTREES_BASES.split(':').filter(Boolean);
   }
-
-  const candidates = [];
-  const glob = process.env.WORKTREES_GLOB || '';
-  let entries = [];
-  if (glob) {
-    // Resolve a single-* glob like '/home/x/g2i/w-*' by reading parent dir.
-    const star = glob.indexOf('*');
-    if (star !== -1) {
-      const parent = glob.slice(0, glob.lastIndexOf('/', star));
-      const prefix = glob.slice(parent.length + 1, star);
-      try {
-        for (const e of fs.readdirSync(parent)) {
-          if (e.startsWith(prefix)) entries.push(path.join(parent, e));
-        }
-      } catch {
-        /* fail-open */
-      }
-    }
-  }
-
-  for (const dir of entries) {
-    const envrc = path.join(dir, '.envrc');
-    if (!fs.existsSync(envrc)) continue;
-    const tb = parseTasksBaseFromEnvrc(envrc);
-    if (tb && fs.existsSync(tb)) candidates.push(tb);
-  }
-  return candidates;
+  const single = resolveTasksBaseOrNull();
+  return single ? [single] : [];
 }
 
 const TASKS_BASES = discoverTasksBases();
