@@ -113,17 +113,31 @@ function shouldNudge(ticket) {
       const last = parseInt(fs.readFileSync(f, 'utf8'), 10) || 0;
       if (now - last < NUDGE_COOLDOWN) return false;
     }
-    fs.writeFileSync(f, String(now));
     return true;
   } catch {
     return true;
   }
 }
 
+// Record a successful nudge so the cooldown takes effect. Split from
+// `shouldNudge` so failed deliveries don't burn the 10-min window — the
+// next monitor pass should be free to retry. Fail-open on IO errors.
+function recordNudgeSent(ticket) {
+  try {
+    fs.mkdirSync(NUDGE_STATE_DIR, { recursive: true });
+    const f = path.join(NUDGE_STATE_DIR, `${ticket}.last`);
+    fs.writeFileSync(f, String(Math.floor(Date.now() / 1000)));
+  } catch {
+    /* fail-open */
+  }
+}
+
+// Returns true on successful delivery, false on failure (so the caller
+// can skip recording the cooldown marker and retry on the next pass).
 function sendNudge(ticket, message) {
   if (dryRun) {
     process.stdout.write(`[dry-run] would nudge ${ticket}: ${message.slice(0, 100)}\n`);
-    return;
+    return true;
   }
   try {
     execFileSync('node', [COMMUNICATE_SCRIPT, ticket, message], {
@@ -131,8 +145,10 @@ function sendNudge(ticket, message) {
       timeout: 10000,
       stdio: 'pipe',
     });
+    return true;
   } catch (err) {
     process.stderr.write(`nudge to ${ticket} failed: ${err.message}\n`);
+    return false;
   }
 }
 
@@ -392,9 +408,18 @@ function main() {
             return 0;
           }
         })();
-        sendNudge(ticket, row.nextAction.suggestedMessage);
-        row.nudged = true;
-        row.nudgeMtimeBefore = beforeMtime;
+        const delivered = sendNudge(ticket, row.nextAction.suggestedMessage);
+        if (delivered) {
+          // Only record cooldown on successful delivery — otherwise the next
+          // monitor poll should be free to retry instead of burning the
+          // 10-min window after a failed send (network/communicate.js crash).
+          recordNudgeSent(ticket);
+          row.nudged = true;
+          row.nudgeMtimeBefore = beforeMtime;
+        } else {
+          row.nudged = false;
+          row.nudgeSkippedReason = 'delivery-failed';
+        }
       } else if (stuck) {
         row.nudged = false;
         row.nudgeSkippedReason = 'cooldown';
