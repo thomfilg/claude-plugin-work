@@ -12,12 +12,37 @@ Run QA testing for a specific application by launching the `qa-feature-tester` a
 
 ## What This Command Does
 
-1. Parse arguments (app name + optional JSON options)
-2. If no arguments → auto-discover affected apps
-3. **Initialize QA progress tracking** (enables resume on context loss)
-4. **Cleanup old screenshots** for the specific app being tested
-5. Launch `qa-feature-tester` agent with context
-6. Agent handles ALL testing (Playwright, screenshots, report)
+1. **Ensure dev environment is running** via `$DEV_COMMAND` (idempotent — no-op if already up)
+2. Parse arguments (app name + optional JSON options)
+3. If no arguments → auto-discover affected apps
+4. **Initialize QA progress tracking** (enables resume on context loss)
+5. **Cleanup old screenshots** for the specific app being tested
+6. Launch `qa-feature-tester` agent with context
+7. Agent handles ALL testing (Playwright, screenshots, report)
+
+## Step 0: Ensure dev environment is running
+
+Before doing any QA work, ensure the dev environment is up. The worktree's `.envrc` defines `$DEV_COMMAND` (e.g. `~/g2i/scripts/dev-tabwoah.sh`) which knows how to start all apps idempotently — it's safe to invoke even when servers are already running. Skip this step if `$DEV_COMMAND` is unset.
+
+```bash
+# Idempotent: starts dev if not already running, no-op otherwise
+if [ -n "${DEV_COMMAND}" ] && [ -x "$(echo $DEV_COMMAND | awk '{print $1}')" ]; then
+  $DEV_COMMAND
+fi
+```
+
+When `/check-qa` is invoked **inside `/check2`'s phase1-agents flow**, the dev environment has already been started by `/check2`'s `start-env` step — this becomes a no-op. When `/check-qa` is invoked **standalone** (ad-hoc QA), Step 0 brings up the env.
+
+## Browser/UI fact verification
+
+For quick verifications during QA (e.g. "is the queue health card showing operational?"), use `scripts/workflows/qa/browser-verify.js` — API-first with a guidance fallback to Playwright:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/workflows/qa/browser-verify.js" --url "${APP_URL}" --query "queue health"
+# → ANSWER: {"totalQueues":20,"operational":20,"critical":0}
+```
+
+The script exits 0 with a concise answer when an API endpoint matches the query, exits 1 with guidance to use the browser when no API match exists (the agent then uses `mcp__playwright__browser_*` directly). This consolidates what the deleted `/check-browser` skill used to do.
 
 ## Context Loss Protection
 

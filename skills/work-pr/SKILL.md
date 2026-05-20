@@ -187,16 +187,12 @@ echo "$TSX_CHANGED" | sed 's/^/    /'
 echo "  Screenshots found: $SCREENSHOT_COUNT"
 ```
 
-If screenshots are missing (`SCREENSHOT_COUNT == 0`), use `AskUserQuestion`:
-- "UI files were changed but no screenshots exist. How would you like to proceed?"
-  - Option 1: "Run /check-qa to capture screenshots" (Recommended)
-  - Option 2: "Run /check-browser to capture screenshots"
-  - Option 3: "Skip screenshots (non-visual change)"
+**Gate behavior — never blocks PR creation:**
 
-**Based on user choice:**
-- If skip and `5_post_pr_gen` is SKIP → transition to `6_summary`
-- If skip and `5_post_pr_gen` is RUN → transition to `5_post_pr_gen`
-- If capture → run selected command, then transition **backward** to `3_pr_gen` (re-generates PR with screenshots)
+- **If `SCREENSHOT_COUNT == 0`** — proceed silently. Do NOT prompt the user. UI changes without screenshots are a soft warning, not a blocker; the next step continues normally.
+- **If `SCREENSHOT_COUNT > 0`** — enforce attachment. The PR description (generated in `3_pr_gen` / refreshed in `5_post_pr_gen`) MUST reference the screenshots from `${TASKS_DIR}/screenshots/`. If the PR body has no screenshot references, transition **backward** to `3_pr_gen` to regenerate with the screenshots included. Do not allow advancing while screenshots exist on disk but are missing from the PR body.
+
+In both cases, control falls through to the next step (`5_post_pr_gen` if RUN, else `6_summary`) without an `AskUserQuestion` prompt. The gate is enforcement-only, never interactive.
 
 ---
 

@@ -169,12 +169,6 @@ All hooks follow a strict fail-open policy:
 | `check-start-env.js` | Start dev servers |
 | `check-validate-reports.js` | Validate report format and status lines |
 
-### Shared hooks consumed by /check2 (`scripts/workflows/lib/hooks/`)
-
-| Hook | Purpose |
-|---|---|
-| `enforce-screenshot-requirement.js` | Block QA without screenshots (GH-207) |
-
 ## Session Guard
 
 **File:** `scripts/workflows/lib/hooks/session-guard.js`

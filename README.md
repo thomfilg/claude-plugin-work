@@ -43,8 +43,8 @@ For local development, point to a local directory instead:
 | Command | Description |
 |---------|-------------|
 | `/check2 <TICKET_ID>` | Run full quality check: lint, typecheck, tests, code review, QA, and requirements verification in parallel |
+| `/qa <TICKET_ID>` | Orchestrate QA per impacted app (web → `/check-qa`, api → `qa-api-tester`) |
 | `/check-qa <app>` | Run QA testing for a specific app using Playwright |
-| `/check-browser` | Verify browser/UI state using API-first approach with browser fallback |
 
 ### Test Management
 
@@ -72,7 +72,6 @@ For local development, point to a local directory instead:
 The plugin registers hooks that enforce workflow discipline:
 
 - **`enforce-step-workflow`** - Validates that steps execute in the correct order during `/work2` sessions
-- **`enforce-screenshot-requirement`** - Ensures QA screenshots are captured before completing checks
 - **`work-orchestrator-hook`** - Pre-processes `/work2` commands to initialize the workflow engine
 
 ## Architecture

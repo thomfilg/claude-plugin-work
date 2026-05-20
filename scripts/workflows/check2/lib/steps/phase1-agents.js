@@ -22,7 +22,24 @@ module.exports = function registerPhase1(register) {
       const hasCodeReview = fs.existsSync(path.join(reportFolder, 'code-review.check.md'));
       const completionPath = path.join(reportFolder, 'completion.check.md');
       const hasCompletion = fs.existsSync(completionPath);
-      if (hasCodeReview && hasCompletion) {
+      // QA reports — only required when /qa was actually dispatched (i.e.
+      // WEB_APPS has web/api apps). When no qa apps, qa-* reports are
+      // never created and don't gate auto-advance.
+      let hasQa = true;
+      try {
+        const apps = JSON.parse(process.env.WEB_APPS || '[]');
+        const qaApps = Array.isArray(apps)
+          ? apps.filter((a) => a && (a.appType === 'web' || a.appType === 'api'))
+          : [];
+        if (qaApps.length > 0) {
+          hasQa = qaApps.every((a) =>
+            fs.existsSync(path.join(reportFolder, `qa-${a.name}.check.md`))
+          );
+        }
+      } catch {
+        /* fail-open: don't block on malformed WEB_APPS */
+      }
+      if (hasCodeReview && hasCompletion && hasQa) {
         // Mark tasks as verified [v] if completion-checker says COMPLETE
         try {
           const completionReport = fs.readFileSync(completionPath, 'utf8');
@@ -123,6 +140,29 @@ module.exports = function registerPhase1(register) {
       },
     ];
 
+    // Add /qa dispatch when at least one web/api app is configured. /qa
+    // orchestrates per-app QA (web → /check-qa skill, api → qa-api-tester
+    // agent, cli → skip). Restoring the QA coverage the deleted /check
+    // workflow used to provide via its Agent 3.x routing.
+    let hasQaApps = false;
+    try {
+      const apps = JSON.parse(process.env.WEB_APPS || '[]');
+      hasQaApps =
+        Array.isArray(apps) && apps.some((a) => a && (a.appType === 'web' || a.appType === 'api'));
+    } catch {
+      /* malformed WEB_APPS — skip QA dispatch silently */
+    }
+    if (hasQaApps) {
+      delegates.push({
+        type: 'skill',
+        skill: 'qa',
+        description: `Per-app QA — ${state.ticketId}`,
+        args: state.ticketId,
+        prompt: `Run /qa for ticket ${state.ticketId}. Dispatch QA per impacted app from $WEB_APPS in parallel. Write per-app reports to ${reportFolder}/qa-<app>.check.md and aggregate the overall verdict.`,
+        note: 'Dispatch the /qa skill directly. It internally fans out to /check-qa per web app and qa-api-tester per api app.',
+      });
+    }
+
     return {
       type: 'check_instruction',
       action: 'execute',
@@ -130,7 +170,7 @@ module.exports = function registerPhase1(register) {
       continue: true,
       parallel: true,
       delegates,
-      note: `Launch EXACTLY these ${delegates.length} agents IN PARALLEL (single message, ${delegates.length} Task tool calls). Do NOT add any other agents — tests are handled by a deterministic script.`,
+      note: `Launch EXACTLY these ${delegates.length} delegates IN PARALLEL (single message, ${delegates.length} tool calls). Do NOT add any other agents — tests are handled by a deterministic script.`,
     };
   });
 };

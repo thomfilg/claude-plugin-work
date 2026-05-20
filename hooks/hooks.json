@@ -106,10 +106,6 @@
           {
             "type": "command",
             "command": "CLAUDE_HOOK_TYPE=PreToolUse node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/check/hooks/enforce-env-start-failure.js"
-          },
-          {
-            "type": "command",
-            "command": "CLAUDE_HOOK_TYPE=PreToolUse node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/lib/hooks/enforce-screenshot-requirement.js"
           }
         ]
       },
