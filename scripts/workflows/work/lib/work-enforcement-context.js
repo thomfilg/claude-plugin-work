@@ -20,7 +20,7 @@
 
 let config;
 try {
-  config = require('../lib/config');
+  config = require('../../lib/config');
 } catch (err) {
   if (err && err.code === 'MODULE_NOT_FOUND') {
     config = null;
@@ -29,7 +29,7 @@ try {
   }
 }
 
-const { loadState, loadActiveSubtaskState } = require('./work-state');
+const { loadState, loadActiveSubtaskState } = require('../work-state');
 const { parseTasks } = require('./task-parser');
 
 // ─── Ticket ID validation (R15) ─────────────────────────────────────────────

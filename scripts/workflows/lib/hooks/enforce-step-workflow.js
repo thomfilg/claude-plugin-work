@@ -83,7 +83,9 @@ const {
 
 let appendAction;
 try {
-  appendAction = require(path.join(__dirname, '..', '..', 'work', 'work-actions')).appendAction;
+  appendAction = require(
+    path.join(__dirname, '..', '..', 'work', 'lib', 'work-actions')
+  ).appendAction;
 } catch {
   appendAction = () => {};
 }

@@ -8,7 +8,7 @@
 
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { STEP_PIPELINE } = require('./steps');
+const { STEP_PIPELINE } = require('../steps');
 
 /**
  * @param {string|null} ticket
@@ -48,7 +48,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
   // Initialize session guard for workflow locking (skip when explicitly disabled)
   if (ticket && process.env.SESSION_GUARD_ENABLED !== '0') {
     try {
-      const guardPath = path.join(__dirname, '..', 'lib', 'hooks', 'session-guard.js');
+      const guardPath = path.join(__dirname, '..', '..', 'lib', 'hooks', 'session-guard.js');
       execFileSync(process.execPath, [guardPath, 'init', safeBase, '/work'], {
         stdio: 'pipe',
         timeout: 5000,
@@ -65,7 +65,7 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
       extra.agentPrompt &&
       (action === 'RUN' || action === 'DEFER')
     ) {
-      const tddStatePath = path.join(__dirname, '..', 'work-implement', 'tdd-phase-state.js');
+      const tddStatePath = path.join(__dirname, '..', '..', 'work-implement', 'tdd-phase-state.js');
       const resolvedProtocol = TDD_PROTOCOL.replace(/<TDD_STATE_PATH>/g, tddStatePath).replace(
         /<TICKET_ID>/g,
         safeName
@@ -135,8 +135,8 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix,
     execFileSync,
     parseTasks,
     buildTaskPrompt,
-    sessionGuardPath: path.join(__dirname, '..', 'lib', 'hooks', 'session-guard.js'),
-    workStatePath: path.join(__dirname, 'work-state.js'),
+    sessionGuardPath: path.join(__dirname, '..', '..', 'lib', 'hooks', 'session-guard.js'),
+    workStatePath: path.join(__dirname, '..', 'work-state.js'),
   };
 
   // Execute step pipeline — each handler may call add() and/or mutate ctx/plan.

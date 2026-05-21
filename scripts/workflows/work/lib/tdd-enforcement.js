@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { taskSegment } = require('../lib/allocate-output-folder');
+const { taskSegment } = require('../../lib/allocate-output-folder');
 
 const TDD_PROTOCOL = `
 TDD protocol (hook-enforced for this step):
@@ -101,7 +101,7 @@ function validateTddEvidence(evidence) {
     }
     // Structured format: { category, reason }
     if (typeof evidence.exception === 'object' && evidence.exception !== null) {
-      const { ALLOWED_CATEGORIES } = require('../work-implement/exception-validator');
+      const { ALLOWED_CATEGORIES } = require('../../work-implement/exception-validator');
       const cat = evidence.exception.category;
       if (typeof cat === 'string' && ALLOWED_CATEGORIES.includes(cat)) {
         // GH-258: validated against exception-validator.ALLOWED_CATEGORIES

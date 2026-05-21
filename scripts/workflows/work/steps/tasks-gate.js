@@ -19,7 +19,7 @@
 function tasksGateStep(add, s, ctx) {
   const { STEPS, tasksDir, path } = ctx;
   const fs = require('fs');
-  const { parseTasks } = require('../task-parser');
+  const { parseTasks } = require('../lib/task-parser');
   const { validateAll } = require('../../lib/task-scope');
   const {
     validateConsistency: validateGherkinTaskRefs,

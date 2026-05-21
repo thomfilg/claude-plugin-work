@@ -23,7 +23,7 @@ const { execFileSync } = require('child_process');
 // Load config
 let config;
 try {
-  config = require('../lib/config');
+  config = require('../../lib/config');
 } catch (err) {
   if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\.\/lib\/config['"]/.test(err.message)) {
     process.stderr.write('Config not found — run from a worktree with .envrc\n');
@@ -33,7 +33,7 @@ try {
 }
 
 const TASKS_BASE = config.TASKS_BASE;
-const { loadState, completeWork, addError } = require(path.join(__dirname, 'work-state'));
+const { loadState, completeWork, addError } = require(path.join(__dirname, '..', 'work-state'));
 // session-guard is a CLI-only script (no exports), executed via execFileSync
 const SESSION_GUARD_PATH = require('path').resolve(
   __dirname,

@@ -33,7 +33,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const getConfig = require('../lib/get-config');
+const getConfig = require('../../lib/get-config');
 
 /**
  * Discriminator value for enforcement audit rows (IDEA2 spec §Pattern — audit).
@@ -51,7 +51,7 @@ function getTasksBase() {
 
 function safeId(ticketId) {
   try {
-    return require('../lib/config').safeTicketId(ticketId);
+    return require('../../lib/config').safeTicketId(ticketId);
   } catch {
     return ticketId;
   }

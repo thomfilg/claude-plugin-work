@@ -58,7 +58,7 @@ function inspect(ticket, providerConfig, suffix, deps) {
     s.headSha = run(`git -C "${c}" rev-parse HEAD`);
     let baseBranch = 'origin/main';
     try {
-      baseBranch = require(path.join(__dirname, '..', 'lib', 'config')).getBaseBranch({ cwd: c });
+      baseBranch = require(path.join(__dirname, '..', '..', 'lib', 'config')).getBaseBranch({ cwd: c });
     } catch {
       /* */
     }
@@ -136,7 +136,7 @@ function inspect(ticket, providerConfig, suffix, deps) {
   // Uses deps.listFiles/fileExists/readFile for most I/O; fs.statSync for directory detection
   // (no deps.isDirectory exists — acceptable since listFiles already filters by regex).
   if (fileExists(path.join(s.tasksDir, 'tasks.md'))) {
-    const { validateTddEvidence } = require(path.join(__dirname, 'tdd-enforcement'));
+    const { validateTddEvidence } = require(path.join(__dirname, '..', 'lib', 'tdd-enforcement'));
     s.perTaskReports = {};
     const taskDirNames = listFiles(s.tasksDir, /^task\d+$/)
       .filter((fp) => {

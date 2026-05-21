@@ -61,7 +61,7 @@ const crypto = require('crypto');
 // bootstrap) by exposing a helper rather than failing at require() time.
 let config;
 try {
-  config = require('../lib/config');
+  config = require('../../lib/config');
 } catch (err) {
   if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\.\/lib\/config['"]/.test(err.message)) {
     config = null;

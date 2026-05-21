@@ -60,7 +60,9 @@ function tryRequire(modulePath, fallback) {
   }
 }
 
-const { appendAction } = tryRequire(path.join(workDir, 'work-actions'), { appendAction: () => {} });
+const { appendAction } = tryRequire(path.join(workDir, 'lib', 'work-actions'), {
+  appendAction: () => {},
+});
 const tp = tryRequire(path.join(libDir, 'ticket-provider'), null);
 if (!tp) process.exit(0);
 
@@ -95,19 +97,23 @@ const { STEPS, STEP_TRANSITIONS, ALL_STEPS, workflowCanTransition } = require(
   path.join(workDir, 'step-registry')
 );
 const { run, fileExists, readFile, listFiles, ...helpers } = require(
-  path.join(workDir, 'work-helpers')
+  path.join(workDir, 'lib', 'work-helpers')
 );
 const { parseTicketInput, validateRawTicketInput } = require(path.join(libDir, 'ticket-provider'));
-const { parseTasks, buildTaskPrompt } = require(path.join(workDir, 'task-parser'));
-const { archiveStepArtifacts } = require(path.join(workDir, 'artifact-archival'));
-const { getHeadSha } = require(path.join(workDir, 'git-utils'));
+const { parseTasks, buildTaskPrompt } = require(path.join(workDir, 'lib', 'task-parser'));
+const { archiveStepArtifacts } = require(path.join(workDir, 'lib', 'artifact-archival'));
+const { getHeadSha } = require(path.join(workDir, 'lib', 'git-utils'));
 const { TDD_PROTOCOL, readTddEvidence: _readTddEvidence, validateTddEvidence } = require(
-  path.join(workDir, 'tdd-enforcement')
+  path.join(workDir, 'lib', 'tdd-enforcement')
 );
-const { inspect: _inspect } = require(path.join(workDir, 'inspect'));
-const { generatePlan: _generatePlan } = require(path.join(workDir, 'plan-generator'));
-const { transitionStep: _transitionStep } = require(path.join(workDir, 'transition-step'));
-const { validateCheckGate: _validateCheckGate } = require(path.join(workDir, 'check-gate'));
+const { inspect: _inspect } = require(path.join(workDir, 'engine', 'inspect'));
+const { generatePlan: _generatePlan } = require(path.join(workDir, 'engine', 'plan-generator'));
+const { transitionStep: _transitionStep } = require(
+  path.join(workDir, 'engine', 'transition-step')
+);
+const { validateCheckGate: _validateCheckGate } = require(
+  path.join(workDir, 'gates', 'check-gate')
+);
 
 // ─── Local modules ──────────────────────────────────────────────────────────
 const { buildInstruction } = require(path.join(__dirname, 'lib', 'instruction-builder'));
@@ -183,7 +189,7 @@ function getWorkflowDefinition() {
       TASKS_BASE,
       safeTicketPath: (id) => tp.sanitizeTicketIdForPath(id, providerConfig),
       resolveGitHead: () => {
-        const { resolveGitHead } = require(path.join(workDir, 'git-utils'));
+        const { resolveGitHead } = require(path.join(workDir, 'lib', 'git-utils'));
         return resolveGitHead();
       },
     });

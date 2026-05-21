@@ -13,7 +13,7 @@
 // declares a back-reference to work.workflow without introducing a cycle.
 function _loadWorkWorkflowLazy() {
   try {
-    return require('./work.workflow');
+    return require('../engine/work.workflow');
   } catch {
     return null;
   }

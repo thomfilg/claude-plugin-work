@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const createWorkflowDefinition = require(path.join(__dirname, 'workflow-definition'));
+const createWorkflowDefinition = require(path.join(__dirname, '..', 'workflow-definition'));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

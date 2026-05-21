@@ -873,7 +873,7 @@ async function main() {
 // Claim lock files live at `TASKS_BASE/<ticketId>/.claims/task-${n}.lock`.
 let claimTask, releaseTask;
 try {
-  ({ claimTask, releaseTask } = require('./work-claims'));
+  ({ claimTask, releaseTask } = require('./lib/work-claims'));
 } catch (err) {
   if (err && err.code === 'MODULE_NOT_FOUND' && /['"]\.\/work-claims['"]/.test(err.message)) {
     // work-claims.js ships in a separate PR (PR 2b). When absent, claim

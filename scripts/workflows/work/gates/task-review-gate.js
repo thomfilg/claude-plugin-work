@@ -12,9 +12,9 @@
 
 const path = require('path');
 const fs = require('fs');
-const config = require(path.join(__dirname, '..', 'lib', 'config'));
-const { appendAction } = require(path.join(__dirname, 'work-actions'));
-const { SHA_REGEX } = require(path.join(__dirname, 'git-utils'));
+const config = require(path.join(__dirname, '..', '..', 'lib', 'config'));
+const { appendAction } = require(path.join(__dirname, '..', 'lib', 'work-actions'));
+const { SHA_REGEX } = require(path.join(__dirname, '..', 'lib', 'git-utils'));
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const LAST_COMMIT_SHA_FILE = '.last-commit-sha';

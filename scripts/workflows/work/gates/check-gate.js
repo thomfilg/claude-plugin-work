@@ -13,8 +13,8 @@
 const path = require('path');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
-const config = require(path.join(__dirname, '..', 'lib', 'config'));
-const { parseReportStatus, isCodeReviewResolved } = require('../lib/parse-report-status');
+const config = require(path.join(__dirname, '..', '..', 'lib', 'config'));
+const { parseReportStatus, isCodeReviewResolved } = require('../../lib/parse-report-status');
 
 // ─── Helpers (local, no external deps) ──────────────────────────────────────
 
@@ -213,8 +213,8 @@ const CHECK_GATE_RULES = [
     check(dir) {
       const tasksPath = path.join(dir, 'tasks.md');
       if (!fileExists(tasksPath)) return []; // single-task mode, skip
-      const { validateTddEvidence } = require(path.join(__dirname, 'tdd-enforcement'));
-      const taskParser = require(path.join(__dirname, 'task-parser'));
+      const { validateTddEvidence } = require(path.join(__dirname, '..', 'lib', 'tdd-enforcement'));
+      const taskParser = require(path.join(__dirname, '..', 'lib', 'task-parser'));
       const tasks = taskParser.parseTasks(dir);
       if (!tasks || tasks.length === 0)
         return ['Unable to parse tasks.md — cannot verify per-task TDD evidence'];
@@ -250,7 +250,7 @@ const CHECK_GATE_RULES = [
     check(dir) {
       const specPath = path.join(dir, 'spec.md');
       if (!fileExists(specPath)) return []; // fail-open: no spec = pass
-      const scriptPath = path.resolve(__dirname, '..', 'check', 'scripts', 'spec-verify.js');
+      const scriptPath = path.resolve(__dirname, '..', '..', 'check', 'scripts', 'spec-verify.js');
       // Resolve worktree root — spec.md lives in the tasks dir, not the git worktree
       let worktreeRoot;
       try {

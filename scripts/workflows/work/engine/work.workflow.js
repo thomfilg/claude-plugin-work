@@ -36,15 +36,15 @@ function tryRequire(modulePath, fallback) {
   }
 }
 const { appendAction, loadActions, analyzeActions } = tryRequire(
-  path.join(__dirname, 'work-actions'),
+  path.join(__dirname, '..', 'lib', 'work-actions'),
   { appendAction: () => {}, loadActions: () => [], analyzeActions: () => ({}) }
 );
-const tp = tryRequire(path.join(__dirname, '..', 'lib', 'ticket-provider'), null);
+const tp = tryRequire(path.join(__dirname, '..', '..', 'lib', 'ticket-provider'), null);
 if (!tp) process.exit(0);
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 const MAIN_WORKTREE_FOLDER = process.env.REPO_NAME || 'my-project';
-const getConfig = require(path.join(__dirname, '..', 'lib', 'get-config'));
+const getConfig = require(path.join(__dirname, '..', '..', 'lib', 'get-config'));
 const WORKTREES_BASE = getConfig('WORKTREES_BASE') || '';
 const TASKS_BASE =
   getConfig('TASKS_BASE') || (WORKTREES_BASE ? path.join(WORKTREES_BASE, 'tasks') : '');
@@ -66,24 +66,24 @@ function requirePaths() {
 
 // ─── Extracted modules (wrappers thread runtime deps through) ───────────────
 const { STEPS, STEP_TRANSITIONS, ALL_STEPS, workflowCanTransition } = require(
-  path.join(__dirname, 'step-registry')
+  path.join(__dirname, '..', 'step-registry')
 );
 const { run, fileExists, readFile, listFiles, ...helpers } = require(
-  path.join(__dirname, 'work-helpers')
+  path.join(__dirname, '..', 'lib', 'work-helpers')
 );
-const { parseTicketInput } = require(path.join(__dirname, '..', 'lib', 'ticket-provider'));
-const { parseTasks, buildTaskPrompt } = require(path.join(__dirname, 'task-parser'));
-const { archiveStepArtifacts } = require(path.join(__dirname, 'artifact-archival'));
-const { getHeadSha } = require(path.join(__dirname, 'git-utils'));
+const { parseTicketInput } = require(path.join(__dirname, '..', '..', 'lib', 'ticket-provider'));
+const { parseTasks, buildTaskPrompt } = require(path.join(__dirname, '..', 'lib', 'task-parser'));
+const { archiveStepArtifacts } = require(path.join(__dirname, '..', 'lib', 'artifact-archival'));
+const { getHeadSha } = require(path.join(__dirname, '..', 'lib', 'git-utils'));
 const { TDD_PROTOCOL, readTddEvidence: _readTddEvidence, validateTddEvidence } = require(
-  path.join(__dirname, 'tdd-enforcement')
+  path.join(__dirname, '..', 'lib', 'tdd-enforcement')
 );
 const { inspect: _inspect } = require(path.join(__dirname, 'inspect'));
 const { generatePlan: _generatePlan } = require(path.join(__dirname, 'plan-generator'));
 // Explicit reference to steps/ index for spec verification (plan-generator consumes these internally)
-const _stepHandlers = require(path.join(__dirname, 'steps/index'));
+const _stepHandlers = require(path.join(__dirname, '..', 'steps', 'index'));
 void _stepHandlers;
-const { validateCheckGate: _validateCheckGate } = require(path.join(__dirname, 'check-gate'));
+const { validateCheckGate: _validateCheckGate } = require(path.join(__dirname, '..', 'gates', 'check-gate'));
 const {
   transitionStep: _transitionStep,
   getAvailableTransitions: _getAvailableTransitions,
@@ -148,14 +148,14 @@ function generatePlan(ticket, description, s, rework, callerProviderCfg, suffix)
 let _workflowDef = null;
 function getWorkflowDefinition() {
   if (!_workflowDef) {
-    const createWorkflowDefinition = require(path.join(__dirname, 'workflow-definition'));
+    const createWorkflowDefinition = require(path.join(__dirname, '..', 'workflow-definition'));
     // Compute providerConfig once (avoids repeated execSync/file reads)
     const providerConfig = tp.getProviderConfig({ skipPrompt: true });
     _workflowDef = createWorkflowDefinition({
       TASKS_BASE,
       safeTicketPath: (id) => tp.sanitizeTicketIdForPath(id, providerConfig),
       resolveGitHead: () => {
-        const { resolveGitHead } = require(path.join(__dirname, 'git-utils'));
+        const { resolveGitHead } = require(path.join(__dirname, '..', 'lib', 'git-utils'));
         return resolveGitHead();
       },
     });

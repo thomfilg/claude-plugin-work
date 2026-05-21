@@ -13,8 +13,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { taskSegment } = require(path.join(__dirname, '..', 'lib', 'allocate-output-folder'));
-const { SHA_REGEX } = require(path.join(__dirname, 'git-utils'));
+const { taskSegment } = require(path.join(__dirname, '..', '..', 'lib', 'allocate-output-folder'));
+const { SHA_REGEX } = require(path.join(__dirname, '..', 'lib', 'git-utils'));
 
 /**
  * Derive the set of steps that come after `check` in the workflow.
@@ -305,7 +305,7 @@ function transitionStep(ticket, targetStep, deps) {
       }
     }
     try {
-      const { autoInitTdd } = require(path.join(__dirname, 'work-state'));
+      const { autoInitTdd } = require(path.join(__dirname, '..', 'work-state'));
       autoInitTdd(safeTicket, taskNum);
     } catch {
       /* fail-open */
