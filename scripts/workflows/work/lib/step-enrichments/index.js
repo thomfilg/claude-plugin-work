@@ -82,7 +82,7 @@ require('./complete')(register);
 const { dispatchAdvanceGate: implementGate } = require('./implement-gate');
 registerGate('implement', implementGate);
 
-const { dispatchAdvanceGate: checkGate } = require('../../gates/check-gate');
+const { dispatchAdvanceGate: checkGate } = require('./check-gate');
 registerGate('check', checkGate);
 
 const { dispatchAdvanceGate: followUpGate } = require('./follow-up-gate');
