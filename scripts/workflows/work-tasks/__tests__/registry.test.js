@@ -74,6 +74,19 @@ test('done has next=null, others have a next string', () => {
   }
 });
 
+test('every phase handler.next matches the transitions map (no wedges)', () => {
+  for (const p of TASKS_PHASE_ORDER) {
+    const h = getPhase(p);
+    if (p === 'done') continue;
+    const allowed = TASKS_PHASE_TRANSITIONS[p] || [];
+    assert.ok(
+      allowed.includes(h.next),
+      `Phase "${p}" handler.next is "${h.next}" but transitions map only allows [${allowed.join(', ')}]. ` +
+        'A mismatch wedges the workflow at this phase.'
+    );
+  }
+});
+
 test('TASKS_PHASES is frozen', () => {
   assert.throws(() => {
     TASKS_PHASES.bogus = 'x';
