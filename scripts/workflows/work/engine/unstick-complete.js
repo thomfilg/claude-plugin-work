@@ -38,6 +38,7 @@ const { loadState, completeWork, addError } = require(path.join(__dirname, '..',
 const SESSION_GUARD_PATH = require('path').resolve(
   __dirname,
   '..',
+  '..',
   'lib',
   'hooks',
   'session-guard.js'
