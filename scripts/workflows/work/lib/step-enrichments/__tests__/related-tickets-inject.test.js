@@ -1,7 +1,7 @@
 /**
  * Tests for step-enrichments/related-tickets-inject.js
  *
- * Run: node --test scripts/workflows/work-orchestrator/lib/step-enrichments/__tests__/related-tickets-inject.test.js
+ * Run: node --test scripts/workflows/work/lib/step-enrichments/__tests__/related-tickets-inject.test.js
  */
 
 'use strict';

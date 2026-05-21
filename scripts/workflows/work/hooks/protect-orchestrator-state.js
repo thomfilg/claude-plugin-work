@@ -18,7 +18,7 @@
  *
  * Coverage:
  *   - .work-state.json (and .bak* rotations)
- *   - .work-orchestrator.pid
+ *   - .work.pid
  *   - .last-commit-sha
  *   - .work-actions.json
  *   - .claims/ — every file under
@@ -41,7 +41,7 @@ const { createFileProtector } = require(
 /** Bare basenames the orchestrator manages; agents must never write these. */
 const PROTECTED_BASENAMES = new Set([
   '.work-state.json',
-  '.work-orchestrator.pid',
+  '.work.pid',
   '.last-commit-sha',
   '.work-actions.json',
   'tdd-phase.json',
@@ -113,7 +113,7 @@ function formatMessage(match, vector) {
 //
 // Use the project's authoritative resolvePluginRoot so we land on
 // `<repo>/scripts/` (the plugin root that contains `workflows/work`), NOT
-// the entire repo root. Three `..` from `scripts/workflows/work-orchestrator/hooks/`
+// the entire repo root. Three `..` from `scripts/workflows/work/hooks/`
 // → `scripts/`. Resolver falls back to that exact traversal when no env
 // var is set, but prefers an env-pinned root when one is present.
 const { resolvePluginRoot } = require(path.join(__dirname, '..', 'lib', 'resolve-plugin-root'));

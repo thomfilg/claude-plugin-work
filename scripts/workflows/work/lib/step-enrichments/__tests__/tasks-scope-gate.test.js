@@ -1,7 +1,7 @@
 /**
  * Tests for tasks-scope-gate.js (Gate C enrichment).
  *
- * Run: node --test scripts/workflows/work-orchestrator/lib/step-enrichments/__tests__/tasks-scope-gate.test.js
+ * Run: node --test scripts/workflows/work/lib/step-enrichments/__tests__/tasks-scope-gate.test.js
  */
 
 'use strict';

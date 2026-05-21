@@ -139,7 +139,7 @@ if (!taskNum) {
 
 try {
   const { resolveTaskType } = require(
-    path.join(__dirname, '..', '..', 'work-orchestrator', 'lib', 'resolve-task-type')
+    path.join(__dirname, '..', '..', 'work', 'lib', 'resolve-task-type')
   );
   const tasksDir = path.join(TASKS_BASE, safeTicket);
   const taskType = resolveTaskType(tasksDir, taskNum);
@@ -198,9 +198,7 @@ if (testCommand) {
   // Read current phase
   let currentPhase = 'red';
   try {
-    const { readPhase } = require(
-      path.join(__dirname, '..', '..', 'work-orchestrator', 'tdd-next')
-    );
+    const { readPhase } = require(path.join(__dirname, '..', '..', 'work', 'tdd-next'));
     const phase = readPhase(safeTicket, taskNum);
     currentPhase = phase?.currentPhase || 'red';
   } catch {

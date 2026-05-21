@@ -100,7 +100,7 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
         fs.renameSync(filePath, dest);
       } catch (e) {
         process.stderr.write(
-          `work-orchestrator: failed to archive ${path.basename(filePath)}: ${e?.message || e}\n`
+          `work: failed to archive ${path.basename(filePath)}: ${e?.message || e}\n`
         );
       }
     }
@@ -143,7 +143,7 @@ function archiveStepArtifacts(tasksDir, stepsToArchive) {
               fs.renameSync(filePath, dest);
             } catch (e) {
               process.stderr.write(
-                `work-orchestrator: failed to archive ${taskDir}/${path.basename(filePath)}: ${e?.message || e}\n`
+                `work: failed to archive ${taskDir}/${path.basename(filePath)}: ${e?.message || e}\n`
               );
             }
           }

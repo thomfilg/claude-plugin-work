@@ -27,7 +27,7 @@ const GLOBAL_WORKFLOWS_DIR = path.join(process.env.HOME || '/home/node', '.claud
 const WORKFLOWS_DIR = PLUGIN_WORKFLOWS_DIR; // Primary location
 
 // ─── State Machine ───────────────────────────────────────────────────────────
-// Ported from work-orchestrator.js (same pattern as IStateMachine.ts)
+// Ported from cli.js (same pattern as IStateMachine.ts)
 
 /**
  * Build transition map from {source, targets} array.

@@ -289,14 +289,14 @@ describe('work-state.js', () => {
   });
 
   describe('step list alignment', () => {
-    it('should have STEPS array matching work-orchestrator.js ALL_STEPS', async () => {
+    it('should have STEPS array matching cli.js ALL_STEPS', async () => {
       // Get steps from work-state.js via init output
       const TICKET = 'TEST-ALIGN-001';
       try {
         const { result } = await runWorkState(['init', TICKET]);
         const workStateSteps = Object.keys(result.stepStatus);
 
-        // Load ALL_STEPS from work-orchestrator.js via graph subcommand
+        // Load ALL_STEPS from cli.js via graph subcommand
         const orchestratorSteps = await new Promise((resolve, reject) => {
           const proc = spawn('node', [path.join(__dirname, '..', 'work.workflow.js'), 'graph'], {
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -316,7 +316,7 @@ describe('work-state.js', () => {
           proc.on('error', reject);
         });
 
-        assert.ok(orchestratorSteps, 'Failed to get steps from work-orchestrator graph');
+        assert.ok(orchestratorSteps, 'Failed to get steps from work graph');
         assert.deepEqual(workStateSteps, orchestratorSteps);
       } finally {
         cleanupTempWorkState(TICKET);

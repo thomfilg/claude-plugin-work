@@ -3,7 +3,7 @@
 /**
  * tdd-next.js — No-op shim for /work.
  *
- * The implement-gate (`scripts/workflows/work-orchestrator/lib/step-enrichments/implement-gate.js`)
+ * The implement-gate (`scripts/workflows/work/lib/step-enrichments/implement-gate.js`)
  * is the single source of truth for TDD evidence. Agents do not record TDD phases.
  *
  * This file is kept as an export shim so any stale code path that still imports

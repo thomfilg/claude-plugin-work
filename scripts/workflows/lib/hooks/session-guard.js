@@ -663,7 +663,7 @@ function handleStop(hookData) {
           if (allowStopSteps.has(ws._work2Dispatched)) {
             process.stderr.write(
               `Pausing at user-review checkpoint "${ws._work2Dispatched}".\n` +
-                `When ready, continue: node "\${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work-orchestrator/work-next.js" ${ticketId}\n`
+                `When ready, continue: node "\${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work/work-next.js" ${ticketId}\n`
             );
             process.exit(0); // allow stop — this is a human-approval gate
             return;
@@ -678,7 +678,7 @@ function handleStop(hookData) {
       `ACTIVE WORKFLOW SESSION — DO NOT ABANDON\n` +
         `Workflow: ${workflow} | Ticket: ${ticketId}\n` +
         `You MUST continue this workflow. Run:\n` +
-        `  node "\${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work-orchestrator/work-next.js" ${ticketId}\n` +
+        `  node "\${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work/work-next.js" ${ticketId}\n` +
         `Execute the returned instruction, then re-run work-next.js until action: "complete".\n` +
         `The session is locked with a passphrase. Complete all steps to unlock.\n`
     );

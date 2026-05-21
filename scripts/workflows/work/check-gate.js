@@ -18,7 +18,7 @@ const { parseReportStatus, isCodeReviewResolved } = require('../lib/parse-report
 
 // ─── Helpers (local, no external deps) ──────────────────────────────────────
 
-// Helpers — extracted as-is from hooks/work-orchestrator.js to preserve identical behavior
+// Helpers — extracted as-is from hooks/cli.js to preserve identical behavior
 function fileExists(p) {
   return fs.existsSync(p);
 }
@@ -173,7 +173,7 @@ const CHECK_GATE_RULES = [
   {
     name: 'running-agents',
     description: 'No check-agent tmux sessions may be running',
-    // tmux session-found path is integration-tested in work-orchestrator.test.js scenario 8
+    // tmux session-found path is integration-tested in work-cli.test.js scenario 8
     check(_dir, ticket) {
       const agents = [
         'code-checker',

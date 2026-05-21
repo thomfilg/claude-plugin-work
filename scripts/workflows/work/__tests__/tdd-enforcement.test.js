@@ -1,5 +1,5 @@
 /**
- * Tests for TDD enforcement feature in work-orchestrator.js
+ * Tests for TDD enforcement feature in cli.js
  *
  * Covers:
  *   - Prompt augmentation (TDD_PROTOCOL injection)

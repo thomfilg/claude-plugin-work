@@ -1,7 +1,7 @@
 /**
  * Tests for follow-up enrichment Gate F closed-PR detection.
  *
- * Run: node --test scripts/workflows/work-orchestrator/lib/step-enrichments/__tests__/follow-up.test.js
+ * Run: node --test scripts/workflows/work/lib/step-enrichments/__tests__/follow-up.test.js
  */
 
 'use strict';

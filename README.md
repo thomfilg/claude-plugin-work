@@ -73,7 +73,7 @@ The plugin registers hooks that enforce workflow discipline:
 
 - **`enforce-step-workflow`** - Validates that steps execute in the correct order during `/work` sessions
 - **`enforce-screenshot-requirement`** - Ensures QA screenshots are captured before completing checks
-- **`work-orchestrator-hook`** - Pre-processes `/work` commands to initialize the workflow engine
+- **`work-hook`** - Pre-processes `/work` commands to initialize the workflow engine
 
 ## Architecture
 
@@ -82,7 +82,7 @@ claude-plugin-work/
 ├── .claude-plugin/               # Plugin metadata (plugin.json, marketplace.json)
 ├── hooks/                        # Top-level event hooks
 │   ├── hooks.json                # Hook registration config
-│   └── work-orchestrator-hook.js
+│   └── work-hook.js
 ├── scripts/workflows/                    # Workflow definitions and core engine
 │   ├── lib/                      # Core engine and shared hook utilities
 │   │   ├── workflow-engine.js    # Reusable state machine engine

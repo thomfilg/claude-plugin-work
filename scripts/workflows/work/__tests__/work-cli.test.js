@@ -1,8 +1,8 @@
 /**
- * Tests for work-orchestrator.js
+ * Tests for cli.js
  *
  * Uses node:test + node:assert/strict.
- * Run: node --test hooks/__tests__/work-orchestrator.test.js
+ * Run: node --test hooks/__tests__/work-cli.test.js
  */
 
 const { describe, it, after, afterEach, before } = require('node:test');
@@ -30,7 +30,7 @@ const ORIG_ENV = {
   WORKTREES_BASE: process.env.WORKTREES_BASE,
   TASKS_BASE: process.env.TASKS_BASE,
 };
-const TEMP_WORKTREES_BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'work-orchestrator-test-'));
+const TEMP_WORKTREES_BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'work-cli-test-'));
 const TEMP_TASKS_BASE = path.join(TEMP_WORKTREES_BASE, 'tasks');
 fs.mkdirSync(TEMP_TASKS_BASE, { recursive: true });
 process.env.WORKTREES_BASE = TEMP_WORKTREES_BASE;
@@ -263,7 +263,7 @@ function prepareVerifyEnv(ticket, tasksBase) {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe('work-orchestrator.js', () => {
+describe('cli.js', () => {
   describe('CLI usage', () => {
     it('should show error when no arguments provided', async () => {
       const { result, code } = await runOrchestrator([]);

@@ -1,7 +1,7 @@
 /**
  * Tests for discrepancy-gate.js (Gate B' enrichment).
  *
- * Run: node --test scripts/workflows/work-orchestrator/lib/step-enrichments/__tests__/discrepancy-gate.test.js
+ * Run: node --test scripts/workflows/work/lib/step-enrichments/__tests__/discrepancy-gate.test.js
  */
 
 'use strict';

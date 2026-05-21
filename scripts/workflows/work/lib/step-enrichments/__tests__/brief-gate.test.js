@@ -2,7 +2,7 @@
  * Tests for step-enrichments/brief-gate.js — Gate 0 manifest validation +
  * pre-existing open-questions handling.
  *
- * Run: node --test scripts/workflows/work-orchestrator/lib/step-enrichments/__tests__/brief-gate.test.js
+ * Run: node --test scripts/workflows/work/lib/step-enrichments/__tests__/brief-gate.test.js
  */
 
 'use strict';

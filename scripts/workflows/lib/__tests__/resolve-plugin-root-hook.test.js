@@ -39,11 +39,11 @@ function runHook(input, env = {}) {
 describe('resolve-plugin-root-hook', () => {
   it('should BLOCK when command contains ${CLAUDE_PLUGIN_ROOT}', async () => {
     const { code, stderr } = await runHook({
-      tool_input: { command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/work-orchestrator.js test' },
+      tool_input: { command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/work-hook.js test' },
     });
     assert.strictEqual(code, 2);
     assert.ok(stderr.includes(FAKE_ROOT));
-    assert.ok(stderr.includes(`node ${FAKE_ROOT}/hooks/work-orchestrator.js test`));
+    assert.ok(stderr.includes(`node ${FAKE_ROOT}/hooks/work-hook.js test`));
   });
 
   it('should BLOCK when command contains $CLAUDE_PLUGIN_ROOT (no braces)', async () => {

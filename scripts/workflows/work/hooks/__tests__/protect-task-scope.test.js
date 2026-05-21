@@ -1,7 +1,7 @@
 /**
- * Tests for work-orchestrator/hooks/protect-task-scope.js (Gate D entrypoint).
+ * Tests for work/hooks/protect-task-scope.js (Gate D entrypoint).
  *
- * Run: node --test scripts/workflows/work-orchestrator/hooks/__tests__/protect-task-scope.test.js
+ * Run: node --test scripts/workflows/work/hooks/__tests__/protect-task-scope.test.js
  */
 
 'use strict';

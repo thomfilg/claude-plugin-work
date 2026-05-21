@@ -33,7 +33,7 @@ function main(deps) {
     console.log(
       JSON.stringify({
         error: true,
-        message: 'Usage: work-orchestrator.js [plan|transition|transitions|graph] <args>',
+        message: 'Usage: cli.js [plan|transition|transitions|graph] <args>',
       })
     );
     process.exit(1);
