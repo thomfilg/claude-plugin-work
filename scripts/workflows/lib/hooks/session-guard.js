@@ -559,7 +559,7 @@ function handleStop(hookData) {
         `BLOCKED: You are mid-workflow (/work ${workState.ticketId}). DO NOT STOP.\n\n` +
           `Current step: ${workState.stepName}\n` +
           `Your next action: Run the orchestrator to get your plan and continue executing ALL remaining steps:\n` +
-          '  node "${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work/work.workflow.js" ' +
+          '  node "${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work/engine/work.workflow.js" ' +
           workState.ticketId +
           '\n\n' +
           "Then execute each RUN step in order. Do NOT stop until the workflow reaches 'complete'.\n" +

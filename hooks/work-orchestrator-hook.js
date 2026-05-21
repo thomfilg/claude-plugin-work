@@ -151,7 +151,7 @@ function formatPlan(plan) {
     '  INSTRUCTIONS: Execute RUN steps in order. DEFER steps: re-run plan first to resolve to RUN/SKIP.'
   );
   lines.push(
-    `  TRANSITION: node ${PLUGIN_ROOT}/scripts/workflows/work/work.workflow.js transition ${plan.ticket} <step>`
+    `  TRANSITION: node ${PLUGIN_ROOT}/scripts/workflows/work/engine/work.workflow.js transition ${plan.ticket} <step>`
   );
   lines.push('═══════════════════════════════════════════════════════════════════');
   lines.push('');
