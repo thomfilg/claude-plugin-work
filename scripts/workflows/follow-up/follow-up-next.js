@@ -156,10 +156,17 @@ function getNextInstruction(ticketId, prNumber) {
         } catch {
           liveMergeable = null;
         }
-        if (liveMergeable && !liveMergeable.mergeable) {
-          const blockerSummary = (liveMergeable.blockers || []).map((b) => b.kind).join(', ');
+        // Ignore gh_error blockers — those mean "we couldn't reach GitHub
+        // to verify", not "we verified the PR is broken". Rewinding the
+        // workflow on a transient network blip would discard real progress.
+        // Only act on concrete blockers (merge_state_*, checks_running).
+        const realBlockers = (
+          liveMergeable && liveMergeable.blockers ? liveMergeable.blockers : []
+        ).filter((b) => b.kind !== 'gh_error');
+        if (liveMergeable && !liveMergeable.mergeable && realBlockers.length > 0) {
+          const blockerSummary = realBlockers.map((b) => b.kind).join(', ');
           process.stderr.write(
-            `[follow-up-next] saved state said complete but PR #${state.prNumber} is not mergeable (${blockerSummary || 'unknown'}); rewinding and resuming.\n`
+            `[follow-up-next] saved state said complete but PR #${state.prNumber} is not mergeable (${blockerSummary}); rewinding and resuming.\n`
           );
           state.status = 'in_progress';
           // Always reset to the first step on rewind. The saved currentStep

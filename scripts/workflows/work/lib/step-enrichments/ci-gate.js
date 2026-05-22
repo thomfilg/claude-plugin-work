@@ -92,11 +92,19 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
     // wait if merge is impossible. Roll back to `follow_up` so the loop
     // gets a chance to fix whatever made the PR un-mergeable.
     //
-    // Guard: only roll back when prState is OPEN. CLOSED PRs are terminal;
-    // a CLOSED-not-MERGED PR is a separate failure mode we don't try to
-    // auto-recover from here.
-    if (!m.mergeable && prInfo.state === 'OPEN') {
-      const reason = (m.blockers || []).map((b) => b.kind).join(', ') || 'not mergeable';
+    // Guards:
+    //   - Only roll back when prState is OPEN. CLOSED PRs are terminal;
+    //     a CLOSED-not-MERGED PR is a separate failure mode we don't try
+    //     to auto-recover from here.
+    //   - Ignore `gh_error` blockers. `assessMergeable` catches gh CLI
+    //     failures (network timeouts, rate limits, transient API blips)
+    //     and reports them as `gh_error`. That's "we couldn't verify",
+    //     not "we verified it's broken" — taking destructive action on a
+    //     transient blip would mis-rewind the workflow. Real blockers
+    //     (merge_state_*, checks_running) still trigger rollback.
+    const realBlockers = (m.blockers || []).filter((b) => b.kind !== 'gh_error');
+    if (!m.mergeable && realBlockers.length > 0 && prInfo.state === 'OPEN') {
+      const reason = realBlockers.map((b) => b.kind).join(', ');
       return rollbackToFollowUp(safeName, deps, reason);
     }
   } catch {

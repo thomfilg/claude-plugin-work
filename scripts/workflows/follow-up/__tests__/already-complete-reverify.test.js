@@ -125,3 +125,61 @@ test('saved state complete + PR number missing → fast path honored (no reverif
   const r = mod.getNextInstruction('TEST-3', null);
   assert.equal(r.action, 'complete');
 });
+
+test('saved state complete + only gh_error blocker → honored (transient, do NOT rewind)', () => {
+  // Regression: gh CLI timeouts/rate-limits become {kind: 'gh_error'}
+  // blockers. That means "we couldn't verify", not "we verified it's
+  // broken". Rewinding on a transient blip discards real progress.
+  stubMergeableResult = {
+    mergeable: false,
+    blockers: [{ kind: 'gh_error', detail: 'gh timed out' }],
+    signals: { prState: 'MERGED' },
+  };
+  const mod = loadFresh();
+  const { STEPS } = require('../lib/step-registry');
+  writeState('TEST-4', {
+    ticketId: 'TEST-4',
+    prNumber: 999,
+    currentStep: STEPS[STEPS.length - 1],
+    status: 'complete',
+  });
+  const r = mod.getNextInstruction('TEST-4', 999);
+  assert.equal(r.action, 'complete', 'expected fast-path honored on transient gh_error');
+});
+
+test('saved state complete + gh_error AND real blocker → rewinds (real blocker wins)', () => {
+  stubMergeableResult = {
+    mergeable: false,
+    blockers: [
+      { kind: 'gh_error', detail: 'one call failed' },
+      { kind: 'checks_running', detail: '3 still running' },
+    ],
+    signals: { prState: 'OPEN' },
+  };
+  const mod = loadFresh();
+  const { STEPS } = require('../lib/step-registry');
+  writeState('TEST-5', {
+    ticketId: 'TEST-5',
+    prNumber: 999,
+    currentStep: STEPS[STEPS.length - 1],
+    status: 'complete',
+  });
+  const origStderr = process.stderr.write;
+  let stderrCaptured = '';
+  process.stderr.write = (chunk) => {
+    stderrCaptured += String(chunk);
+    return true;
+  };
+  try {
+    try {
+      mod.getNextInstruction('TEST-5', 999);
+    } catch {
+      /* expected — runStep dispatch isn't stubbed */
+    }
+  } finally {
+    process.stderr.write = origStderr;
+  }
+  const after = readState('TEST-5');
+  assert.notEqual(after.status, 'complete', 'expected rewind when a real blocker is present');
+  assert.match(stderrCaptured, /checks_running/);
+});

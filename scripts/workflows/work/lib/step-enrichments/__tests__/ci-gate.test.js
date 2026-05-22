@@ -134,6 +134,47 @@ test('no-ops when PR has no number', () => {
   assert.equal(r, null);
 });
 
+test('does NOT roll back when the only blocker is a transient gh_error (network blip)', () => {
+  // Regression: assessMergeable catches `gh` CLI failures and reports them
+  // as `{kind: 'gh_error'}`. That's "we couldn't verify", not "we verified
+  // it's broken". Rolling back the workflow on a transient blip would
+  // discard real progress. Only concrete blockers (merge_state_*,
+  // checks_running) should trigger the backward edge.
+  stubPrInfo = { number: 7, state: 'OPEN' };
+  stubMergeable = {
+    mergeable: false,
+    blockers: [{ kind: 'gh_error', detail: 'gh pr view failed: timeout' }],
+    signals: {},
+  };
+  const deps = makeDeps();
+  deps.saveWorkState('TICK7', { stepStatus: { ci: 'in_progress' } });
+  const r = dispatchAdvanceGate('TICK7', {}, deps);
+  assert.equal(r, null, 'expected no-op on transient gh_error');
+  const ws = deps._states.get('TICK7');
+  assert.equal(ws.stepStatus.ci, 'in_progress');
+  assert.equal(ws.stepStatus.follow_up, undefined);
+});
+
+test('DOES roll back when blockers include both gh_error AND a real blocker', () => {
+  // gh_error alone is transient; gh_error + merge_state_dirty means we
+  // partially verified — the real blocker still applies.
+  stubPrInfo = { number: 8, state: 'OPEN' };
+  stubMergeable = {
+    mergeable: false,
+    blockers: [
+      { kind: 'gh_error', detail: 'one call failed' },
+      { kind: 'merge_state_dirty', detail: 'conflicts' },
+    ],
+    signals: {},
+  };
+  const deps = makeDeps();
+  deps.saveWorkState('TICK8', { stepStatus: { ci: 'in_progress' } });
+  const r = dispatchAdvanceGate('TICK8', {}, deps);
+  assert.deepEqual(r, { recurse: true });
+  const ws = deps._states.get('TICK8');
+  assert.equal(ws.stepStatus.follow_up, 'in_progress');
+});
+
 test('mergeable but PR still OPEN → no advance (waiting for merge), no rollback', () => {
   // The happy path while waiting at ci. Don't advance to cleanup yet;
   // don't roll back because nothing is wrong. Just wait.
