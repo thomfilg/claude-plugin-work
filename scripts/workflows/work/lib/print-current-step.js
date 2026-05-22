@@ -59,7 +59,13 @@ try {
 
   // currentStep in .work-state.json is 1-indexed (see e.g. ci-gate.js
   // setting `ws.currentStep = ALL_STEPS.indexOf('cleanup') + 1`).
-  const idx = (Number(data && data.currentStep) || 1) - 1;
+  // Fail-silent contract: if currentStep is missing / not a positive
+  // integer, print nothing rather than defaulting to step 1 ("ticket"),
+  // which would be a misleading indicator.
+  const raw = data && data.currentStep;
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num < 1) process.exit(0);
+  const idx = num - 1;
   const stepName = (idx >= 0 && idx < ALL_STEPS.length) ? ALL_STEPS[idx] : '';
   if (stepName) process.stdout.write(stepName);
 } catch {

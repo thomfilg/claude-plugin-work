@@ -97,6 +97,49 @@ test('print-current-step: malformed JSON → exit 0, stdout empty (fail-silent)'
   }
 });
 
+test('print-current-step: missing currentStep → exit 0, stdout empty (fail-silent, no fallback to step 1)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pcs-missing-step-'));
+  try {
+    writeStateFile(tmp, 'TKT-NO-STEP', JSON.stringify({
+      ticketId: 'TKT-NO-STEP',
+      status: 'in_progress',
+      // currentStep intentionally omitted
+    }));
+
+    const res = runWithTasksBase(tmp);
+    assert.equal(res.status, 0, `stderr=${res.stderr}`);
+    assert.equal(res.stdout, '', 'must not fall back to ALL_STEPS[0]');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('print-current-step: currentStep=0 → exit 0, stdout empty (fail-silent)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pcs-zero-step-'));
+  try {
+    writeStateFile(tmp, 'TKT-ZERO', JSON.stringify({ currentStep: 0 }));
+
+    const res = runWithTasksBase(tmp);
+    assert.equal(res.status, 0, `stderr=${res.stderr}`);
+    assert.equal(res.stdout, '');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('print-current-step: currentStep=null → exit 0, stdout empty (fail-silent)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pcs-null-step-'));
+  try {
+    writeStateFile(tmp, 'TKT-NULL', JSON.stringify({ currentStep: null }));
+
+    const res = runWithTasksBase(tmp);
+    assert.equal(res.status, 0, `stderr=${res.stderr}`);
+    assert.equal(res.stdout, '');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('print-current-step: TASKS_BASE does not exist → exit 0, stdout empty', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pcs-missing-'));
   const missing = path.join(tmp, 'does-not-exist');
