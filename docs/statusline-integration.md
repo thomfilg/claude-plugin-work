@@ -45,7 +45,7 @@ create a small wrapper. Save this as `$HOME/.claude/work-statusline.sh`:
 PAYLOAD=$(cat)
 
 # Original statusline command — adjust the path below if your install differs.
-ORIG=$(printf '%s' "$PAYLOAD" | node /home/node/.claude/plugins/dist/index.js statusline 2>/dev/null)
+ORIG=$(printf '%s' "$PAYLOAD" | node "$HOME/.claude/plugins/dist/index.js" statusline 2>/dev/null)
 
 # Current /work step (silent on any error).
 STEP=$(node "$HOME/.claude/plugins/marketplaces/work-workflow/scripts/workflows/work/lib/print-current-step.js" 2>/dev/null)
