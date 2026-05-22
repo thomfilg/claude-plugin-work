@@ -148,6 +148,82 @@ test('accepts shared paths under packages/ui/', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('finds the task numbered 1 even when it appears AFTER Task 2 in document order', () => {
+  // Regression: validateSharedComponentOrdering used to use taskBlocks[0]
+  // (first-in-file) instead of finding the task whose `## Task N` header is
+  // 1. If Task 2 was written before Task 1, the gate evaluated Task 2
+  // and produced a misleading "Task 1 must scaffold..." error.
+  const tasksMd = [
+    '## Extracted Requirements',
+    '- R1',
+    '',
+    '## Task 2 — Page-specific UsersTable wrapper',
+    '',
+    '### Type',
+    'frontend',
+    '### Dependencies',
+    'Task 1',
+    '### Requirements Covered',
+    '- R1',
+    '### Acceptance Criteria',
+    '- it builds',
+    '### Files in scope',
+    '- `src/pages/users/UsersTable.tsx`',
+    '',
+    '## Task 1 — Scaffold generic `Table` component',
+    '',
+    '### Type',
+    'frontend',
+    '### Dependencies',
+    'none',
+    '### Requirements Covered',
+    '- R1',
+    '### Acceptance Criteria',
+    '- it builds',
+    '### Files in scope',
+    '- `src/shared/ui/Table.tsx`',
+    '',
+  ].join('\n');
+  const { root, tasksDir } = mkDir({ 'spec.md': SPEC_GENERIC_SPLIT, 'tasks.md': tasksMd });
+  const errors = draft.validateArtifacts(tasksDir);
+  // Task 1 (actually numbered 1) scaffolds the shared component → no error.
+  // The buggy version would have evaluated Task 2 (first in file) and reported
+  // "Task 1 must scaffold..." even though Task 1 is correct.
+  assert.equal(errors.length, 0, `expected no errors, got: ${JSON.stringify(errors)}`);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('error message reports the actual task number found when no Task 1 exists', () => {
+  // Edge case: tasks file has no `## Task 1` (authors started numbering from
+  // 2 by mistake). The gate should report the actual task it evaluated,
+  // not a hardcoded "Task 1".
+  const tasksMd = [
+    '## Extracted Requirements',
+    '- R1',
+    '',
+    '## Task 2 — Build UsersTable',
+    '',
+    '### Type',
+    'frontend',
+    '### Dependencies',
+    'none',
+    '### Requirements Covered',
+    '- R1',
+    '### Acceptance Criteria',
+    '- it builds',
+    '### Files in scope',
+    '- `src/pages/users/UsersTable.tsx`',
+    '',
+  ].join('\n');
+  const { root, tasksDir } = mkDir({ 'spec.md': SPEC_GENERIC_SPLIT, 'tasks.md': tasksMd });
+  const errors = draft.validateArtifacts(tasksDir);
+  assert.ok(
+    errors.some((e) => /Task 2 must scaffold/i.test(e)),
+    `expected error referring to "Task 2", got: ${JSON.stringify(errors)}`
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('extractFilesInScope parses bullet list correctly', () => {
   const body = [
     '### Type',

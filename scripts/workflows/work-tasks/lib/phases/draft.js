@@ -79,31 +79,38 @@ function validateSharedComponentOrdering(tasksDir, taskBlocks) {
   const genericRows = rows.filter((r) => r.isGenericSplit);
   if (genericRows.length === 0) return errors; // nothing to enforce
   if (taskBlocks.length === 0) return errors; // earlier check already reports
-  const firstTask = taskBlocks[0];
-  const filesInFirst = extractFilesInScope(firstTask.body);
-  const firstTouchesShared = filesInFirst.some((f) => SHARED_PATH_RE.test(f));
+
+  // Locate the task ACTUALLY numbered 1 (per `## Task 1` heading), not just
+  // the first task in document order. Authors sometimes write tasks
+  // out-of-order in the file; the scaffold-first rule applies to Task 1 by
+  // number, which is the implement-gate's anchor. If no `## Task 1` exists,
+  // fall back to the first task in document order and report its real number.
+  const task1 = taskBlocks.find((t) => t.num === 1) || taskBlocks[0];
+  const taskLabel = `Task ${task1.num}`;
+  const filesInTask = extractFilesInScope(task1.body);
+  const taskTouchesShared = filesInTask.some((f) => SHARED_PATH_RE.test(f));
 
   const sharedNames = genericRows
     .map((r) => r.genericName)
     .filter(Boolean)
     .map((n) => n.toLowerCase());
-  const firstMentionsSharedName = sharedNames.some((n) => {
+  const taskMentionsSharedName = sharedNames.some((n) => {
     const re = new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    return re.test(firstTask.title) || re.test(firstTask.body);
+    return re.test(task1.title) || re.test(task1.body);
   });
 
-  if (!firstTouchesShared) {
+  if (!taskTouchesShared) {
     errors.push(
-      `Task 1 must scaffold the shared component(s) declared Generic-split in spec.md's \`## Component Shape Decision\` (${genericRows
+      `${taskLabel} must scaffold the shared component(s) declared Generic-split in spec.md's \`## Component Shape Decision\` (${genericRows
         .map((r) => `\`${r.proposed}\` → \`${r.genericName || '?'}\``)
         .join(
           ', '
-        )}), but Task 1's \`### Files in scope\` contains no path under \`shared/\`, \`ui/\`, \`packages/ui/\`, or similar. Reorder so the generic shell lands first; page-specific wrappers depend on it.`
+        )}), but ${taskLabel}'s \`### Files in scope\` contains no path under \`shared/\`, \`ui/\`, \`packages/ui/\`, or similar. Reorder so the generic shell lands first; page-specific wrappers depend on it.`
     );
   }
-  if (sharedNames.length > 0 && !firstMentionsSharedName) {
+  if (sharedNames.length > 0 && !taskMentionsSharedName) {
     errors.push(
-      `Task 1 must mention the shared component name(s) from the Generic-split decision (${sharedNames
+      `${taskLabel} must mention the shared component name(s) from the Generic-split decision (${sharedNames
         .map((n) => `\`${n}\``)
         .join(
           ', '
