@@ -5,7 +5,10 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 // Stub pr-mergeable BEFORE ci-gate loads so we can drive its decisions.
+// hasActionableBlockers is the real helper — we want the gate to exercise
+// its actual filter/guard logic, only assessMergeable's result is stubbed.
 const prMergeablePath = require.resolve('../../pr-mergeable.js');
+const realPrMergeable = require('../../pr-mergeable.js');
 let stubMergeable;
 require.cache[prMergeablePath] = {
   id: prMergeablePath,
@@ -18,6 +21,7 @@ require.cache[prMergeablePath] = {
     classify() {
       return stubMergeable;
     },
+    hasActionableBlockers: realPrMergeable.hasActionableBlockers,
   },
 };
 

@@ -138,9 +138,50 @@ function assessMergeable(prNumber, opts) {
   }
 }
 
+/**
+ * Decide whether a non-mergeable result is actionable — i.e. whether the
+ * caller should take destructive recovery action (rollback / rewind) or
+ * just wait. Centralises the two guards both follow-up-next.js and
+ * ci-gate.js have to apply:
+ *
+ *   1. Filter out `gh_error` blockers (transient gh CLI failures). Those
+ *      mean "we couldn't reach GitHub to verify", not "we verified the PR
+ *      is broken" — taking destructive action on a network blip discards
+ *      real progress.
+ *   2. Require the PR state to be `OPEN`. A `MERGED` PR can transiently
+ *      report `mergeStateStatus: UNKNOWN` for ~5-30s after merge, which
+ *      produces a non-mergeable result even though the work is done.
+ *      Acting on that would churn the workflow.
+ *
+ * Callers that don't have a separately-fetched PR state can pass
+ * `opts.prStateOverride = '<MERGED|OPEN|CLOSED|...>'` — when the
+ * assessMergeable result already populated `signals.prState`, omit the
+ * override and the helper reads it from the signals.
+ *
+ * @param {{mergeable: boolean, blockers: Array<{kind: string, detail?: string}>, signals?: {prState?: string}}} mergeResult
+ * @param {{prStateOverride?: string}} [opts]
+ * @returns {{ actionable: boolean, realBlockers: Array<{kind: string, detail?: string}>, prState: string }}
+ */
+function hasActionableBlockers(mergeResult, opts) {
+  const blockers = (mergeResult && mergeResult.blockers) || [];
+  const realBlockers = blockers.filter((b) => b && b.kind !== 'gh_error');
+  const prStateRaw =
+    (opts && opts.prStateOverride) ||
+    (mergeResult && mergeResult.signals && mergeResult.signals.prState) ||
+    '';
+  // Empty / unknown PR state defaults to "treat as open" so callers that
+  // don't fetch PR state (or stub without it) still see the historical
+  // behaviour. Only an explicit non-OPEN value (MERGED, CLOSED) suppresses
+  // destructive action.
+  const prIsOpen = prStateRaw === '' || prStateRaw === 'OPEN';
+  const actionable = !!mergeResult && !mergeResult.mergeable && realBlockers.length > 0 && prIsOpen;
+  return { actionable, realBlockers, prState: prStateRaw };
+}
+
 module.exports = {
   assessMergeable,
   classify,
+  hasActionableBlockers,
   MERGEABLE_STATES,
   RUNNING_STATUSES,
 };

@@ -3,7 +3,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { classify, MERGEABLE_STATES, RUNNING_STATUSES } = require('../pr-mergeable');
+const {
+  classify,
+  hasActionableBlockers,
+  MERGEABLE_STATES,
+  RUNNING_STATUSES,
+} = require('../pr-mergeable');
 
 // --- Fixture builders -------------------------------------------------------
 
@@ -180,4 +185,76 @@ test('exported constant sets match documented behavior', () => {
   assert.equal(MERGEABLE_STATES.has('BLOCKED'), false);
   assert.ok(RUNNING_STATUSES.has('IN_PROGRESS'));
   assert.ok(RUNNING_STATUSES.has('QUEUED'));
+});
+
+// --- hasActionableBlockers helper ------------------------------------------
+
+test('hasActionableBlockers: mergeable result → not actionable', () => {
+  const r = hasActionableBlockers({ mergeable: true, blockers: [], signals: { prState: 'OPEN' } });
+  assert.equal(r.actionable, false);
+  assert.deepEqual(r.realBlockers, []);
+});
+
+test('hasActionableBlockers: real blocker on OPEN PR → actionable', () => {
+  const r = hasActionableBlockers({
+    mergeable: false,
+    blockers: [{ kind: 'merge_state_dirty' }],
+    signals: { prState: 'OPEN' },
+  });
+  assert.equal(r.actionable, true);
+  assert.equal(r.realBlockers.length, 1);
+});
+
+test('hasActionableBlockers: only gh_error → not actionable (transient)', () => {
+  const r = hasActionableBlockers({
+    mergeable: false,
+    blockers: [{ kind: 'gh_error', detail: 'timeout' }],
+    signals: { prState: 'OPEN' },
+  });
+  assert.equal(r.actionable, false);
+  assert.deepEqual(r.realBlockers, []);
+});
+
+test('hasActionableBlockers: gh_error + real blocker → actionable, gh_error filtered', () => {
+  const r = hasActionableBlockers({
+    mergeable: false,
+    blockers: [{ kind: 'gh_error' }, { kind: 'checks_running' }],
+    signals: { prState: 'OPEN' },
+  });
+  assert.equal(r.actionable, true);
+  assert.equal(r.realBlockers.length, 1);
+  assert.equal(r.realBlockers[0].kind, 'checks_running');
+});
+
+test('hasActionableBlockers: MERGED PR with non-mergeable result → not actionable', () => {
+  // Transient mergeStateStatus=UNKNOWN window right after merge.
+  const r = hasActionableBlockers({
+    mergeable: false,
+    blockers: [{ kind: 'merge_state_unknown' }],
+    signals: { prState: 'MERGED' },
+  });
+  assert.equal(r.actionable, false);
+});
+
+test('hasActionableBlockers: prStateOverride wins over signals.prState', () => {
+  // ci-gate fetches prState separately and passes it in.
+  const r = hasActionableBlockers(
+    {
+      mergeable: false,
+      blockers: [{ kind: 'merge_state_dirty' }],
+      signals: { prState: 'OPEN' },
+    },
+    { prStateOverride: 'MERGED' }
+  );
+  assert.equal(r.actionable, false, 'override should suppress action');
+});
+
+test('hasActionableBlockers: missing prState defaults to "treat as open"', () => {
+  // Preserves historical behaviour for callers/tests that don't populate signals.
+  const r = hasActionableBlockers({
+    mergeable: false,
+    blockers: [{ kind: 'merge_state_dirty' }],
+    signals: {},
+  });
+  assert.equal(r.actionable, true);
 });

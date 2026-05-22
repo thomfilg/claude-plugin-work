@@ -14,8 +14,11 @@ const os = require('node:os');
 const path = require('node:path');
 
 // ─── Stub pr-mergeable BEFORE follow-up-next loads ──────────────────────────
+// hasActionableBlockers is the real helper — we want follow-up-next to
+// exercise the actual filter/guard logic, only assessMergeable is stubbed.
 
 const prMergeablePath = require.resolve('../../work/lib/pr-mergeable.js');
+const realPrMergeable = require('../../work/lib/pr-mergeable.js');
 let stubMergeableResult = null;
 require.cache[prMergeablePath] = {
   id: prMergeablePath,
@@ -26,6 +29,7 @@ require.cache[prMergeablePath] = {
       return stubMergeableResult;
     },
     classify: () => stubMergeableResult,
+    hasActionableBlockers: realPrMergeable.hasActionableBlockers,
   },
 };
 

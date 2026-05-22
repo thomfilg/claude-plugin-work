@@ -78,7 +78,9 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
     // shipped to base branch." Both conditions must hold:
     //   - assessMergeable.mergeable === true
     //   - prInfo.state === 'MERGED'
-    const { assessMergeable } = require(path.join(__dirname, '..', 'pr-mergeable.js'));
+    const { assessMergeable, hasActionableBlockers } = require(
+      path.join(__dirname, '..', 'pr-mergeable.js')
+    );
     const m = assessMergeable(prInfo.number);
 
     // Forward edge: mergeable AND already merged → advance to cleanup.
@@ -86,25 +88,17 @@ function dispatchAdvanceGate(safeName, ctx, deps) {
       return advanceToCleanup(safeName, deps, 'Mergeable and PR merged');
     }
 
-    // Backward edge: PR is OPEN and NOT mergeable (conflicts, new failing
-    // checks introduced by a base-branch change, reviewer requested
-    // changes, etc.). The `ci` step's job is to wait for merge — it can't
-    // wait if merge is impossible. Roll back to `follow_up` so the loop
+    // Backward edge: PR is OPEN and has REAL (non-transient) blockers —
+    // conflicts, new failing checks introduced by a base-branch change,
+    // reviewer requested changes. Roll back to `follow_up` so the loop
     // gets a chance to fix whatever made the PR un-mergeable.
     //
-    // Guards:
-    //   - Only roll back when prState is OPEN. CLOSED PRs are terminal;
-    //     a CLOSED-not-MERGED PR is a separate failure mode we don't try
-    //     to auto-recover from here.
-    //   - Ignore `gh_error` blockers. `assessMergeable` catches gh CLI
-    //     failures (network timeouts, rate limits, transient API blips)
-    //     and reports them as `gh_error`. That's "we couldn't verify",
-    //     not "we verified it's broken" — taking destructive action on a
-    //     transient blip would mis-rewind the workflow. Real blockers
-    //     (merge_state_*, checks_running) still trigger rollback.
-    const realBlockers = (m.blockers || []).filter((b) => b.kind !== 'gh_error');
-    if (!m.mergeable && realBlockers.length > 0 && prInfo.state === 'OPEN') {
-      const reason = realBlockers.map((b) => b.kind).join(', ');
+    // `hasActionableBlockers` centralises the two guards (filter gh_error
+    // transients, require prState=OPEN) that this gate and follow-up-next's
+    // rewind path both apply.
+    const action = hasActionableBlockers(m, { prStateOverride: prInfo.state });
+    if (action.actionable) {
+      const reason = action.realBlockers.map((b) => b.kind).join(', ');
       return rollbackToFollowUp(safeName, deps, reason);
     }
   } catch {

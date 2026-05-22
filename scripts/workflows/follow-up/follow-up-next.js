@@ -148,31 +148,23 @@ function getNextInstruction(ticketId, prNumber) {
       // step from live GitHub state.
       if (state.prNumber) {
         let liveMergeable = null;
+        let actionable = false;
+        let realBlockers = [];
         try {
-          const { assessMergeable } = require(
+          const { assessMergeable, hasActionableBlockers } = require(
             path.join(__dirname, '..', 'work', 'lib', 'pr-mergeable.js')
           );
           liveMergeable = assessMergeable(state.prNumber);
+          // hasActionableBlockers centralises the two guards (filter out
+          // gh_error transients, require prState=OPEN) shared with
+          // ci-gate.js. See pr-mergeable.js for the full rationale.
+          const action = hasActionableBlockers(liveMergeable);
+          actionable = action.actionable;
+          realBlockers = action.realBlockers;
         } catch {
           liveMergeable = null;
         }
-        // Ignore gh_error blockers — those mean "we couldn't reach GitHub
-        // to verify", not "we verified the PR is broken". Rewinding the
-        // workflow on a transient network blip would discard real progress.
-        // Only act on concrete blockers (merge_state_*, checks_running).
-        const realBlockers = (
-          liveMergeable && liveMergeable.blockers ? liveMergeable.blockers : []
-        ).filter((b) => b.kind !== 'gh_error');
-        // Skip rewind when the PR is already MERGED. GitHub transiently
-        // reports `mergeStateStatus: UNKNOWN` for ~5-30s after merge, which
-        // produces a non-mergeable result even though the work is done.
-        // Rewinding here would just loop: monitor → MERGED → report →
-        // complete → rewind → monitor... Mirror ci-gate's `prState ===
-        // 'OPEN'` guard so only an actually-open-and-broken PR rewinds.
-        const liveState =
-          (liveMergeable && liveMergeable.signals && liveMergeable.signals.prState) || '';
-        const prIsOpen = liveState === '' || liveState === 'OPEN';
-        if (liveMergeable && !liveMergeable.mergeable && realBlockers.length > 0 && prIsOpen) {
+        if (actionable) {
           const blockerSummary = realBlockers.map((b) => b.kind).join(', ');
           process.stderr.write(
             `[follow-up-next] saved state said complete but PR #${state.prNumber} is not mergeable (${blockerSummary}); rewinding and resuming.\n`
