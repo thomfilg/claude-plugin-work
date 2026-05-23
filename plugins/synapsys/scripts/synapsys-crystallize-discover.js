@@ -19,21 +19,9 @@
  * Empty dirs are still included (count=0) so the caller can decide.
  */
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { execSync } = require('node:child_process');
-const { discoverStores } = require(path.join(__dirname, '..', 'lib', 'memory-store'));
+const { fs, os, path, execSync, discoverStores, setupCli } = require('../lib/script-bootstrap');
 
-const args = process.argv.slice(2);
-function flag(name) {
-  const a = args.find((x) => x === `--${name}` || x.startsWith(`--${name}=`));
-  if (!a) return undefined;
-  const eq = a.indexOf('=');
-  return eq === -1 ? true : a.slice(eq + 1);
-}
-
-const cwd = flag('cwd') || process.cwd();
+const { flag, cwd } = setupCli();
 
 // Accept cwd explicitly so callers control which directory git resolves
 // relative to (mirrors the pattern in lib/memory-store.js#safeExec).

@@ -15,14 +15,9 @@
 
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { makeFlag } = require(path.join(__dirname, '..', 'lib', 'cli-args'));
 
-const args = process.argv.slice(2);
-function flag(name) {
-  const a = args.find((x) => x === `--${name}` || x.startsWith(`--${name}=`));
-  if (!a) return undefined;
-  const eq = a.indexOf('=');
-  return eq === -1 ? true : a.slice(eq + 1);
-}
+const flag = makeFlag(process.argv.slice(2));
 
 const event = flag('event') || 'UserPromptSubmit';
 const cwd = flag('cwd') || process.cwd();

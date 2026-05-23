@@ -9,24 +9,12 @@
 'use strict';
 
 const { spawn } = require('node:child_process');
-const fs = require('node:fs');
-const path = require('node:path');
-
-const INBOX_DIR = '/tmp/claude-agent-inbox';
+const { validateChannelOrExit, ensureChannelFile } = require('../lib/inbox');
 
 function main() {
   const [, , channel] = process.argv;
-  if (!channel) {
-    console.error('usage: maestro-listen <CHANNEL>');
-    process.exit(2);
-  }
-  if (!/^[A-Za-z0-9_.-]+$/.test(channel)) {
-    console.error(`invalid channel name: ${channel}`);
-    process.exit(2);
-  }
-  fs.mkdirSync(INBOX_DIR, { recursive: true });
-  const file = path.join(INBOX_DIR, `${channel}.log`);
-  if (!fs.existsSync(file)) fs.writeFileSync(file, '');
+  validateChannelOrExit(channel, 'maestro-listen <CHANNEL>');
+  const file = ensureChannelFile(channel);
 
   process.stdout.write(`listening on ${file}\n`);
 

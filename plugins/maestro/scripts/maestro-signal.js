@@ -11,9 +11,7 @@
 'use strict';
 
 const fs = require('node:fs');
-const path = require('node:path');
-
-const INBOX_DIR = '/tmp/claude-agent-inbox';
+const { INBOX_DIR, validateChannelOrExit, ensureChannelFile } = require('../lib/inbox');
 
 function listListeners(channel) {
   // Best-effort: list pids holding /tmp/claude-agent-inbox/<channel>.log open.
@@ -32,16 +30,12 @@ function listListeners(channel) {
 
 function main() {
   const [, , channel, ...msgParts] = process.argv;
-  if (!channel || msgParts.length === 0) {
+  if (msgParts.length === 0) {
     console.error('usage: maestro-signal <CHANNEL> <message...>');
     process.exit(2);
   }
-  if (!/^[A-Za-z0-9_.-]+$/.test(channel)) {
-    console.error(`invalid channel name: ${channel}`);
-    process.exit(2);
-  }
-  fs.mkdirSync(INBOX_DIR, { recursive: true });
-  const file = path.join(INBOX_DIR, `${channel}.log`);
+  validateChannelOrExit(channel, 'maestro-signal <CHANNEL> <message...>');
+  const file = ensureChannelFile(channel);
   const line = `[${new Date().toISOString()}] ${msgParts.join(' ')}\n`;
   fs.appendFileSync(file, line);
   const pids = listListeners(channel);

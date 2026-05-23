@@ -28,19 +28,9 @@
  * On success prints the path written. Non-zero on validation failure.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { discoverStores } = require(path.join(__dirname, '..', 'lib', 'memory-store'));
+const { fs, path, discoverStores, setupCli } = require('../lib/script-bootstrap');
 
-const args = process.argv.slice(2);
-function flag(name) {
-  const a = args.find((x) => x === `--${name}` || x.startsWith(`--${name}=`));
-  if (!a) return undefined;
-  const eq = a.indexOf('=');
-  return eq === -1 ? true : a.slice(eq + 1);
-}
-
-const cwd = flag('cwd') || process.cwd();
+const { flag, cwd } = setupCli();
 const name = flag('name');
 const desc = flag('desc');
 const eventsRaw = flag('events');

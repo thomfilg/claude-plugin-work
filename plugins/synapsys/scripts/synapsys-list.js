@@ -12,16 +12,9 @@
  * --json: raw machine-readable dump.
  */
 
-const path = require('node:path');
-const { listMemories, discoverStores } = require(path.join(__dirname, '..', 'lib', 'memory-store'));
+const { discoverStores, listMemories, setupCli } = require('../lib/script-bootstrap');
 
-const args = process.argv.slice(2);
-function flag(name) {
-  const a = args.find((x) => x === `--${name}` || x.startsWith(`--${name}=`));
-  if (!a) return undefined;
-  const eq = a.indexOf('=');
-  return eq === -1 ? true : a.slice(eq + 1);
-}
+const { flag } = setupCli();
 
 const cwd = flag('cwd') || process.cwd();
 const json = !!flag('json');
