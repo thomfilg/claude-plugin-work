@@ -56,7 +56,9 @@ function coerceFrontmatterValue(raw) {
   if (val === '') return '';
   if (val === 'true') return true;
   if (val === 'false') return false;
-  if (/^\[.*\]$/.test(val)) {
+  // Bracket-array form: only treat as array when a comma is present.
+  // Single-bracket values like `[a-z]` are regex character classes — keep as string.
+  if (/^\[.*,.*\]$/.test(val)) {
     return val
       .slice(1, -1)
       .split(',')
