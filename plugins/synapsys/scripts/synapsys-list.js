@@ -12,7 +12,7 @@
  * --json: raw machine-readable dump.
  */
 
-const { discoverStores, listMemories, setupCli } = require('../lib/script-bootstrap');
+const { discoverStores, listMemoriesFromStore, setupCli } = require('../lib/script-bootstrap');
 
 const { flag } = setupCli();
 
@@ -24,7 +24,7 @@ const storeFilter = typeof flag('store') === 'string' ? flag('store') : null;
 const eventFilter = typeof flag('event') === 'string' ? flag('event') : null;
 
 const stores = discoverStores(cwd);
-let memories = listMemories(cwd);
+let memories = stores.flatMap(listMemoriesFromStore);
 if (storeFilter) memories = memories.filter((m) => m.store.kind === storeFilter);
 if (eventFilter) memories = memories.filter((m) => m.events.includes(eventFilter));
 
