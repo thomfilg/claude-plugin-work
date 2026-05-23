@@ -16,27 +16,29 @@ function matchPrompt(memory, prompt) {
   return re.test(prompt || '');
 }
 
+function parsePretoolSpec(spec) {
+  const colon = spec.indexOf(':');
+  if (colon === -1) return { tool: spec, pat: '' };
+  return {
+    tool: spec.slice(0, colon).trim(),
+    pat: spec.slice(colon + 1).trim(),
+  };
+}
+
+function pretoolSpecMatches(spec, toolName, argBlob) {
+  const { tool, pat } = parsePretoolSpec(spec);
+  if (tool && tool !== '*' && tool !== toolName) return false;
+  if (!pat) return true;
+  const re = safeRegex(pat);
+  return re ? re.test(argBlob) : false;
+}
+
 function matchPreTool(memory, payload) {
   if (!memory.events.includes('PreToolUse')) return false;
   if (!memory.triggerPretool.length) return false;
   const toolName = payload?.tool_name || '';
-  const blob = JSON.stringify(payload?.tool_input || {});
-  for (const spec of memory.triggerPretool) {
-    const colon = spec.indexOf(':');
-    let tool, pat;
-    if (colon === -1) {
-      tool = spec;
-      pat = '';
-    } else {
-      tool = spec.slice(0, colon).trim();
-      pat = spec.slice(colon + 1).trim();
-    }
-    if (tool && tool !== '*' && tool !== toolName) continue;
-    if (!pat) return true;
-    const re = safeRegex(pat);
-    if (re && re.test(blob)) return true;
-  }
-  return false;
+  const argBlob = JSON.stringify(payload?.tool_input || {});
+  return memory.triggerPretool.some((spec) => pretoolSpecMatches(spec, toolName, argBlob));
 }
 
 function matchSession(memory) {

@@ -51,6 +51,22 @@ function discoverStores(cwd) {
   return out;
 }
 
+function coerceFrontmatterValue(raw) {
+  const val = raw.trim();
+  if (val === '') return '';
+  if (val === 'true') return true;
+  if (val === 'false') return false;
+  if (/^\[.*\]$/.test(val)) {
+    return val
+      .slice(1, -1)
+      .split(',')
+      .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+  }
+  if (/^["'].*["']$/.test(val)) return val.slice(1, -1);
+  return val;
+}
+
 function parseFrontmatter(content) {
   const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (!m) return { meta: {}, body: content };
@@ -60,72 +76,58 @@ function parseFrontmatter(content) {
     if (!line || line.startsWith('#')) continue;
     const km = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/);
     if (!km) continue;
-    const key = km[1];
-    let val = km[2].trim();
-    if (val === '') {
-      meta[key] = '';
-      continue;
-    }
-    if (val === 'true') {
-      meta[key] = true;
-      continue;
-    }
-    if (val === 'false') {
-      meta[key] = false;
-      continue;
-    }
-    if (/^\[.*\]$/.test(val)) {
-      meta[key] = val
-        .slice(1, -1)
-        .split(',')
-        .map((s) => s.trim().replace(/^["']|["']$/g, ''))
-        .filter(Boolean);
-      continue;
-    }
-    if (/^["'].*["']$/.test(val)) {
-      meta[key] = val.slice(1, -1);
-      continue;
-    }
-    meta[key] = val;
+    meta[km[1]] = coerceFrontmatterValue(km[2]);
   }
   return { meta, body: m[2] };
+}
+
+const SKIP_FILES = new Set(['INDEX.md', 'README.md']);
+
+function readMemoryFile(store, name) {
+  if (!name.endsWith('.md') || SKIP_FILES.has(name)) return null;
+  const file = path.join(store.dir, name);
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  const { meta, body } = parseFrontmatter(raw);
+  return {
+    store,
+    file,
+    name: meta.name || path.basename(name, '.md'),
+    description: meta.description || '',
+    events: toList(meta.events),
+    triggerPrompt: meta.trigger_prompt || '',
+    triggerPretool: toList(meta.trigger_pretool),
+    triggerSession: meta.trigger_session === true || meta.trigger_session === 'true',
+    inject: meta.inject === 'full' ? 'full' : 'summary',
+    meta,
+    body,
+  };
+}
+
+function listMemoriesFromStore(store) {
+  let entries;
+  try {
+    entries = fs.readdirSync(store.dir);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of entries) {
+    const m = readMemoryFile(store, name);
+    if (m) out.push(m);
+  }
+  return out;
 }
 
 function listMemories(cwd) {
   const stores = discoverStores(cwd || process.cwd());
   const memories = [];
   for (const s of stores) {
-    let entries;
-    try {
-      entries = fs.readdirSync(s.dir);
-    } catch {
-      continue;
-    }
-    for (const name of entries) {
-      if (!name.endsWith('.md')) continue;
-      if (name === 'INDEX.md' || name === 'README.md') continue;
-      const file = path.join(s.dir, name);
-      let raw;
-      try {
-        raw = fs.readFileSync(file, 'utf8');
-      } catch {
-        continue;
-      }
-      const { meta, body } = parseFrontmatter(raw);
-      memories.push({
-        store: s,
-        file,
-        name: meta.name || path.basename(name, '.md'),
-        description: meta.description || '',
-        events: toList(meta.events),
-        triggerPrompt: meta.trigger_prompt || '',
-        triggerPretool: toList(meta.trigger_pretool),
-        triggerSession: meta.trigger_session === true || meta.trigger_session === 'true',
-        inject: meta.inject === 'full' ? 'full' : 'summary',
-        meta,
-        body,
-      });
-    }
+    memories.push(...listMemoriesFromStore(s));
   }
   return memories;
 }
