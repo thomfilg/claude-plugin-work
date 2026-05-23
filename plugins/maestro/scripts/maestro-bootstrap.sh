@@ -19,7 +19,7 @@
 #   bash maestro-bootstrap.sh GH-397 GH-398 GH-414
 #
 # Env vars (with defaults; override or set in ../.envrc):
-#   WORKTREES_BASE    /home/thomfilg/p/w-claude-plugin
+#   WORKTREES_BASE    $HOME/worktrees
 #   REPO_NAME         claude-plugin-work
 #   BASE_BRANCH       main
 #   CLAUDE_BIN        claude
@@ -40,7 +40,7 @@ for candidate in "$PWD/../.envrc" "$PWD/.envrc" "$SCRIPT_DIR/../../../../.envrc"
   fi
 done
 
-WORKTREES_BASE="${WORKTREES_BASE:-/home/thomfilg/p/w-claude-plugin}"
+WORKTREES_BASE="${WORKTREES_BASE:-$HOME/worktrees}"
 REPO_NAME="${REPO_NAME:-claude-plugin-work}"
 BASE_BRANCH="${BASE_BRANCH:-main}"
 BASE_BRANCH="${BASE_BRANCH#refs/remotes/origin/}"

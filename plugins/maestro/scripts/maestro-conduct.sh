@@ -12,7 +12,7 @@ mkdir -p "$STATE_DIR"
 
 # Match maestro-bootstrap.sh so auto-restart finds the same worktree the
 # bootstrap created. Override via env to customize layout.
-WORKTREES_BASE="${WORKTREES_BASE:-/home/thomfilg/p/w-claude-plugin}"
+WORKTREES_BASE="${WORKTREES_BASE:-$HOME/worktrees}"
 REPO_NAME="${REPO_NAME:-claude-plugin-work}"
 SESSION_PATTERN="${SESSION_PATTERN:-^GH-[0-9]+-work$}"
 # Match maestro-bootstrap.sh so auto-restart uses the same binary and skill the

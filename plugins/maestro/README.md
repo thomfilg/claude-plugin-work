@@ -39,7 +39,7 @@ File-mailbox at `/tmp/claude-agent-inbox/<TICKET>.log`. `signal` appends a line,
 
 | Var | Default | Effect |
 |-----|---------|--------|
-| `WORKTREES_BASE` | `/home/thomfilg/p/w-claude-plugin` | Parent dir for `<REPO>-<TICKET>` worktrees |
+| `WORKTREES_BASE` | `$HOME/worktrees` | Parent dir for `<REPO>-<TICKET>` worktrees |
 | `REPO_NAME` | `claude-plugin-work` | Repo basename |
 | `BASE_BRANCH` | `main` | Branch to base worktrees on |
 | `SILENCE_LIMIT_SEC` | `300` | Auto-restart threshold |

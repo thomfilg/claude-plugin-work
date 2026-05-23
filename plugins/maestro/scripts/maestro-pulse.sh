@@ -2,7 +2,7 @@
 # maestro-status.sh — one-shot status snapshot of all active GH-*-work agents.
 set -u
 
-WORKTREES_BASE="${WORKTREES_BASE:-/home/thomfilg/p/w-claude-plugin}"
+WORKTREES_BASE="${WORKTREES_BASE:-$HOME/worktrees}"
 REPO_NAME="${REPO_NAME:-claude-plugin-work}"
 
 echo "=== Active /work agents ==="
