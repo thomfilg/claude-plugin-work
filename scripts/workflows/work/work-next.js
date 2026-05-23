@@ -472,17 +472,18 @@ function getNextInstruction(ticketRaw, rework) {
   const args = process.argv.slice(2).join(' ');
   log.call(ticket, args);
 
-  // If workflow is already at the complete step OR overall state.status === 'completed',
-  // release session guard and return. The `state.status === 'completed'` branch
-  // (GH-398) handles re-entry on a previously-finished workflow regardless of
-  // stepStatus.complete value (which may be 'pending' or undefined on older
-  // state files written before the canonical `complete` step existed).
+  // GH-398 (ECHO-4552 Issue 2): dispatcher-level early-return when the whole
+  // workflow is in the terminal completed state. Fires when BOTH:
+  //   - state.status === 'completed' (overall workflow flag), AND
+  //   - state.stepStatus.complete === 'completed' (terminal step flag)
+  // Both conditions together — never one without the other. Anything weaker
+  // risks short-circuiting in-progress workflows where the user may have
+  // edited inputs between gate satisfaction and resume.
   const _preCheckState = loadWorkState(safeName);
   if (
     _preCheckState &&
-    ((getCurrentStep(_preCheckState) === 'complete' &&
-      _preCheckState.stepStatus?.complete === 'completed') ||
-      _preCheckState.status === 'completed')
+    _preCheckState.status === 'completed' &&
+    _preCheckState.stepStatus?.complete === 'completed'
   ) {
     // Release session guard inline
     try {
@@ -495,10 +496,6 @@ function getNextInstruction(ticketRaw, rework) {
     } catch {
       /* already released or not active */
     }
-    // Back-fill stepStatus.complete = 'completed' on the returned payload (AC7) —
-    // `state.completedSteps` (which includes 'complete') is the canonical surface
-    // consumed by downstream callers; an additional flat stepStatus map is not
-    // emitted here to keep the payload single-nested and JSON-tail-parseable.
     return {
       type: 'work_instruction',
       action: 'complete',
