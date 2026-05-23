@@ -18,6 +18,7 @@
 #   CLAUDE_BIN        claude
 #   SKILL_NAME        work               (so the launched cmd is /<SKILL_NAME> <TICKET>)
 set -u
+set -o pipefail
 
 WORKTREES_BASE="${WORKTREES_BASE:-/home/thomfilg/p/w-claude-plugin}"
 REPO_NAME="${REPO_NAME:-claude-plugin-work}"
