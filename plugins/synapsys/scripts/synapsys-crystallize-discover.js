@@ -35,9 +35,15 @@ function flag(name) {
 
 const cwd = flag('cwd') || process.cwd();
 
-function safeExec(cmd) {
+// Accept cwd explicitly so callers control which directory git resolves
+// relative to (mirrors the pattern in lib/memory-store.js#safeExec).
+function safeExec(cmd, execCwd) {
   try {
-    return execSync(cmd, { encoding: 'utf8', cwd, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execSync(cmd, {
+      cwd: execCwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
   } catch {
     return '';
   }
@@ -60,7 +66,7 @@ function parseHash(hash, repoName) {
   return rest.startsWith('-') ? rest.slice(1) : rest === '' ? '(no branch suffix)' : rest;
 }
 
-const repoToplevel = safeExec('git rev-parse --show-toplevel');
+const repoToplevel = safeExec('git rev-parse --show-toplevel', cwd);
 const repoName = repoToplevel ? path.basename(repoToplevel) : path.basename(cwd);
 
 const currentHash = cwd.replaceAll('/', '-');

@@ -5,8 +5,9 @@
 # hash has changed since the last poll. Static status-bar text alone does NOT
 # count as activity.
 set -u
-STATE_DIR=/tmp/maestro-conduct
-SILENCE_LIMIT_SEC=300
+STATE_DIR="${STATE_DIR:-/tmp/maestro-conduct}"
+SILENCE_LIMIT_SEC="${SILENCE_LIMIT_SEC:-300}"
+POLL_INTERVAL_SEC="${POLL_INTERVAL_SEC:-60}"
 mkdir -p "$STATE_DIR"
 
 # Match maestro-bootstrap.sh so auto-restart finds the same worktree the
@@ -93,5 +94,5 @@ while true; do
       echo "[$s] IDLE: ${silence}s silent (restart at ${SILENCE_LIMIT_SEC}s) — tokens=${toks_now:-?}"
     fi
   done < <(discover_sessions)
-  sleep 60
+  sleep "$POLL_INTERVAL_SEC"
 done
