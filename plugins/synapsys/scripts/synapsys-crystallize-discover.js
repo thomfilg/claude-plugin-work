@@ -19,23 +19,9 @@
  * Empty dirs are still included (count=0) so the caller can decide.
  */
 
-const { fs, os, path, execSync, discoverStores, setupCli } = require('../lib/script-bootstrap');
+const { fs, os, path, discoverStores, safeExec, setupCli } = require('../lib/script-bootstrap');
 
 const { flag, cwd } = setupCli();
-
-// Accept cwd explicitly so callers control which directory git resolves
-// relative to (mirrors the pattern in lib/memory-store.js#safeExec).
-function safeExec(cmd, execCwd) {
-  try {
-    return execSync(cmd, {
-      cwd: execCwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return '';
-  }
-}
 
 function memoryCount(dir) {
   try {

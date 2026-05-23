@@ -28,6 +28,7 @@ const {
   listMemories,
   getProjectName,
   parseFrontmatter,
+  safeExec,
 } = require(path.join(__dirname, 'memory-store'));
 
 function setupCli() {
@@ -49,4 +50,5 @@ module.exports = {
   listMemories,
   getProjectName,
   parseFrontmatter,
+  safeExec,
 };
