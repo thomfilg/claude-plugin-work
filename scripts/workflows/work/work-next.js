@@ -472,19 +472,16 @@ function getNextInstruction(ticketRaw, rework) {
   const args = process.argv.slice(2).join(' ');
   log.call(ticket, args);
 
-  // GH-398 (ECHO-4552 Issue 2): dispatcher-level early-return when the whole
-  // workflow is in the terminal completed state. Fires when BOTH:
-  //   - state.status === 'completed' (overall workflow flag), AND
-  //   - state.stepStatus.complete === 'completed' (terminal step flag)
-  // Both conditions together — never one without the other. Anything weaker
-  // risks short-circuiting in-progress workflows where the user may have
-  // edited inputs between gate satisfaction and resume.
+  // GH-398 (ECHO-4552 Issue 2): dispatcher-level early-return when the
+  // workflow is in the terminal completed state. Per brief P0 #1, fires on
+  // `state.status === 'completed'` ALONE — older state files (and any state
+  // where the overall status flag was set without back-filling
+  // `stepStatus.complete`) must short-circuit. The "all steps completed
+  // including the canonical complete step" case is independently handled by
+  // existing `getCurrentStep() === 'complete'` checks elsewhere in the
+  // codebase, so the looser condition here does not narrow coverage.
   const _preCheckState = loadWorkState(safeName);
-  if (
-    _preCheckState &&
-    _preCheckState.status === 'completed' &&
-    _preCheckState.stepStatus?.complete === 'completed'
-  ) {
+  if (_preCheckState && _preCheckState.status === 'completed') {
     // Release session guard inline
     try {
       const sgPath = path.join(workDir, '..', 'lib', 'hooks', 'session-guard.js');
