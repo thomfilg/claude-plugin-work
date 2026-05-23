@@ -74,9 +74,7 @@ const REGISTRY = Object.freeze({
         matcher: '.*',
         type: 'shell',
         command:
-          'TICKET=$(node "$CLAUDE_PLUGIN_ROOT/scripts/workflows/lib/scripts/get-ticket-id.js"); ' +
-          '[ -n "$TICKET" ] && mkdir -p "/home/node/worktrees/tasks/$TICKET" && ' +
-          'touch "/home/node/worktrees/tasks/$TICKET/.qa-api-agent-active"',
+          'node "$CLAUDE_PLUGIN_ROOT/scripts/workflows/check/agents/qa-api-tester/qa-api-active-marker.js" set',
         optional: true,
       }),
       Object.freeze({
@@ -90,8 +88,7 @@ const REGISTRY = Object.freeze({
       Object.freeze({
         type: 'shell',
         command:
-          'TICKET=$(node "$CLAUDE_PLUGIN_ROOT/scripts/workflows/lib/scripts/get-ticket-id.js"); ' +
-          '[ -n "$TICKET" ] && rm -f "/home/node/worktrees/tasks/$TICKET/.qa-api-agent-active"',
+          'node "$CLAUDE_PLUGIN_ROOT/scripts/workflows/check/agents/qa-api-tester/qa-api-active-marker.js" clear',
         optional: true,
       }),
       Object.freeze({
