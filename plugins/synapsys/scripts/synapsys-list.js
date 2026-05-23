@@ -80,11 +80,6 @@ function pad(s, n) {
   return s + ' '.repeat(n - s.length);
 }
 
-function truncate(s, n) {
-  if (s.length <= n) return s;
-  return `${s.slice(0, n - 1)}…`;
-}
-
 // ─── empty cases ──────────────────────────────────────────────────────
 if (!stores.length) {
   console.log(C.yellow('No Synapsys stores installed.'));
