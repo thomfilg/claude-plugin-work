@@ -27,7 +27,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.11",
     "eslint": "^10.4.0",
-    "eslint-plugin-sonarjs": "^4.0.3",
     "jscpd": "^4.2.3"
   }
 }
