@@ -8,18 +8,28 @@ const { execSync } = require('node:child_process');
 const MARKER = '.synapsys.json';
 const FOLDER = 'synapsys';
 
-function safeExec(cmd) {
+// Pass cwd through to execSync so git resolves relative to the caller's path,
+// not the host process's cwd. Mirrors the pattern in
+// scripts/workflows/lib/scripts/get-ticket-id.js — without this, hooks invoked
+// from one cwd but processing a payload with a different cwd resolve to the
+// wrong git toplevel.
+function safeExec(cmd, cwd) {
   try {
-    return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execSync(cmd, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
   } catch {
     return '';
   }
 }
 
 function getProjectName(cwd) {
-  const top = safeExec('git rev-parse --show-toplevel');
+  const resolvedCwd = cwd || process.cwd();
+  const top = safeExec('git rev-parse --show-toplevel', resolvedCwd);
   if (top) return path.basename(top);
-  return path.basename(cwd || process.cwd());
+  return path.basename(resolvedCwd);
 }
 
 function candidateStores(cwd, projectName) {
