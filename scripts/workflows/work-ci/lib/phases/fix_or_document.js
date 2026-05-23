@@ -44,7 +44,7 @@ function validate(ctx) {
     } else if (c.category === 'flake') {
       // No artifact required — handled by rerun_check.
     } else if (c.category === 'cache-miss') {
-      if (!c.rerunRunId || !/^\d{6,}$/.test(String(c.rerunRunId))) {
+      if (typeof c.rerunRunId !== 'string' || !/^\d{6,}$/.test(c.rerunRunId)) {
         errors.push(
           `Cache-miss failure \`${c.name}\` needs \`rerunRunId\` (numeric, ≥ 6 digits). Run \`gh run rerun <run-id>\` (full rerun, no \`--failed\`) and patch the entry with the new run id.`
         );
