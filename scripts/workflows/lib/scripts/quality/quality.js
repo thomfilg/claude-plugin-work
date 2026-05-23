@@ -27,14 +27,14 @@ const biomeBridge = require('./rules/biome-bridge');
 const eslintBridge = require('./rules/eslint-bridge');
 const jscpdBridge = require('./rules/jscpd-bridge');
 
-const SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'tasks',
-  'external_scripts',
-  'references',
-  'docs',
-]);
+// Always-skip directories: makes no sense to lint anywhere in the tree.
+const SKIP_DIRS_ANY_DEPTH = new Set(['node_modules', '.git']);
+
+// Root-only skip directories: matches biome.json and the ESLint config
+// (`tasks/**`, `external_scripts/**`, `references/**`, `docs/**` — anchored
+// at the repo root). A nested directory like `src/lib/docs/` is a legitimate
+// source location and must NOT be silently skipped.
+const SKIP_DIRS_ROOT_ONLY = new Set(['tasks', 'external_scripts', 'references', 'docs']);
 
 const TEST_FILE_RE = /(?:^|[\\/])__tests__[\\/]|\.test\.js$|\.spec\.js$/;
 
@@ -56,11 +56,17 @@ function readDirSafe(dir) {
   }
 }
 
-function processEntry(ent, dir, stack, out) {
+function shouldSkipDir(name, isRoot) {
+  if (SKIP_DIRS_ANY_DEPTH.has(name)) return true;
+  if (isRoot && SKIP_DIRS_ROOT_ONLY.has(name)) return true;
+  return false;
+}
+
+function processEntry(ent, dir, isRoot, stack, out) {
   if (ent.name.startsWith('.')) return;
   const full = path.join(dir, ent.name);
   if (ent.isDirectory()) {
-    if (!SKIP_DIRS.has(ent.name)) stack.push(full);
+    if (!shouldSkipDir(ent.name, isRoot)) stack.push(full);
   } else if (ent.isFile() && ent.name.endsWith('.js')) {
     out.push(full);
   }
@@ -68,10 +74,13 @@ function processEntry(ent, dir, stack, out) {
 
 function walkJsFiles(root) {
   const out = [];
+  // Stack entries carry their own dir; root-only excludes apply when the dir
+  // being scanned IS the walker's root.
   const stack = [root];
   while (stack.length > 0) {
     const dir = stack.pop();
-    for (const ent of readDirSafe(dir)) processEntry(ent, dir, stack, out);
+    const isRoot = dir === root;
+    for (const ent of readDirSafe(dir)) processEntry(ent, dir, isRoot, stack, out);
   }
   return out;
 }
