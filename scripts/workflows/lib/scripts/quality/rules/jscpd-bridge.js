@@ -45,8 +45,12 @@ function runJscpdCli(bin, files, outDir, cwd) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (res.error) {
-    throw new Error(`jscpd-bridge: failed: ${res.error.message}`);
+  // jscpd's non-zero exit on clone-threshold breach is expected, but
+  // `status === null` indicates the process was signal-killed (e.g., OOM)
+  // — that must hard-fail rather than silently emit empty duplicates.
+  if (res.error || res.status === null) {
+    const reason = res.error ? res.error.message : `signal=${res.signal} (process killed)`;
+    throw new Error(`jscpd-bridge: failed: ${reason}`);
   }
 }
 

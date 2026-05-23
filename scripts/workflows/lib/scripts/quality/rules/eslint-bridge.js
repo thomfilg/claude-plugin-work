@@ -69,8 +69,14 @@ function runESLintCli(files, cwd) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (res.status === 2 || res.error) {
-    const reason = res.error ? res.error.message : (res.stderr || 'unknown').trim();
+  // Treat any of these as a hard config error rather than parsing empty
+  // stdout — silently returning [] would let the quality gate pass while
+  // ESLint actually failed to run. `status === null` covers signal-kill /
+  // OOM (matches the biome-bridge null-status guard).
+  if (res.status === null || res.status === 2 || res.error) {
+    const reason = res.error
+      ? res.error.message
+      : (res.stderr || `exited with status=${res.status}, signal=${res.signal}`).trim();
     throw new Error(`eslint-bridge: failed: ${reason}`);
   }
   return (res.stdout || '').trim();
