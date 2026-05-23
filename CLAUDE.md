@@ -80,12 +80,12 @@ into CI (`.github/workflows/ci.yml` → `quality` job) and is required for merge
 **Rules and default thresholds:**
 | Rule ID | Threshold | What it catches |
 |---|---|---|
-| `max-lines` | 500 lines / file | Oversized modules |
-| `max-lines-per-function` | 75 lines / function | Bloated functions |
+| `max-lines` | 400 lines / file | Oversized modules |
+| `max-lines-per-function` | 80 lines / function | Bloated functions |
 | `cyclomatic-complexity` | 10 | Tangled branching |
 | `max-depth` | 4 | Deeply-nested blocks |
 | `duplicate-blocks` | 50-token blocks across files | Copy-paste drift |
-| `biome-bridge` | biome lint findings | Existing biome rules |
+| `cognitive-complexity` | 15 / function | Cognitively complex functions (enforced via Biome) |
 
 **Allowlist (`.quality-exceptions` at repo root):**
 - Captures the current set of pre-existing violations so the gate can flip on
@@ -93,8 +93,8 @@ into CI (`.github/workflows/ci.yml` → `quality` job) and is required for merge
 - **Burn-down policy: new PRs may only shrink, never grow, the allowlist.** Any
   PR that introduces a new entry is rejected by the gate; entries should be
   removed as code is cleaned up.
-- File format: one entry per line, `path:rule[:identifier]` (see runner source
-  for exact grammar).
+- File format: one relative path per line; blank lines and `#`-prefixed comments
+  are ignored. Absolute paths and `..` traversal are rejected.
 
 **When the gate fails:**
 1. Read the runner output — each violation prints `file:line  rule (value) in function`.

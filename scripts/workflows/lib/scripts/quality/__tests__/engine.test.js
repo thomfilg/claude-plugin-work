@@ -65,6 +65,35 @@ test('engine: allowlisted file downgrades severity from error to warning (rule s
   assert.equal(result.violations[0].rule, 'fake');
 });
 
+test('engine: checkAll batch rule produces violations and respects allowlist downgrade', () => {
+  const { RuleEngine } = loadEngine();
+  const engine = new RuleEngine();
+  engine.register({
+    id: 'batch-fake',
+    defaultThreshold: 1,
+    check() {
+      return [];
+    },
+    checkAll(files) {
+      return files.map((f) => ({ file: f.path, line: 1, message: 'batch hit' }));
+    },
+  });
+  const result = engine.run({
+    files: [
+      { path: 'a.js', source: 'x' },
+      { path: 'allowed.js', source: 'y' },
+    ],
+    allowlist: new Set(['allowed.js']),
+  });
+  assert.equal(result.violations.length, 2);
+  const a = result.violations.find((v) => v.file === 'a.js');
+  const allowed = result.violations.find((v) => v.file === 'allowed.js');
+  assert.equal(a.severity, 'error');
+  assert.equal(a.rule, 'batch-fake');
+  assert.equal(allowed.severity, 'warning');
+  assert.equal(allowed.rule, 'batch-fake');
+});
+
 test('engine: non-allowlisted files retain error severity', () => {
   const { RuleEngine } = loadEngine();
   const engine = new RuleEngine();
