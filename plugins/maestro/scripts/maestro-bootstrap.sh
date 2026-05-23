@@ -29,10 +29,14 @@
 set -u
 set -o pipefail
 
-# ── Source .envrc if present so the script picks up the same vars
-#    /work-workflow:bootstrap relies on, even without direnv active.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for candidate in "$PWD/../.envrc" "$PWD/.envrc" "$SCRIPT_DIR/../../../../.envrc"; do
+# ── Source .envrc from the caller's pwd (or its parent — the worktree
+#    convention) so the script picks up the same vars /work-workflow:bootstrap
+#    relies on, even without direnv active.
+#
+#    Note: no SCRIPT_DIR-based fallback. At runtime this script lives in a
+#    plugin cache dir (~/.claude/plugins/cache/...), so relative traversal from
+#    its install location never lands in a repo's .envrc.
+for candidate in "$PWD/../.envrc" "$PWD/.envrc"; do
   if [ -f "$candidate" ]; then
     # shellcheck disable=SC1090
     set -a; . "$candidate"; set +a
