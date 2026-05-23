@@ -9,12 +9,17 @@ STATE_DIR=/tmp/maestro-conduct
 SILENCE_LIMIT_SEC=300
 mkdir -p "$STATE_DIR"
 
+# Match maestro-bootstrap.sh so auto-restart finds the same worktree the
+# bootstrap created. Override via env to customize layout.
+WORKTREES_BASE="${WORKTREES_BASE:-/home/thomfilg/p/w-claude-plugin}"
+REPO_NAME="${REPO_NAME:-claude-plugin-work}"
+
 discover_sessions() {
   tmux list-sessions -F '#S' 2>/dev/null | grep -E '^GH-[0-9]+-work$' || true
 }
 
 ticket_id_for() { echo "$1" | sed 's/-work$//'; }
-worktree_for()  { echo "/home/thomfilg/p/w-claude-plugin/claude-plugin-work-$1"; }
+worktree_for()  { echo "$WORKTREES_BASE/$REPO_NAME-$1"; }
 
 # Extract the token count integer from the pane (status bar shows e.g. "353792 tokens")
 pane_tokens() { echo "$1" | grep -oE '[0-9]+ tokens' | tail -1 | awk '{print $1}'; }
