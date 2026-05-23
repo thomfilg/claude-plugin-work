@@ -144,6 +144,11 @@ function decideEdit(input) {
     return { blocked: false, category: 'outside-worktree' };
   }
 
+  // GH-392 Task 8 / spec §P0#6 / R7: every block message ends with a `BYPASS:`
+  // line advertising the env-var escape hatch + audit log location.
+  const bypassLine =
+    'BYPASS: set PROTECT_TASK_SCOPE_BYPASS_REASON="<reason>" and retry. Audit: .work-actions.json';
+
   const outMatch = findMatch(relPath, filesOutOfScope);
   if (outMatch) {
     return {
@@ -153,7 +158,8 @@ function decideEdit(input) {
       reason:
         `BLOCKED: ${relPath} matches \`### Files explicitly out of scope\`` +
         (activeTask ? ` for ${activeTask}` : '') +
-        ` (pattern: ${outMatch}). This file is owned by a sibling ticket — do NOT edit it from this ticket.`,
+        ` (pattern: ${outMatch}). This file is owned by a sibling ticket — do NOT edit it from this ticket.\n` +
+        bypassLine,
     };
   }
 
@@ -168,7 +174,8 @@ function decideEdit(input) {
     reason:
       `BLOCKED: ${relPath} is outside the active task's \`### Files in scope\`` +
       (activeTask ? ` (${activeTask})` : '') +
-      `. If this file genuinely belongs to this task, update tasks.md and re-run /work.`,
+      `. If this file genuinely belongs to this task, update tasks.md and re-run /work.\n` +
+      bypassLine,
   };
 }
 

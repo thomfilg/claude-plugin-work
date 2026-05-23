@@ -15,6 +15,18 @@
  *   - The target path matches `filesOutOfScope` (sibling-owned), OR
  *   - The target path is not matched by any `filesInScope` glob.
  *
+ * Escape hatches (GH-392 Task 8):
+ *   1. Env var — non-empty `PROTECT_TASK_SCOPE_BYPASS_REASON` allows the edit
+ *      and appends a `scope-bypass` audit row via `appendEnforcementAudit`
+ *      (spec §P0#6).
+ *   2. `### Cross-Task Dependencies` — paths in the active task's
+ *      `crossTaskDeps` list bypass the would-be block and append a
+ *      `cross-task-dep-allow` audit row (spec §P0#7b).
+ *
+ * Security: bypass paths fail closed on missing ticket identity (no ticket →
+ * no bypass; the early `if (!ticketId) process.exit(0)` rejects un-scoped
+ * invocations before either escape hatch is evaluated).
+ *
  * Fail-open in all error paths (missing state, parse error, missing config) —
  * agents on legitimate non-implement steps must not be blocked by this hook.
  */
@@ -26,10 +38,13 @@ const path = require('path');
 
 const { logHookError } = require(path.join(__dirname, '..', '..', 'lib', 'hook-error-log'));
 const config = require(path.join(__dirname, '..', '..', 'lib', 'config'));
-const { decideEdit } = require(
+const { decideEdit, relativizePath, findMatch } = require(
   path.join(__dirname, '..', '..', 'lib', 'hooks', 'policies', 'scope-protection')
 );
 const { parseTasks } = require(path.join(__dirname, '..', '..', 'work', 'lib', 'task-parser'));
+const { appendEnforcementAudit } = require(
+  path.join(__dirname, '..', '..', 'work', 'lib', 'work-actions')
+);
 
 const FILE_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
@@ -118,6 +133,11 @@ function getActiveTask(tasksDir) {
     label: `Task ${task.num}${task.title ? ' — ' + task.title : ''}`,
     filesInScope: Array.isArray(task.filesInScope) ? task.filesInScope : [],
     filesOutOfScope: Array.isArray(task.filesOutOfScope) ? task.filesOutOfScope : [],
+    // GH-392 Task 8 / spec §P0#7b: cross-task allow-list. Files declared here
+    // are out of the task's primary scope but are legitimately needed (owned
+    // by sibling tasks). decideEdit blocks would be overridden to exit 0 with
+    // a `cross-task-dep-allow` audit row.
+    crossTaskDeps: Array.isArray(task.crossTaskDeps) ? task.crossTaskDeps : [],
   };
 }
 
@@ -232,12 +252,92 @@ async function main() {
   if (!active || active.skip) process.exit(0);
   if (active.filesInScope.length === 0 && active.filesOutOfScope.length === 0) process.exit(0);
 
-  const decision = evaluateTool(hookData.tool_name || '', hookData.tool_input || {}, active, cwd);
+  const toolName = hookData.tool_name || '';
+  const toolInput = hookData.tool_input || {};
+
+  // GH-392 Task 8 / spec §P0#6: env-var escape hatch. Non-empty reason →
+  // append a `scope-bypass` audit row and exit 0. We fail closed when no
+  // ticket was detected (handled above by the early exit when ticketId is
+  // null), so identity is established here.
+  const bypassReason = (process.env.PROTECT_TASK_SCOPE_BYPASS_REASON || '').trim();
+  if (bypassReason) {
+    const target = extractTargetPath(toolName, toolInput) || '';
+    const relTarget = relativizePath(target, cwd) || target;
+    try {
+      appendEnforcementAudit(ticketId, {
+        origin: 'ai-subtask',
+        task: active.taskNum,
+        phase: null,
+        action: 'scope-bypass',
+        allow: true,
+        reason: bypassReason,
+        outputPath: relTarget,
+        meta: { taskNum: active.taskNum, target: relTarget },
+      });
+    } catch (err) {
+      try {
+        logHookError(__filename, err);
+      } catch {
+        /* swallow */
+      }
+    }
+    process.exit(0);
+  }
+
+  const decision = evaluateTool(toolName, toolInput, active, cwd);
   if (decision && decision.blocked) {
+    // GH-392 Task 8 / spec §P0#7b: cross-task allow-list. If the would-be-
+    // blocked target matches an entry in `active.crossTaskDeps`, audit it
+    // and exit 0.
+    const target = extractTargetPath(toolName, toolInput) || '';
+    const relTarget = relativizePath(target, cwd);
+    if (
+      relTarget &&
+      Array.isArray(active.crossTaskDeps) &&
+      active.crossTaskDeps.length > 0 &&
+      findMatch(relTarget, active.crossTaskDeps)
+    ) {
+      try {
+        appendEnforcementAudit(ticketId, {
+          origin: 'ai-subtask',
+          task: active.taskNum,
+          phase: null,
+          action: 'cross-task-dep-allow',
+          allow: true,
+          reason: 'matched ### Cross-Task Dependencies',
+          outputPath: relTarget,
+          meta: { taskNum: active.taskNum, target: relTarget },
+        });
+      } catch (err) {
+        try {
+          logHookError(__filename, err);
+        } catch {
+          /* swallow */
+        }
+      }
+      process.exit(0);
+    }
     process.stderr.write(decision.reason + '\n');
     process.exit(2);
   }
   process.exit(0);
+}
+
+/**
+ * Best-effort extraction of the primary write target for an audit log row.
+ * Returns the first plausible path, or empty string.
+ */
+function extractTargetPath(toolName, toolInput) {
+  if (FILE_WRITE_TOOLS.has(toolName)) {
+    return (toolInput && toolInput.file_path) || '';
+  }
+  if (toolName === 'Bash') {
+    const cmd = toolInput && toolInput.command;
+    if (!cmd) return '';
+    const targets = extractBashWriteTargets(String(cmd));
+    return targets[0] || '';
+  }
+  return '';
 }
 
 if (require.main === module) {
