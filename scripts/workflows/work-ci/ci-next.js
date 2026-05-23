@@ -155,8 +155,6 @@ function main(argv) {
     agent: process.env.CLAUDE_CURRENT_AGENT || null,
   });
 
-  snapshotCompanionToken('ci-phase-state.js', ticket);
-
   const tasksBase = resolveTasksBaseWithFallback();
   const tasksDir = path.join(tasksBase, ticket);
   if (!fs.existsSync(tasksDir)) die(`tasks dir not found: ${tasksDir}`);
