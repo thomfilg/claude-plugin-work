@@ -1,24 +1,44 @@
 #!/usr/bin/env bash
 # maestro-bootstrap.sh
 #
-# Bootstrap multiple tickets at once: per ticket, create a worktree at
-# <WORKTREES_BASE>/<REPO_NAME>-<TICKET> from <BASE_BRANCH>, then launch a
-# <TICKET>-work tmux session running `claude --dangerously-skip-permissions
-# '/work <TICKET>'` in that worktree.
+# Bootstrap multiple tickets at once for parallel /work agents:
 #
-# Idempotent: skips tickets that already have a worktree.
+#   1. Source ../.envrc (if present) to pick up WORKTREES_BASE, REPO_NAME,
+#      BASE_BRANCH, BOOTSTRAP_SCRIPT — same convention work-workflow uses.
+#   2. Per ticket: create worktree at <WORKTREES_BASE>/<REPO_NAME>-<TICKET>
+#      from <BASE_BRANCH> on a new branch <TICKET>-maestro.
+#   3. Run work-workflow's bootstrap-custom-script.js if installed (honours
+#      $BOOTSTRAP_SCRIPT just like /work-workflow:bootstrap does). Skipped
+#      gracefully if the helper isn't found.
+#   4. Launch a <TICKET>-work tmux session running
+#      `$CLAUDE_BIN --dangerously-skip-permissions '/$SKILL_NAME <TICKET>'`.
+#
+# Idempotent: skips tickets that already have a worktree or tmux session.
 #
 # Usage:
 #   bash maestro-bootstrap.sh GH-397 GH-398 GH-414
 #
-# Env vars (with defaults):
+# Env vars (with defaults; override or set in ../.envrc):
 #   WORKTREES_BASE    /home/thomfilg/p/w-claude-plugin
 #   REPO_NAME         claude-plugin-work
 #   BASE_BRANCH       main
 #   CLAUDE_BIN        claude
-#   SKILL_NAME        work               (so the launched cmd is /<SKILL_NAME> <TICKET>)
+#   SKILL_NAME        work
+#   BOOTSTRAP_SCRIPT  (unset)  Path to custom per-ticket setup script invoked
+#                              by work-workflow's bootstrap-custom-script.js.
 set -u
 set -o pipefail
+
+# ── Source .envrc if present so the script picks up the same vars
+#    /work-workflow:bootstrap relies on, even without direnv active.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for candidate in "$PWD/../.envrc" "$PWD/.envrc" "$SCRIPT_DIR/../../../../.envrc"; do
+  if [ -f "$candidate" ]; then
+    # shellcheck disable=SC1090
+    set -a; . "$candidate"; set +a
+    break
+  fi
+done
 
 WORKTREES_BASE="${WORKTREES_BASE:-/home/thomfilg/p/w-claude-plugin}"
 REPO_NAME="${REPO_NAME:-claude-plugin-work}"
@@ -39,6 +59,30 @@ if [ "$#" -eq 0 ]; then
   exit 1
 fi
 
+# ── Locate work-workflow's bootstrap-custom-script.js so per-ticket
+#    BOOTSTRAP_SCRIPT setup works the same as /work-workflow:bootstrap.
+#    Falls back gracefully if work-workflow isn't installed.
+find_bootstrap_helper() {
+  local candidates=(
+    "$HOME/.claude/plugins/marketplaces/work-workflow/scripts/workflows/work/scripts/bootstrap-custom-script.js"
+  )
+  # Also try any cached version of the work-workflow plugin.
+  for d in "$HOME/.claude/plugins/cache/work-workflow/work-workflow"/*/scripts/workflows/work/scripts/bootstrap-custom-script.js; do
+    [ -f "$d" ] && candidates+=("$d")
+  done
+  for c in "${candidates[@]}"; do
+    [ -f "$c" ] && echo "$c" && return 0
+  done
+  return 1
+}
+
+BOOTSTRAP_HELPER="$(find_bootstrap_helper || true)"
+if [ -n "$BOOTSTRAP_HELPER" ]; then
+  echo "[maestro] using bootstrap helper: $BOOTSTRAP_HELPER"
+else
+  echo "[maestro] work-workflow bootstrap helper not found — skipping custom BOOTSTRAP_SCRIPT step"
+fi
+
 git -C "$REPO_DIR" fetch origin "$BASE_BRANCH" 2>&1 | tail -1
 
 for TICKET in "$@"; do
@@ -52,13 +96,21 @@ for TICKET in "$@"; do
 
   if [ -d "$WT" ]; then
     echo "[$TICKET] worktree exists at $WT — skipping create"
+    SKIP_CUSTOM_SCRIPT=1
   else
     if git -C "$REPO_DIR" worktree add "$WT" -b "$BRANCH" "origin/$BASE_BRANCH" 2>&1 | tail -2; then
       echo "[$TICKET] worktree created at $WT (branch $BRANCH)"
+      SKIP_CUSTOM_SCRIPT=0
     else
       echo "[$TICKET] worktree create FAILED — skipping launch"
       continue
     fi
+  fi
+
+  # Per-ticket custom bootstrap (runs only on fresh worktrees).
+  if [ "${SKIP_CUSTOM_SCRIPT:-0}" = "0" ] && [ -n "$BOOTSTRAP_HELPER" ]; then
+    # bootstrap-custom-script.js is fail-open: warns and exits 0 on errors.
+    node "$BOOTSTRAP_HELPER" "$WT" "$TICKET" || true
   fi
 
   SESSION="$TICKET-work"
