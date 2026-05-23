@@ -82,10 +82,6 @@ function eventCode(events) {
   return parts.join('+');
 }
 
-function injectCode(inject) {
-  return inject === 'full' ? 'F' : 's';
-}
-
 function pad(s, n) {
   if (s.length >= n) return s.slice(0, n);
   return s + ' '.repeat(n - s.length);
@@ -134,10 +130,8 @@ for (const m of memories) {
 const termWidth =
   process.stdout.columns && process.stdout.columns > 80 ? process.stdout.columns : 100;
 const longestName = Math.max(...memories.map((m) => m.name.length));
-const nameWidth = Math.min(40, Math.max(longestName, 20));
+const nameWidth = Math.min(50, Math.max(longestName, 20));
 const eventsWidth = 8;
-// inject column is 1 visible char ("F" or "s") rendered into a 1-wide cell
-const descWidth = Math.max(30, termWidth - nameWidth - eventsWidth - 1 - 8);
 
 for (const [kind, bucket] of byStore.entries()) {
   if (!bucket.memories.length) continue;
@@ -147,20 +141,19 @@ for (const [kind, bucket] of byStore.entries()) {
     `${C.cyan(C.bold(kind.toUpperCase()))} ${C.dim('·')} ${C.dim(bucket.dir)} ${C.dim('·')} ${bucket.memories.length} memories`
   );
   console.log(C.dim('─'.repeat(Math.min(termWidth, 120))));
+  console.log('');
 
-  // Column header (raw strings, then dim the whole thing)
-  const colHeader = `  ${pad('NAME', nameWidth)}  ${pad('EVENTS', eventsWidth)}  I  DESCRIPTION`;
-  console.log(C.dim(colHeader));
-
-  // Rows
+  // Rows: 2 lines per memory + blank line between
+  //   line 1: NAME    EVENTS  I
+  //   line 2:   <full description>
   bucket.memories.sort((a, b) => a.name.localeCompare(b.name));
   for (const m of bucket.memories) {
-    const name = pad(truncate(m.name, nameWidth), nameWidth);
+    const name = pad(m.name, nameWidth);
     const ev = pad(eventCode(m.events), eventsWidth);
     const injChar = m.inject === 'full' ? 'F' : 's';
     const injColored = m.inject === 'full' ? C.bold(C.red(injChar)) : C.gray(injChar);
-    const desc = truncate(m.description, descWidth);
-    console.log(`  ${C.green(name)}  ${C.yellow(ev)}  ${injColored}  ${desc}`);
+    console.log(`  ${C.green(name)}  ${C.yellow(ev)}  ${injColored}`);
+    console.log(`    ${m.description}`);
 
     if (verbose) {
       if (m.triggerPrompt)
@@ -170,8 +163,8 @@ for (const [kind, bucket] of byStore.entries()) {
       if (m.triggerSession) console.log(`    ${C.dim('session:')} ${C.magenta('yes')}`);
       console.log(`    ${C.dim('file:')}    ${C.dim(m.file)}`);
     }
+    console.log('');
   }
-  console.log('');
 }
 
 // ─── summary ──────────────────────────────────────────────────────────
