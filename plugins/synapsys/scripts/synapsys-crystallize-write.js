@@ -33,7 +33,7 @@
 const { fs, path, discoverStores, setupCli } = require('../lib/script-bootstrap');
 
 const { flag, cwd } = setupCli();
-const storeKind = flag('store');
+const storeKind = typeof flag('store') === 'string' ? flag('store') : '';
 const force = !!flag('force');
 
 if (!storeKind) {
