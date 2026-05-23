@@ -66,7 +66,7 @@ test('Quality script hard-fails on a new oversized file', (t) => {
   const res = runCli(repo);
   assert.equal(res.status, 1, `stdout=${res.stdout}\nstderr=${res.stderr}`);
   assert.match(res.stdout + res.stderr, /huge\.js/);
-  assert.match(res.stdout + res.stderr, /max-lines > 400/);
+  assert.match(res.stdout + res.stderr, /max-lines/);
 });
 
 test('Quality script hard-fails on excessive cognitive complexity', (t) => {
@@ -90,10 +90,7 @@ test('Quality script hard-fails on excessive cognitive complexity', (t) => {
     ],
   });
   fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(
-    fakeNpx,
-    `#!/usr/bin/env bash\ncat <<'__EOF__'\n${payload}\n__EOF__\n`
-  );
+  fs.writeFileSync(fakeNpx, `#!/usr/bin/env bash\ncat <<'__EOF__'\n${payload}\n__EOF__\n`);
   fs.chmodSync(fakeNpx, 0o755);
 
   const res = runCli(repo, [], {
@@ -131,13 +128,19 @@ test('Test files and markdown are excluded from max-lines rule', (t) => {
 
 test('Function over 80 lines is flagged', (t) => {
   const repo = mkRepo(t);
-  const body = new Array(90).fill('  let x = 1;').join('\n');
-  write(repo, 'src/longfn.js', `'use strict';\nfunction big() {\n${body}\n}\nmodule.exports = big;\n`);
+  const bodyLines = [];
+  for (let i = 0; i < 90; i++) bodyLines.push(`  const x${i} = ${i};`);
+  const body = bodyLines.join('\n');
+  write(
+    repo,
+    'src/longfn.js',
+    `'use strict';\nfunction big() {\n${body}\n  return [${bodyLines.length}];\n}\nmodule.exports = big;\n`
+  );
   write(repo, '.quality-exceptions', '');
 
   const res = runCli(repo);
   assert.equal(res.status, 1, `stdout=${res.stdout}\nstderr=${res.stderr}`);
-  assert.match(res.stdout + res.stderr, /max-lines-per-function > 80/);
+  assert.match(res.stdout + res.stderr, /max-lines-per-function/);
 });
 
 test('Nesting depth over 4 is flagged', (t) => {
@@ -163,14 +166,14 @@ module.exports = deep;
 
   const res = runCli(repo);
   assert.equal(res.status, 1, `stdout=${res.stdout}\nstderr=${res.stderr}`);
-  assert.match(res.stdout + res.stderr, /max-depth > 4/);
+  assert.match(res.stdout + res.stderr, /max-depth/);
 });
 
 test('Duplicate code blocks above 50 tokens are flagged', (t) => {
   const repo = mkRepo(t);
   const tokens = [];
   for (let i = 0; i < 60; i++) tokens.push(`token${i}`);
-  const block = tokens.join(' ');
+  const block = tokens.join('\n');
   write(repo, 'src/a.js', `'use strict';\n// a\n${block}\n`);
   write(repo, 'src/b.js', `'use strict';\n// b\n${block}\n`);
   write(repo, '.quality-exceptions', '');
@@ -179,5 +182,8 @@ test('Duplicate code blocks above 50 tokens are flagged', (t) => {
   assert.equal(res.status, 1, `stdout=${res.stdout}\nstderr=${res.stderr}`);
   const parsed = JSON.parse(res.stdout);
   const dupes = parsed.violations.filter((v) => v.rule === 'duplicate-blocks');
-  assert.ok(dupes.length >= 1, `expected at least one duplicate-blocks violation, got ${JSON.stringify(parsed.violations)}`);
+  assert.ok(
+    dupes.length >= 1,
+    `expected at least one duplicate-blocks violation, got ${JSON.stringify(parsed.violations)}`
+  );
 });

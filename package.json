@@ -25,6 +25,9 @@
     "quality:changed": "node scripts/workflows/lib/scripts/quality/quality.js --changed"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.11"
+    "@biomejs/biome": "^2.4.11",
+    "eslint": "^10.4.0",
+    "eslint-plugin-sonarjs": "^4.0.3",
+    "jscpd": "^4.2.3"
   }
 }

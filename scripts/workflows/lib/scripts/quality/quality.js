@@ -4,21 +4,15 @@
 /**
  * `quality.js` — CLI entry for the static code quality gate.
  *
+ * Wires three off-the-shelf tools into one runner that emits a unified
+ * violation shape and honors the `.quality-exceptions` allowlist:
+ *
+ *   ESLint        → complexity, max-depth, max-lines, max-lines-per-function
+ *   jscpd         → duplicate-blocks (cross-file, ≥50 tokens)
+ *   biome-bridge  → cognitive-complexity (shells out to `npx biome`)
+ *
  * Usage:
  *   node quality.js [--changed] [--json] [paths...]
- *
- * Modes:
- *   - default: walks the repo for `*.js` files (excludes node_modules, tasks/,
- *     external_scripts/, references/, docs/).
- *   - --changed: scans only the files changed vs the dynamic base branch
- *     (resolved via `config.getBaseBranch()`; fallback `HEAD~1`).
- *   - positional paths: explicit list (file or directory paths) override
- *     auto-discovery.
- *
- * Output:
- *   - default: human-readable, grouped by rule, with `(allowlisted)` suffix
- *     on downgraded items.
- *   - --json: `{ violations: [{ file, line, rule, severity, message }] }`.
  *
  * Exit codes: 0 clean (warnings only is OK), 1 hard-fail, 2 config error.
  */
@@ -27,16 +21,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { RuleEngine } = require('./shared/engine');
 const { AllowlistLoader } = require('./shared/allowlist');
 const config = require('../../config');
-
-const maxLines = require('./rules/max-lines');
-const maxLinesPerFunction = require('./rules/max-lines-per-function');
-const maxDepth = require('./rules/max-depth');
-const duplicateBlocks = require('./rules/duplicate-blocks');
-const cyclomatic = require('./rules/cyclomatic');
 const biomeBridge = require('./rules/biome-bridge');
+const eslintBridge = require('./rules/eslint-bridge');
+const jscpdBridge = require('./rules/jscpd-bridge');
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -46,6 +35,8 @@ const SKIP_DIRS = new Set([
   'references',
   'docs',
 ]);
+
+const TEST_FILE_RE = /(?:^|[\\/])__tests__[\\/]|\.test\.js$|\.spec\.js$/;
 
 function parseArgs(argv) {
   const opts = { changed: false, json: false, paths: [] };
@@ -80,9 +71,7 @@ function walkJsFiles(root) {
   const stack = [root];
   while (stack.length > 0) {
     const dir = stack.pop();
-    for (const ent of readDirSafe(dir)) {
-      processEntry(ent, dir, stack, out);
-    }
+    for (const ent of readDirSafe(dir)) processEntry(ent, dir, stack, out);
   }
   return out;
 }
@@ -108,8 +97,7 @@ function expandPaths(paths, repoRoot) {
 
 function changedFiles(repoRoot) {
   const base = config.getBaseBranch({ cwd: repoRoot }) || 'origin/main';
-  const tryRefs = [`${base}...HEAD`, 'HEAD~1'];
-  for (const ref of tryRefs) {
+  for (const ref of [`${base}...HEAD`, 'HEAD~1']) {
     const res = spawnSync('git', ['diff', '--name-only', '--diff-filter=ACMR', ref], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -131,8 +119,12 @@ function discoverFiles(opts, repoRoot) {
   return walkJsFiles(repoRoot);
 }
 
-function readSources(absFiles, repoRoot) {
-  const files = [];
+function nonTestFiles(absFiles) {
+  return absFiles.filter((f) => !TEST_FILE_RE.test(f));
+}
+
+function readSources(absFiles) {
+  const out = [];
   for (const abs of absFiles) {
     let source;
     try {
@@ -140,23 +132,31 @@ function readSources(absFiles, repoRoot) {
     } catch {
       continue;
     }
-    const rel = path.relative(repoRoot, abs);
-    files.push({ path: rel, source });
+    out.push({ path: abs, source });
   }
-  return files;
+  return out;
 }
 
-function buildEngine() {
-  const engine = new RuleEngine();
-  engine.register(maxLines);
-  engine.register(maxLinesPerFunction);
-  engine.register(maxDepth);
-  engine.register(cyclomatic);
-  engine.register(duplicateBlocks);
-  if (process.env.BIOME_BRIDGE_DISABLE !== '1') {
-    engine.register(biomeBridge);
-  }
-  return engine;
+function runBiomeBridge(absFiles, repoRoot) {
+  if (process.env.BIOME_BRIDGE_DISABLE === '1') return [];
+  if (absFiles.length === 0) return [];
+  const files = readSources(absFiles);
+  const raw = biomeBridge.checkAll(files) || [];
+  return raw.map((v) => ({ ...v, file: path.relative(repoRoot, v.file) }));
+}
+
+function collectViolations(absFiles, repoRoot) {
+  const lintable = nonTestFiles(absFiles);
+  const violations = [];
+  violations.push(...eslintBridge.checkAll(lintable, repoRoot));
+  violations.push(...jscpdBridge.checkAll(lintable, repoRoot));
+  violations.push(...runBiomeBridge(lintable, repoRoot));
+  return violations;
+}
+
+function applyAllowlist(violations, allowlist) {
+  if (!(allowlist instanceof Set) || allowlist.size === 0) return violations;
+  return violations.map((v) => (allowlist.has(v.file) ? { ...v, severity: 'warning' } : v));
 }
 
 function formatHuman(violations) {
@@ -194,23 +194,18 @@ function main(argv) {
   }
 
   const absFiles = discoverFiles(opts, repoRoot);
-  const files = readSources(absFiles, repoRoot);
 
-  const engine = buildEngine();
-  let result;
+  let violations;
   try {
-    result = engine.run({ files, allowlist });
+    violations = collectViolations(absFiles, repoRoot);
   } catch (err) {
     process.stderr.write(`quality: config error: ${err.message}\n`);
     return 2;
   }
 
-  const violations = result.violations || [];
-  const out = opts.json ? formatJson(violations) : formatHuman(violations);
-  process.stdout.write(out);
-
-  const hasError = violations.some((v) => v.severity === 'error');
-  return hasError ? 1 : 0;
+  violations = applyAllowlist(violations, allowlist);
+  process.stdout.write(opts.json ? formatJson(violations) : formatHuman(violations));
+  return violations.some((v) => v.severity === 'error') ? 1 : 0;
 }
 
 if (require.main === module) {

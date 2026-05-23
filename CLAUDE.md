@@ -12,7 +12,7 @@ See **[AGENTS.md](./AGENTS.md)** for the agent catalog. See **[docs/README.md](.
 - **CommonJS only** — `require`/`module.exports`. No ES modules, no `.mjs`, no bundlers.
 - **Plain JavaScript** — No TypeScript. No transpilation. Runs directly under Node.js.
 - **Node built-in test runner** — `node:test` + `node:assert/strict`. No Jest, Vitest, or Mocha.
-- **Zero runtime dependencies** — Only `@biomejs/biome` as devDependency for formatting.
+- **Zero runtime dependencies** — Runtime dependencies must stay zero (the plugin is installed by users; their install size matters). devDependencies for lint/build/format tooling are permitted: `@biomejs/biome` (format + cognitive-complexity), `eslint` (4 quality rules), `jscpd` (duplicate-block detection). These do not ship to consumers.
 
 ### Testing
 - Run tests: `pnpm test`
@@ -82,10 +82,17 @@ into CI (`.github/workflows/ci.yml` → `quality` job) and is required for merge
 |---|---|---|
 | `max-lines` | 400 lines / file | Oversized modules |
 | `max-lines-per-function` | 80 lines / function | Bloated functions |
-| `cyclomatic-complexity` | 10 | Tangled branching |
-| `max-depth` | 4 | Deeply-nested blocks |
-| `duplicate-blocks` | 50-token blocks across files | Copy-paste drift |
-| `cognitive-complexity` | 15 / function | Cognitively complex functions (enforced via Biome) |
+| `cyclomatic-complexity` | 10 | Tangled branching (ESLint `complexity`) |
+| `max-depth` | 4 | Deeply-nested blocks (ESLint `max-depth`) |
+| `duplicate-blocks` | 50-token blocks across files | Copy-paste drift (jscpd) |
+| `cognitive-complexity` | 15 / function | Cognitively complex functions (Biome `noExcessiveCognitiveComplexity`) |
+
+The runner shells out to three tools and folds their diagnostics into a single
+violation shape: ESLint owns the first four rules (`complexity`, `max-depth`,
+`max-lines`, `max-lines-per-function` — config in
+`scripts/workflows/lib/scripts/quality/configs/quality-lint-rules.js`), jscpd
+owns `duplicate-blocks`, and `rules/biome-bridge.js` shells out to Biome for
+`cognitive-complexity`.
 
 **Allowlist (`.quality-exceptions` at repo root):**
 - Captures the current set of pre-existing violations so the gate can flip on
