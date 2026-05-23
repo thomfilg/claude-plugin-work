@@ -19,8 +19,7 @@
       "!external_scripts/**",
       "!references/**",
       "!docs/**",
-      "!**/*.md",
-      "!**/__tests__/**"
+      "!**/*.md"
     ]
   },
   "formatter": {
@@ -46,6 +45,7 @@
   },
   "linter": {
     "enabled": true,
+    "includes": ["**", "!**/__tests__/**"],
     "rules": {
       "recommended": false,
       "complexity": {
