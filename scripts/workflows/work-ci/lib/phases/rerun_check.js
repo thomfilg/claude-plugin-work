@@ -82,9 +82,21 @@ function validate(ctx) {
     }
   }
   if (errors.length) return { ok: false, errors };
+  // Build an accurate summary that distinguishes pre-existing from cache-miss.
+  let preExisting = 0;
+  let cacheMiss = 0;
+  for (const f of status.failures) {
+    const t = byName[f.name];
+    if (t && t.category === 'pre-existing') preExisting += 1;
+    else if (t && t.category === 'cache-miss') cacheMiss += 1;
+  }
+  const parts = [];
+  if (preExisting > 0) parts.push(`${preExisting} pre-existing documented`);
+  if (cacheMiss > 0) parts.push(`${cacheMiss} cache-miss rerun(s) recorded`);
+  parts.push('rest green');
   return {
     ok: true,
-    summary: `${status.failures.length} pre-existing documented, rest green`,
+    summary: parts.join(', '),
   };
 }
 
