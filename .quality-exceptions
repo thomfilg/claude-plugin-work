@@ -248,3 +248,12 @@ scripts/workflows/work-code-checker/lib/kind-checks/kind-registry.js
 scripts/workflows/work-pr-reviewer/lib/kind-checks/kind-registry.js
 scripts/workflows/work-qa-feature-tester/lib/kind-checks/kind-registry.js
 scripts/workflows/work-task-review/lib/kind-checks/kind-registry.js
+
+# Cognitive-complexity additions (Biome-detected; existing offenders, burn down separately)
+scripts/workflows/check/lib/severity-detection.js
+scripts/workflows/follow-up/lib/steps/push-retry.js
+scripts/workflows/work-pr-reviewer/lib/kind-checks/devops.js
+scripts/workflows/work-pr-reviewer/lib/kind-checks/frontend.js
+scripts/workflows/work-spec/lib/component-shape.js
+scripts/workflows/work/engine/unstick-complete.js
+scripts/workflows/work/lib/step-enrichments/complete.js

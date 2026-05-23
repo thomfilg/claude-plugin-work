@@ -56,26 +56,31 @@ function parseArgs(argv) {
   return opts;
 }
 
+function readDirSafe(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function processEntry(ent, dir, stack, out) {
+  if (ent.name.startsWith('.')) return;
+  const full = path.join(dir, ent.name);
+  if (ent.isDirectory()) {
+    if (!SKIP_DIRS.has(ent.name)) stack.push(full);
+  } else if (ent.isFile() && ent.name.endsWith('.js')) {
+    out.push(full);
+  }
+}
+
 function walkJsFiles(root) {
   const out = [];
   const stack = [root];
   while (stack.length > 0) {
     const dir = stack.pop();
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const ent of entries) {
-      if (ent.name.startsWith('.')) continue;
-      const full = path.join(dir, ent.name);
-      if (ent.isDirectory()) {
-        if (SKIP_DIRS.has(ent.name)) continue;
-        stack.push(full);
-      } else if (ent.isFile() && ent.name.endsWith('.js')) {
-        out.push(full);
-      }
+    for (const ent of readDirSafe(dir)) {
+      processEntry(ent, dir, stack, out);
     }
   }
   return out;
@@ -103,11 +108,10 @@ function expandPaths(paths, repoRoot) {
 function changedFiles(repoRoot) {
   const tryRefs = ['origin/main...HEAD', 'HEAD~1'];
   for (const ref of tryRefs) {
-    const res = spawnSync(
-      'git',
-      ['diff', '--name-only', '--diff-filter=ACMR', ref],
-      { cwd: repoRoot, encoding: 'utf8' }
-    );
+    const res = spawnSync('git', ['diff', '--name-only', '--diff-filter=ACMR', ref], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
     if (res.status === 0) {
       return res.stdout
         .split('\n')
