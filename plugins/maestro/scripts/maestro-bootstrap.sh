@@ -129,4 +129,6 @@ done
 
 echo
 echo "Active sessions:"
-tmux list-sessions 2>/dev/null | grep -E '^GH-[A-Z0-9-]+-work:' || echo "  (none)"
+# Use the same pattern maestro-conduct.sh's SESSION_PATTERN defaults to so the
+# listing only shows sessions the conductor will actually discover and monitor.
+tmux list-sessions 2>/dev/null | grep -E '^GH-[0-9]+-work:' || echo "  (none)"
