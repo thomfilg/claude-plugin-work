@@ -184,10 +184,18 @@ function markerPresent(marker, v) {
   );
 }
 
-/** Is this marker eligible to be write-matched for the entry? */
-function markerEligible(entry, marker, v, dirPresent) {
+/**
+ * Is this marker eligible to be write-matched for the entry?
+ *
+ * Both files and directories match on marker presence (basename / relative
+ * token), NOT on the absolute path appearing in the command. Requiring the
+ * absolute path would let relative-path writes (e.g. `sed -i .claude/x`, which
+ * is how commands usually reference repo paths) bypass directory guards.
+ * Fail-closed: an unrelated same-named dir may occasionally match, but the user
+ * can unlock — that is safer than silently missing a write.
+ */
+function markerEligible(entry, marker, v) {
   if (!markerPresent(marker, v)) return false;
-  if (!entry.isFile && !dirPresent) return false;
   if (!entry.isFile && allRefsUnderAllowedPaths(v.expandedCollapsed, entry)) return false;
   return true;
 }
@@ -205,7 +213,7 @@ function entryWriteMatch(entry, v) {
   const dirPresent = v.expanded.includes(entry.dir) || v.expandedCollapsed.includes(entry.dir);
   if (absolutePathWrite(entry, v, dirPresent)) return 'absolute-path';
   for (const marker of entry.markers) {
-    if (!markerEligible(entry, marker, v, dirPresent)) continue;
+    if (!markerEligible(entry, marker, v)) continue;
     if (markerWriteMatch(marker, v)) return 'marker';
   }
   return null;

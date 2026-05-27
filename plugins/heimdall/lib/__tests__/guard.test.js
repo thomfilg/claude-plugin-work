@@ -172,6 +172,11 @@ describe('evaluate: bash', () => {
     const r = run(`cp /tmp/evil ${path.join(baseDir, '.claude', 'config')} && echo done`);
     assert.equal(r.exitCode, 2);
   });
+
+  it('blocks a relative-path write to a protected directory (no absolute path present)', () => {
+    const r = run("sed -i 's/a/b/' .claude/settings.json");
+    assert.equal(r.exitCode, 2);
+  });
 });
 
 // ─── Task ─────────────────────────────────────────────────────────────────────
