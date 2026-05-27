@@ -8,11 +8,7 @@
 const os = require('node:os');
 const path = require('node:path');
 const { findProtectedPathRef, findProtectedTarget, resolvePathSafe } = require('./paths');
-const {
-  hasGenericWriteIntent,
-  isReadOnlyBashCommand,
-  bashTargetsProtectedTarget,
-} = require('./bash');
+const { isReadOnlyBashCommand, bashTargetsProtectedTarget } = require('./bash');
 const { isReadOnlyTaskPrompt } = require('./task');
 const { findUnlockedPhrases, isEntryUnlocked } = require('./transcript');
 const { checkScriptBypass } = require('./scripts-bypass');
