@@ -76,7 +76,9 @@ function discoverStores(cwd) {
     if (seen.has(key)) return;
     if (!fs.existsSync(path.join(dir, MARKER))) return;
     seen.add(key);
-    out.push({ kind, dir, projectName });
+    // The shared store is cross-project, so it must not be stamped with the
+    // caller's projectName (mirrors the marker written by synapsys-init.js).
+    out.push({ kind, dir, projectName: kind === 'shared' ? null : projectName });
   };
 
   // local: store inside the cwd itself.
