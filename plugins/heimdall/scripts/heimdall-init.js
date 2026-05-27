@@ -15,6 +15,7 @@
  */
 
 const path = require('node:path');
+const { parseArgs } = require(path.join(__dirname, '..', 'lib', 'cli'));
 const {
   MARKER,
   SCHEMA_VERSION,
@@ -24,28 +25,20 @@ const {
   writeConfig,
 } = require(path.join(__dirname, '..', 'lib', 'lock-store'));
 
-function parseArgs(argv) {
-  const out = { kind: 'local', cwd: process.cwd() };
-  for (const a of argv.slice(2)) {
-    const m = a.match(/^--([a-z]+)=(.+)$/);
-    if (m) out[m[1]] = m[2];
-  }
-  return out;
-}
-
 const args = parseArgs(process.argv);
+const kind = args.kind || 'local';
 const projectName = getProjectName(args.cwd);
-const target = candidateStores(args.cwd, projectName).find((c) => c.kind === args.kind);
+const target = candidateStores(args.cwd, projectName).find((c) => c.kind === kind);
 
 if (!target) {
-  console.error(`unknown kind: ${args.kind} (use local|worktree|global)`);
+  console.error(`unknown kind: ${kind} (use local|worktree|global)`);
   process.exit(1);
 }
 
 const existing = readConfig(target.dir);
 const cfg = {
   schemaVersion: SCHEMA_VERSION,
-  kind: args.kind,
+  kind,
   projectName,
   createdAt: existing?.createdAt || new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -55,5 +48,5 @@ writeConfig(target.dir, cfg);
 
 console.log(
   `initialized heimdall store at ${path.join(target.dir, MARKER)} ` +
-    `(kind=${args.kind}, project=${projectName}, locks=${cfg.locks.length})`
+    `(kind=${kind}, project=${projectName}, locks=${cfg.locks.length})`
 );

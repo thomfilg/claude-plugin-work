@@ -25,6 +25,16 @@ async function readStdin() {
   return input;
 }
 
+/** Merge lock blocks from every active store at cwd; '' when none apply. */
+function collectLocks(cwd) {
+  const locks = [];
+  for (const store of discoverStores(cwd)) {
+    const cfg = readConfig(store.dir);
+    if (cfg && Array.isArray(cfg.locks)) locks.push(...cfg.locks);
+  }
+  return locks;
+}
+
 async function main() {
   const raw = await readStdin();
 
@@ -37,26 +47,14 @@ async function main() {
   }
 
   const cwd = hookData.cwd || process.cwd();
-
-  // Gather lock blocks from every active store.
-  const stores = discoverStores(cwd);
-  if (stores.length === 0) process.exit(0);
-
-  const baseDir = getRepoRoot(cwd);
-  const locks = [];
-  for (const store of stores) {
-    const cfg = readConfig(store.dir);
-    if (cfg && Array.isArray(cfg.locks)) locks.push(...cfg.locks);
-  }
+  const locks = collectLocks(cwd);
   if (locks.length === 0) process.exit(0);
-
-  const entries = buildEntries(locks, baseDir);
 
   const result = evaluate({
     toolName: hookData.tool_name || '',
     toolInput: hookData.tool_input || {},
     transcriptPath: hookData.transcript_path || hookData.transcriptPath || '',
-    entries,
+    entries: buildEntries(locks, getRepoRoot(cwd)),
   });
 
   if (result.exitCode === 2) {

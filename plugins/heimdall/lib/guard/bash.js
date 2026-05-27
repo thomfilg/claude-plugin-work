@@ -172,25 +172,37 @@ function markerWriteMatch(entry, marker, v) {
   return false;
 }
 
-function entryWriteMatch(entry, v) {
-  const dirPresent = v.expanded.includes(entry.dir) || v.expandedCollapsed.includes(entry.dir);
-  if (
+function markerPresent(marker, v) {
+  return (
+    v.command.includes(marker) ||
+    v.expanded.includes(marker) ||
+    v.collapsed.includes(marker) ||
+    v.expandedCollapsed.includes(marker)
+  );
+}
+
+/** Is this marker eligible to be write-matched for the entry? */
+function markerEligible(entry, marker, v, dirPresent) {
+  if (!markerPresent(marker, v)) return false;
+  if (!entry.isFile && !dirPresent) return false;
+  if (!entry.isFile && allRefsUnderAllowedPaths(v.expandedCollapsed, entry)) return false;
+  return true;
+}
+
+function absolutePathWrite(entry, v, dirPresent) {
+  return (
     dirPresent &&
     hasGenericWriteIntent(v.collapsed) &&
     !isDirectionSensitiveRead(entry._cmd, v.expanded, entry.dir) &&
     !allRefsUnderAllowedPaths(v.expandedCollapsed, entry)
-  ) {
-    return 'absolute-path';
-  }
+  );
+}
+
+function entryWriteMatch(entry, v) {
+  const dirPresent = v.expanded.includes(entry.dir) || v.expandedCollapsed.includes(entry.dir);
+  if (absolutePathWrite(entry, v, dirPresent)) return 'absolute-path';
   for (const marker of entry.markers) {
-    const present =
-      v.command.includes(marker) ||
-      v.expanded.includes(marker) ||
-      v.collapsed.includes(marker) ||
-      v.expandedCollapsed.includes(marker);
-    if (!present) continue;
-    if (!entry.isFile && !dirPresent) continue;
-    if (!entry.isFile && allRefsUnderAllowedPaths(v.expandedCollapsed, entry)) continue;
+    if (!markerEligible(entry, marker, v, dirPresent)) continue;
     if (markerWriteMatch(entry, marker, v)) return 'marker';
   }
   return null;

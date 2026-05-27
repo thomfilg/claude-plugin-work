@@ -26,19 +26,7 @@ const { getRepoRoot, discoverStores, readConfig } = require(
   path.join(__dirname, '..', 'lib', 'lock-store')
 );
 const { buildEntries } = require(path.join(__dirname, '..', 'lib', 'guard'));
-
-function parseArgs(argv) {
-  const out = { kind: 'local', cwd: process.cwd(), json: false };
-  for (const a of argv.slice(2)) {
-    if (a === '--json') {
-      out.json = true;
-      continue;
-    }
-    const m = a.match(/^--([a-z]+)=(.+)$/);
-    if (m) out[m[1]] = m[2];
-  }
-  return out;
-}
+const { parseArgs } = require(path.join(__dirname, '..', 'lib', 'cli'));
 
 function resolveTarget(target, repoRoot) {
   if (target.anchor === 'home') {
@@ -92,6 +80,7 @@ function scan(args) {
 }
 
 const args = parseArgs(process.argv);
+if (!args.kind) args.kind = 'local';
 const suggestions = scan(args);
 
 if (args.json) {

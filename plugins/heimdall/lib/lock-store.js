@@ -25,6 +25,12 @@ const MARKER = '.heimdall.json';
 const FOLDER = 'heimdall';
 const SCHEMA_VERSION = 1;
 
+// jscpd:ignore-start
+// The store-discovery primitives below intentionally mirror synapsys's
+// memory-store.js: heimdall reuses the same local/worktree/global store model
+// on purpose, but must stay a self-contained plugin (it is installed
+// independently and cannot require synapsys at runtime). The duplication is
+// therefore deliberate and is excluded from the duplicate-blocks gate.
 function safeExec(cmd, cwd) {
   try {
     return execSync(cmd, {
@@ -98,6 +104,7 @@ function discoverStores(cwd) {
 
   return out;
 }
+// jscpd:ignore-end
 
 function readConfig(storeDir) {
   try {

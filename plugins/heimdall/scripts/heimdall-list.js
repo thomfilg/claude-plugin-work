@@ -14,20 +14,8 @@ const path = require('node:path');
 const { discoverStores, readConfig, getRepoRoot } = require(
   path.join(__dirname, '..', 'lib', 'lock-store')
 );
+const { parseArgs } = require(path.join(__dirname, '..', 'lib', 'cli'));
 const { buildEntries } = require(path.join(__dirname, '..', 'lib', 'guard'));
-
-function parseArgs(argv) {
-  const out = { cwd: process.cwd(), json: false };
-  for (const a of argv.slice(2)) {
-    if (a === '--json') {
-      out.json = true;
-      continue;
-    }
-    const m = a.match(/^--([a-z]+)=(.+)$/);
-    if (m) out[m[1]] = m[2];
-  }
-  return out;
-}
 
 const args = parseArgs(process.argv);
 const stores = discoverStores(args.cwd);
