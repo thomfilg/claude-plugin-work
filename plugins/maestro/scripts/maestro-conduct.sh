@@ -15,37 +15,12 @@ mkdir -p "$STATE_DIR"
 WORKTREES_BASE="${WORKTREES_BASE:-$HOME/worktrees}"
 REPO_NAME="${REPO_NAME:-claude-plugin-work}"
 
-# Derive the session-name prefix from the ticket provider (ticket-provider.js)
-# instead of hardcoding "GH". Fail-open: any node/module failure, an empty
-# projectKey (github / unconfigured), or a value that fails the strict
-# ^[A-Z][A-Z0-9]*$ validation all fall back to "GH" — never an empty prefix.
-# Sets the global PREFIX. Always exits 0 (never hard-errors the conductor).
-resolve_prefix() {
-  local script_dir provider_js raw
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  provider_js="$script_dir/../../work/scripts/workflows/lib/ticket-provider.js"
-
-  # Shell out to node to read the provider's projectKey, mirroring
-  # config.js safeTicketId (getProviderConfig({ skipPrompt: true })). Any
-  # failure is swallowed (2>/dev/null) so the conductor never hard-errors.
-  raw="$(node -e '
-    try {
-      const tp = require(process.argv[1]);
-      const cfg = tp.getProviderConfig({ skipPrompt: true });
-      process.stdout.write((cfg && cfg.projectKey) ? String(cfg.projectKey) : "");
-    } catch (_) {
-      process.stdout.write("");
-    }
-  ' "$provider_js" 2>/dev/null)" || raw=""
-
-  # Validate: strict uppercase key only; anything else (empty, github,
-  # unconfigured, malformed/injected) falls back to GH.
-  if [[ "$raw" =~ ^[A-Z][A-Z0-9]*$ ]]; then
-    PREFIX="$raw"
-  else
-    PREFIX="GH"
-  fi
-}
+# Provider-derived session-name prefix. resolve_prefix() (sets global PREFIX,
+# fail-open to "GH") is shared with maestro-bootstrap.sh via lib/resolve-prefix.sh
+# so the conductor and bootstrap can never drift to different prefixes.
+_MAESTRO_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/resolve-prefix.sh
+. "$_MAESTRO_SCRIPT_DIR/lib/resolve-prefix.sh"
 
 resolve_prefix
 # Match maestro-bootstrap.sh so auto-restart uses the same binary and skill the
