@@ -107,7 +107,10 @@ function isDirectionSensitiveRead(command, expanded, marker) {
   expanded = expanded.replace(/\s*\n+\s*/g, ' ');
   if (!/\b(?:cp|mv|rsync|ln|install)\b/i.test(command)) return false;
   if (/\b(?:find\s+.*-exec|xargs|sh\s+-c|bash\s+-c|eval)\b/i.test(command)) return false;
-  if (/\|/.test(command) || /["']/.test(command)) return false;
+  // Any shell separator/operator (| || & && ;) means the "last arg is the
+  // destination" heuristic is unreliable — fail closed (not a pure read) so the
+  // write-detection patterns still get a chance to match the protected path.
+  if (/[|&;]/.test(command) || /["']/.test(command)) return false;
   if (/\s-t\s|--target-directory/.test(command)) return false;
   const args = expanded.trim().split(/\s+/);
   const lastArg = args[args.length - 1];

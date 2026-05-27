@@ -167,6 +167,11 @@ describe('evaluate: bash', () => {
     const r = run(`echo hi > ${path.join(baseDir, '.claude', 'x.json')}`, transcriptUnlocked);
     assert.equal(r.exitCode, 0);
   });
+
+  it('blocks a cp into a protected dir chained with && (no direction-sensitive bypass)', () => {
+    const r = run(`cp /tmp/evil ${path.join(baseDir, '.claude', 'config')} && echo done`);
+    assert.equal(r.exitCode, 2);
+  });
 });
 
 // ─── Task ─────────────────────────────────────────────────────────────────────
