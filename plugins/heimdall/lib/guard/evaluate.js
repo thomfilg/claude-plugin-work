@@ -13,7 +13,9 @@ const { isReadOnlyTaskPrompt } = require('./task');
 const { findUnlockedPhrases, isEntryUnlocked } = require('./transcript');
 const { checkScriptBypass } = require('./scripts-bypass');
 
-const ALLOW = { exitCode: 0, message: '' };
+// Frozen: returned by reference from every allow-path and exported, so freezing
+// prevents a consumer from silently corrupting all future evaluations.
+const ALLOW = Object.freeze({ exitCode: 0, message: '' });
 
 function blockMessage(reason, entry, matchContext) {
   // Only the USER typing the phrase unlocks (see transcript.js): tool output —
