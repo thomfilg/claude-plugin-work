@@ -5,13 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SKILL_PATH = path.join(
-  __dirname,
-  '..',
-  'skills',
-  'crystallize',
-  'SKILL.md'
-);
+const SKILL_PATH = path.join(__dirname, '..', 'skills', 'crystallize', 'SKILL.md');
 
 function readSkill() {
   return fs.readFileSync(SKILL_PATH, 'utf8');
@@ -20,7 +14,7 @@ function readSkill() {
 test('SKILL.md no longer hardcodes the default events line', () => {
   const skill = readSkill();
   assert.ok(
-    !skill.includes('Every memory uses events: UserPromptSubmit,PreToolUse'),
+    !skill.includes('Every memory uses `events: UserPromptSubmit,PreToolUse`'),
     'SKILL.md must not contain the hardcoded default-events phrase'
   );
 });
