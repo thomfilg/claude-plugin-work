@@ -11,6 +11,7 @@ const { spawn } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const { spawnHook } = require('./_helpers/run-hook');
 
 const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'enforce-step-workflow.js');
 const getConfig = require(path.join(__dirname, '..', 'get-config'));
@@ -32,32 +33,21 @@ let TASKS_DIR = path.join(TASKS_BASE, TEST_TICKET);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// This test suite intentionally writes per-test TEST-ESW-* ticket dirs UNDER the
+// real `TASKS_BASE` (resolved at module load above), so we preserve TASKS_BASE
+// from the parent env via `preserveExtra`. Other workflow-config vars are
+// scrubbed by the shared helper to prevent silent leaks from `.envrc`.
 function runHook(hookData, hookType = 'PreToolUse', env = {}) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('node', [HOOK_PATH], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        CLAUDE_HOOK_TYPE: hookType,
-        ENFORCE_HOOK_TICKET_ID: TEST_TICKET,
-        ...env,
-      },
-    });
-    let stdout = '';
-    let stderr = '';
-    proc.stdout.on('data', (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on('data', (d) => {
-      stderr += d.toString();
-    });
-    proc.on('close', (code) => {
-      resolve({ code, stdout, stderr });
-    });
-    proc.on('error', reject);
-    proc.stdin.write(JSON.stringify(hookData));
-    proc.stdin.end();
-  });
+  return spawnHook(
+    HOOK_PATH,
+    hookData,
+    {
+      CLAUDE_HOOK_TYPE: hookType,
+      ENFORCE_HOOK_TICKET_ID: TEST_TICKET,
+      ...env,
+    },
+    { preserveExtra: ['TASKS_BASE', 'WORKTREES_BASE', 'REPO_NAME', 'TICKET_PROVIDER'] }
+  );
 }
 
 function writeWorkState(stepStatus, status = 'in_progress') {
@@ -3482,33 +3472,20 @@ describe('enforce-step-workflow', () => {
     const COMMIT_TICKET = `COMMITV-${process.pid}`;
 
     function runHookInRepo(hookData, hookType = 'PreToolUse', env = {}) {
-      return new Promise((resolve, reject) => {
-        const proc = spawn('node', [HOOK_PATH], {
-          stdio: ['pipe', 'pipe', 'pipe'],
+      return spawnHook(
+        HOOK_PATH,
+        hookData,
+        {
+          CLAUDE_HOOK_TYPE: hookType,
+          ENFORCE_HOOK_TICKET_ID: COMMIT_TICKET,
+          TASKS_BASE: tmpTasksBase,
+          ...env,
+        },
+        {
           cwd: gitRepoDir,
-          env: {
-            ...process.env,
-            CLAUDE_HOOK_TYPE: hookType,
-            ENFORCE_HOOK_TICKET_ID: COMMIT_TICKET,
-            TASKS_BASE: tmpTasksBase,
-            ...env,
-          },
-        });
-        let stdout = '';
-        let stderr = '';
-        proc.stdout.on('data', (d) => {
-          stdout += d.toString();
-        });
-        proc.stderr.on('data', (d) => {
-          stderr += d.toString();
-        });
-        proc.on('close', (code) => {
-          resolve({ code, stdout, stderr });
-        });
-        proc.on('error', reject);
-        proc.stdin.write(JSON.stringify(hookData));
-        proc.stdin.end();
-      });
+          preserveExtra: ['WORKTREES_BASE', 'REPO_NAME', 'TICKET_PROVIDER'],
+        }
+      );
     }
 
     function writeCommitWorkState(stepStatus, status = 'in_progress') {
