@@ -169,9 +169,10 @@ Read `/tmp/synapsys-lint-$$.json` and present `warnings` + `errors` to the user 
 - **Fix and retry** — abort the write; the agent edits the offending memories and re-derives the manifest.
 - **Cancel** — abort entirely; no writes.
 
-Only when the user selects **Proceed despite warnings** (and `errors.length === 0`) run the full pipeline:
+Only when the user selects **Proceed despite warnings** (and `errors.length === 0`) run the full pipeline. The `set -o pipefail` is mandatory — without it the lint script's non-zero exit is masked by `jq`'s success and the writer runs on bad data:
 
 ```bash
+set -o pipefail
 cat /tmp/synapsys-manifest-$$.json \
   | node "${CLAUDE_PLUGIN_ROOT}/scripts/synapsys-crystallize-lint.js" \
   | jq '.manifest' \
@@ -179,7 +180,7 @@ cat /tmp/synapsys-manifest-$$.json \
 rm /tmp/synapsys-manifest-$$.json /tmp/synapsys-lint-$$.json
 ```
 
-If `synapsys-crystallize-lint.js` exits non-zero, the writer is never reached. The writer script writes each memory, skips existing names (use `--force` to overwrite), and prints a JSON summary.
+If `synapsys-crystallize-lint.js` exits non-zero (under `set -o pipefail`), the pipeline exits before the writer can persist anything. The writer script writes each memory, skips existing names (use `--force` to overwrite), and prints a JSON summary.
 
 ### 9. Smoke-test a sample
 
