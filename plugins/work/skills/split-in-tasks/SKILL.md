@@ -256,18 +256,17 @@ After saving, output:
 
 After tasks are decomposed (Step 4) and before the quality review pass (Step 5), the splitter runs three static-analysis passes against the proposed tasks. Each pass that detects a problem emits a single-line `SPLIT-WARNING` token into `tasks.md` (or the splitter's stderr stream) so the operator can decide how to resolve it before committing the split.
 
-Warning line shape (all three passes share this template):
+Warning line shape (all three passes share this Markdown blockquote template, rendered by `lib/emit-warnings.js`):
 
 ```
-SPLIT-WARNING [<pass-id>] Task <N>: <one-line problem summary> — resolve: [keep | merge-with-task-<M> | edit-scope | suppress]
+> ⚠️ SPLIT-WARNING: [Pass <X>] <file>: <one-line problem summary> — hint: <suggested-resolution>
 ```
 
-The operator-resolution choices map 1:1 to the bracketed options:
+The `<suggested-resolution>` text is pass-specific (see each pass below) and names the most likely operator action. Common hint phrases:
 
-- `keep` — accept the warning, leave the split as-is (use when the analysis is a false positive)
-- `merge-with-task-<M>` — combine this task into Task M (use when Pass A/B/C detected a deadlock or scope conflict)
-- `edit-scope` — adjust the task's `### Files in scope` / `### Files explicitly out of scope` and re-run the pass
-- `suppress` — record the warning as acknowledged-but-deferred (use only when the operator has a written rationale)
+- `merge-with-prior-task or convert-to-verification-checkpoint` — Pass A typically suggests merging the empty-RED task into its predecessor or downgrading it to a checkpoint
+- coordinate-with-sibling ticket IDs (e.g. `coordinate with ECHO-5355`) — Pass B includes sibling ticket IDs harvested from `git log`
+- `(a) add a Task 0 / (b) accept blast-radius takeover / (c) confirm with brief author` — Pass C lists the three remediation options in the hint
 
 ### Pass A — Chronological Simulator
 
@@ -276,7 +275,7 @@ The operator-resolution choices map 1:1 to the bracketed options:
 **Warning template:**
 
 ```
-SPLIT-WARNING [pass-a] Task <N>: empty-RED chronological collision with Task <M> on <shared-file> — resolve: [keep | merge-with-task-<M> | edit-scope | suppress]
+> ⚠️ SPLIT-WARNING: [Pass A] <shared-file>: Task <N> RED already holds after Task <M> GREEN — hint: merge-with-prior-task or convert-to-verification-checkpoint
 ```
 
 **Limitations:**
@@ -292,7 +291,7 @@ SPLIT-WARNING [pass-a] Task <N>: empty-RED chronological collision with Task <M>
 **Warning template:**
 
 ```
-SPLIT-WARNING [pass-b] Task <N>: test command references out-of-scope file <path> owned by Task <M> — resolve: [keep | merge-with-task-<M> | edit-scope | suppress]
+> ⚠️ SPLIT-WARNING: [Pass B] <path>: contract divergence with out-of-scope file (consumer/producer shapes differ) — hint: coordinate with <SIBLING-TICKET-ID>
 ```
 
 **Limitations:**
@@ -308,7 +307,7 @@ SPLIT-WARNING [pass-b] Task <N>: test command references out-of-scope file <path
 **Warning template:**
 
 ```
-SPLIT-WARNING [pass-c] Task <N>: pre-existing lint violation in <path> outside ticket scope — resolve: [keep | merge-with-task-<M> | edit-scope | suppress]
+> ⚠️ SPLIT-WARNING: [Pass C] <path>:<line>: pre-existing lint violation (<rule>) outside ticket scope — hint: (a) add a Task 0 / (b) accept blast-radius takeover / (c) confirm with brief author
 ```
 
 **Limitations:**
