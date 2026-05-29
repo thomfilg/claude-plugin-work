@@ -519,17 +519,18 @@ function isTerminalCompleteBypass(cmd, ticketId) {
   trace('tokens', { count: tokens.length, tokens });
 
   // Expect: node <path/work-state.js> complete <ticket>
-  // Allow optional inline env-assignments before the script path, mirroring
-  // how getNodeInvocations() tolerates them. Wrappers (timeout/nice/env) are
-  // rejected — the bypass is for the orchestrator's direct call only.
-  if (tokens.length < 4) {
-    trace('reject: too few tokens');
+  // Env-assignment prefixes (FOO=bar node ...) are DISALLOWED entirely — they
+  // would let an attacker inject `NODE_OPTIONS=--require=/evil/module` (or
+  // NODE_PATH, LD_PRELOAD, DYLD_*, NODE_TLS_REJECT_UNAUTHORIZED, etc.) which
+  // Node.js honors before executing the legitimate script. The bypass is for
+  // the orchestrator's strict, direct call only — no wrappers, no env prefix.
+  if (tokens.length !== 4) {
+    trace('reject: token count not 4');
     return false;
   }
 
   let i = 0;
-  while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i++;
-  if (i >= tokens.length || !/^(?:node|nodejs)$/.test(tokens[i])) {
+  if (!/^(?:node|nodejs)$/.test(tokens[i])) {
     trace('reject: no node token', { i, token: tokens[i] });
     return false;
   }

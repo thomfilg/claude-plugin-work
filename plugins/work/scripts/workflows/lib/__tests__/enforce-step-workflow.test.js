@@ -2229,6 +2229,38 @@ describe('enforce-step-workflow', () => {
       assert.ok(stderr.includes('BLOCKED'));
     });
 
+    it('blocks work-state.js complete with NODE_OPTIONS env prefix (GH-450 security)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      const { code, stderr } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: {
+            command: `NODE_OPTIONS=--require=/evil/module node ${WORK_STATE_PATH} complete ${TEST_TICKET}`,
+          },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 2, 'NODE_OPTIONS env prefix should be blocked at terminal step');
+      assert.ok(stderr.includes('BLOCKED'));
+    });
+
+    it('blocks work-state.js complete with arbitrary env prefix (GH-450 security)', async () => {
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      const { code, stderr } = await runHook(
+        {
+          tool_name: 'Bash',
+          tool_input: {
+            command: `FOO=bar node ${WORK_STATE_PATH} complete ${TEST_TICKET}`,
+          },
+        },
+        'PreToolUse'
+      );
+      assert.equal(code, 2, 'any env prefix should be blocked at terminal step');
+      assert.ok(stderr.includes('BLOCKED'));
+    });
+
     it('blocks work-state.js init-subtask command', async () => {
       writeWorkState(makeStepStatus('implement', WORK_STEPS));
 
