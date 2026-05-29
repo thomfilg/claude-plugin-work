@@ -177,7 +177,7 @@ function simulate(input) {
   for (let i = 0; i < tasks.length; i += 1) {
     const task = tasks[i];
     if (!task) continue;
-    const priorId = i === 0 ? 0 : tasks[i - 1].id;
+    const priorId = i === 0 ? 0 : (tasks[i - 1]?.id ?? 0);
     const projected = snapshots.get(priorId) || new Set();
     const w = detectEmptyRed(task, projected, priorId);
     if (w) warnings.push(w);
