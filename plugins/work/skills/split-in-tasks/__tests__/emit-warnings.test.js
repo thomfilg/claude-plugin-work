@@ -8,7 +8,12 @@ describe('emit-warnings — formatWarnings', () => {
   it('renders a blockquote line starting with > ⚠️ SPLIT-WARNING: containing kind/file/message/hint', () => {
     const { formatWarnings } = require(MODULE_PATH);
     const out = formatWarnings([
-      { kind: 'A', file: 'surfaces/foo.ts', message: 'collision detected', hint: 'merge-with-prior-task' },
+      {
+        kind: 'A',
+        file: 'surfaces/foo.ts',
+        message: 'collision detected',
+        hint: 'merge-with-prior-task',
+      },
     ]);
     assert.ok(typeof out === 'string', 'output must be a string');
     const firstLine = out.split('\n')[0];
@@ -81,6 +86,30 @@ describe('emit-warnings — dedupe', () => {
   it('returns empty array on empty input', () => {
     const { dedupe } = require(MODULE_PATH);
     assert.deepEqual(dedupe([]), []);
+  });
+
+  it('iterative merge of A+B+C produces a single non-nested citation prefix', () => {
+    const { dedupe } = require(MODULE_PATH);
+    const result = dedupe([
+      { file: 'x', kind: 'A', message: 'm1', hint: 'h1' },
+      { file: 'x', kind: 'B', message: 'm2', hint: 'h2' },
+      { file: 'x', kind: 'C', message: 'm3', hint: 'h3' },
+    ]);
+    assert.equal(result.length, 1, 'must collapse all same-file warnings into one');
+    const merged = result[0];
+    assert.equal(merged.kind, 'A+B+C', 'kind must be sorted union joined with +');
+    // Citation must appear exactly once — no inner "cites Pass" embedded in the hint.
+    const citationCount = (merged.hint.match(/cites Pass/g) || []).length;
+    assert.equal(
+      citationCount,
+      1,
+      `hint must contain exactly one "cites Pass" prefix, got: ${merged.hint}`
+    );
+    assert.equal(
+      merged.hint,
+      'cites Pass A+B+C: h1 | h2 | h3',
+      'hint must list raw hints once, prefixed by a single citation'
+    );
   });
 });
 

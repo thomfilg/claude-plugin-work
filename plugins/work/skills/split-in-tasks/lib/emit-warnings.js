@@ -79,11 +79,24 @@ function splitKinds(kind) {
  * @param {object} b — incoming warning to fold in
  * @returns {object}
  */
+/**
+ * Strip a leading `cites Pass <kinds>: ` citation prefix from a hint, if present.
+ * Iterative merges via `dedupe` re-prefix every step, so we must remove the
+ * previous citation before re-applying the union citation — otherwise the inner
+ * citation gets embedded inside the outer one.
+ *
+ * @param {string} hint
+ * @returns {string}
+ */
+function stripCitationPrefix(hint) {
+  return String(hint).replace(/^cites Pass [^:]+:\s*/, '');
+}
+
 function mergeWarnings(a, b) {
   const kinds = new Set([...splitKinds(a.kind), ...splitKinds(b.kind)]);
   const kind = Array.from(kinds).sort().join('+');
   const messages = [a.message, b.message].filter(Boolean);
-  const hints = [a.hint, b.hint].filter(Boolean);
+  const hints = [a.hint, b.hint].filter(Boolean).map(stripCitationPrefix).filter(Boolean);
   const citation = `cites Pass ${kind}`;
   return {
     file: a.file,
