@@ -91,7 +91,6 @@ function writeWorkState(stepStatus, status = 'in_progress') {
 }
 
 function writeWorkflowState(stepStatus, workflow = 'work-pr', status = 'in_progress') {
-  if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
   const state = {
     workflow,
     instanceId: TEST_TICKET,
@@ -103,12 +102,11 @@ function writeWorkflowState(stepStatus, workflow = 'work-pr', status = 'in_progr
     lastUpdate: new Date().toISOString(),
   };
   const stateFile = `.${workflow}.workflow-state.json`;
-  fs.writeFileSync(path.join(TASKS_DIR, stateFile), JSON.stringify(state, null, 2));
+  atomicWriteJson(path.join(TASKS_DIR, stateFile), state);
 }
 
 function writeEvidence(evidence, evidenceFile = '.step-evidence.json') {
-  if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(TASKS_DIR, evidenceFile), JSON.stringify(evidence, null, 2));
+  atomicWriteJson(path.join(TASKS_DIR, evidenceFile), evidence);
 }
 
 function readEvidence(evidenceFile = '.step-evidence.json') {
