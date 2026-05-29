@@ -2096,6 +2096,45 @@ describe('enforce-step-workflow', () => {
       );
     });
 
+    it('allows direct work-state.js complete with quoted path containing spaces (GH-450)', async () => {
+      // Regression: cursor[bot] flagged that quote-stripping BEFORE whitespace
+      // split breaks paths like `/Users/John Smith/.../work-state.js` — the
+      // internal space caused split() to produce >4 tokens and the strict
+      // 4-token bypass check failed. The quote-aware tokenizer now keeps
+      // quoted runs as a single token even when they contain whitespace.
+      writeWorkState(makeStepStatus('complete', WORK_STEPS));
+
+      // Create a trusted-dir subdirectory whose NAME contains a space, then
+      // drop a placeholder work-state.js inside it. The trusted-path check
+      // walks parents, so any descendant of WORK_DIR is trusted.
+      const SPACED_DIR = path.join(WORK_DIR, 'has space');
+      const SPACED_PATH = path.join(SPACED_DIR, 'work-state.js');
+      fs.mkdirSync(SPACED_DIR, { recursive: true });
+      fs.writeFileSync(SPACED_PATH, '// placeholder for GH-450 regression test\n');
+      try {
+        const { code, stderr } = await runHook(
+          {
+            tool_name: 'Bash',
+            tool_input: { command: `node "${SPACED_PATH}" complete ${TEST_TICKET}` },
+          },
+          'PreToolUse',
+          { ENFORCE_HOOK_DEBUG: '1' }
+        );
+        assert.equal(
+          code,
+          0,
+          `quoted path with spaces should be tokenized as a single arg and allowed at terminal step. stderr: ${stderr}`
+        );
+        // Sanity: the bypass parser must NOT have rejected on token count.
+        assert.ok(
+          !/reject: token count not 4/.test(stderr),
+          `tokenizer should preserve quoted-with-spaces path as one token. stderr: ${stderr}`
+        );
+      } finally {
+        fs.rmSync(SPACED_DIR, { recursive: true, force: true });
+      }
+    });
+
     it('does not trigger complete bypass for untrusted path (GH-276 security)', async () => {
       // /tmp/work-state.js is not in TRUSTED_SCRIPT_DIRS, so the bypass won't fire.
       // Rule 3b also skips untrusted paths (they are handled by Vector 3).

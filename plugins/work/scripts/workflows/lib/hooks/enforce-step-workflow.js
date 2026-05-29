@@ -470,6 +470,64 @@ function getCurrentStep(state, steps) {
 }
 
 /**
+ * Quote-aware shell tokenizer for the strict bypass parser.
+ *
+ * Splits on whitespace EXCEPT within balanced ASCII single or double quotes,
+ * so paths containing spaces (e.g. `/Users/John Smith/...`) remain a single
+ * token. Surrounding quotes are stripped from each token before return.
+ *
+ * Rejects (returns null) on:
+ *   - Unbalanced quotes (open `"` or `'` with no matching close).
+ *   - Nested/mixed quotes within a token are simply treated literally — we do
+ *     not support shell-style escaping (`\"`, `$'..'`, etc.); the bypass is
+ *     for the orchestrator's strict, direct invocation only.
+ *
+ * @param {string} input
+ * @returns {string[] | null}
+ */
+function shellTokenize(input) {
+  const tokens = [];
+  let current = '';
+  let inToken = false;
+  let quote = null; // either '"' or "'" when inside a quoted run
+
+  for (let idx = 0; idx < input.length; idx++) {
+    const ch = input[idx];
+
+    if (quote) {
+      if (ch === quote) {
+        quote = null; // close quote — token continues (allows `a"b"c` style)
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      inToken = true;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      if (inToken) {
+        tokens.push(current);
+        current = '';
+        inToken = false;
+      }
+      continue;
+    }
+
+    current += ch;
+    inToken = true;
+  }
+
+  if (quote) return null; // unbalanced
+  if (inToken) tokens.push(current);
+  return tokens;
+}
+
+/**
  * Step-conditional bypass for `work-state.js complete` at the terminal step (GH-276).
  * Returns true ONLY when ALL conditions are met:
  *   1. Command is a strict `node <path>/work-state.js complete <ticketId>` invocation
@@ -503,19 +561,18 @@ function isTerminalCompleteBypass(cmd, ticketId) {
     return false;
   }
 
-  // Normalize by stripping balanced surrounding quote pairs from any token.
-  // This collapses both `node /abs/work-state.js ...` and
-  // `node "/abs/work-state.js" ...` into a single canonical form before we
-  // tokenize. Doing this BEFORE split avoids any per-token edge case where
-  // a leading-quote token (which starts with `"`, not `-`) could later trip
-  // an unrelated guard. We only strip ASCII " and ' — no shell-style
-  // backslash escapes are honored, matching the strict shape of the bypass.
-  const normalized = String(cmd)
-    .trim()
-    .replace(/"([^"]*)"/g, '$1')
-    .replace(/'([^']*)'/g, '$1');
-
-  const tokens = normalized.split(/\s+/);
+  // Quote-aware tokenizer: split on whitespace BUT treat quoted runs as one
+  // token. This is critical for paths containing spaces (e.g. macOS
+  // `/Users/John Smith/...`) — splitting after quote-stripping would break
+  // such paths into multiple tokens and fail the strict 4-token check.
+  // We honor only balanced ASCII " and ' pairs (no backslash escapes), which
+  // matches the strict shape of the bypass: orchestrator-issued commands.
+  // Unbalanced quotes return null → reject (caller treats as not-a-bypass).
+  const tokens = shellTokenize(String(cmd).trim());
+  if (tokens === null) {
+    trace('reject: unbalanced quotes');
+    return false;
+  }
   trace('tokens', { count: tokens.length, tokens });
 
   // Expect: node <path/work-state.js> complete <ticket>
