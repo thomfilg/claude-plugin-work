@@ -2068,7 +2068,8 @@ describe('enforce-step-workflow', () => {
           tool_name: 'Bash',
           tool_input: { command: `node ${WORK_STATE_PATH} complete ${TEST_TICKET}` },
         },
-        'PreToolUse'
+        'PreToolUse',
+        { ENFORCE_HOOK_DEBUG: '1' }
       );
       assert.equal(
         code,
@@ -2085,7 +2086,8 @@ describe('enforce-step-workflow', () => {
           tool_name: 'Bash',
           tool_input: { command: `node "${WORK_STATE_PATH}" complete ${TEST_TICKET}` },
         },
-        'PreToolUse'
+        'PreToolUse',
+        { ENFORCE_HOOK_DEBUG: '1' }
       );
       assert.equal(
         code,
