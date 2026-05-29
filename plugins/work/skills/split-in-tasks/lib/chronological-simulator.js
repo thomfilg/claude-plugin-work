@@ -118,14 +118,13 @@ function assertionAlreadyHolds(text, projected) {
 }
 
 /**
- * Run Pass A over a parsed task list.
+ * Build chronological snapshots by applying each task's GREEN deliverables in order.
  *
- * @param {{tasks: ParsedTask[], initialTree: string[]}} input
- * @returns {{warnings: Warning[], projectedTreeAfter: (n: number) => string[]}}
+ * @param {ParsedTask[]} tasks
+ * @param {string[]} initial
+ * @returns {Map<number, Set<string>>}
  */
-function simulate(input) {
-  const tasks = Array.isArray(input && input.tasks) ? input.tasks : [];
-  const initial = Array.isArray(input && input.initialTree) ? input.initialTree : [];
+function buildSnapshots(tasks, initial) {
   const snapshots = new Map();
   const current = new Set(initial);
   snapshots.set(0, new Set(current));
@@ -136,25 +135,52 @@ function simulate(input) {
     }
     snapshots.set(task.id, new Set(current));
   }
+  return snapshots;
+}
+
+/**
+ * Check a single task's RED assertions against the projected tree, returning
+ * the first empty-RED warning encountered (or null).
+ *
+ * @param {ParsedTask} task
+ * @param {Set<string>} projected
+ * @param {number|string} priorId
+ * @returns {Warning|null}
+ */
+function detectEmptyRed(task, projected, priorId) {
+  const reds = Array.isArray(task.redAssertions) ? task.redAssertions : [];
+  for (const redText of reds) {
+    if (!assertionAlreadyHolds(redText, projected)) continue;
+    const paths = extractPaths(redText);
+    return {
+      kind: 'A',
+      file: paths[0] || '',
+      message: `Task ${task.id} RED assertion already holds on the projected tree after Task ${priorId} — empty RED detected`,
+      hint: HINT_TEXT,
+    };
+  }
+  return null;
+}
+
+/**
+ * Run Pass A over a parsed task list.
+ *
+ * @param {{tasks: ParsedTask[], initialTree: string[]}} input
+ * @returns {{warnings: Warning[], projectedTreeAfter: (n: number) => string[]}}
+ */
+function simulate(input) {
+  const tasks = Array.isArray(input && input.tasks) ? input.tasks : [];
+  const initial = Array.isArray(input && input.initialTree) ? input.initialTree : [];
+  const snapshots = buildSnapshots(tasks, initial);
+
   const warnings = [];
   for (let i = 0; i < tasks.length; i += 1) {
     const task = tasks[i];
     if (!task) continue;
     const priorId = i === 0 ? 0 : tasks[i - 1].id;
     const projected = snapshots.get(priorId) || new Set();
-    const reds = Array.isArray(task.redAssertions) ? task.redAssertions : [];
-    for (const redText of reds) {
-      if (assertionAlreadyHolds(redText, projected)) {
-        const paths = extractPaths(redText);
-        warnings.push({
-          kind: 'A',
-          file: paths[0] || '',
-          message: `Task ${task.id} RED assertion already holds on the projected tree after Task ${priorId} — empty RED detected`,
-          hint: HINT_TEXT,
-        });
-        break;
-      }
-    }
+    const w = detectEmptyRed(task, projected, priorId);
+    if (w) warnings.push(w);
   }
   return {
     warnings,

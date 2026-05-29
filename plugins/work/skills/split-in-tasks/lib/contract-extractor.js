@@ -132,22 +132,28 @@ function parseExports(source) {
  * @param {number} offset
  * @returns {string}
  */
+function captureBracedBody(slice, braceIdx) {
+  let depth = 0;
+  for (let i = braceIdx; i < slice.length; i++) {
+    const ch = slice[i];
+    if (ch === '{') {
+      depth++;
+      continue;
+    }
+    if (ch !== '}') continue;
+    depth--;
+    if (depth === 0) return slice.slice(0, i + 1);
+  }
+  return slice;
+}
+
 function captureBody(source, offset) {
   const slice = source.slice(offset);
   // Find first `{` on the head line (within ~200 chars) to decide mode.
   const braceIdx = slice.indexOf('{');
   const newlineIdx = slice.indexOf('\n');
   if (braceIdx !== -1 && (newlineIdx === -1 || braceIdx < newlineIdx + 1)) {
-    let depth = 0;
-    for (let i = braceIdx; i < slice.length; i++) {
-      const ch = slice[i];
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        if (depth === 0) return slice.slice(0, i + 1);
-      }
-    }
-    return slice;
+    return captureBracedBody(slice, braceIdx);
   }
   // Statement-style: capture until next blank line.
   const blank = slice.indexOf('\n\n');

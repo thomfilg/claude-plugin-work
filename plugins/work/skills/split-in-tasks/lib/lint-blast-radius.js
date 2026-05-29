@@ -74,21 +74,31 @@ function readPackageJson(projectRoot) {
  * @param {unknown} report
  * @returns {Array<{file:string, line:number, ruleId:string}>}
  */
+function flattenEslintMessage(file, m) {
+  return {
+    file,
+    line: typeof m.line === 'number' ? m.line : 0,
+    ruleId: typeof m.ruleId === 'string' ? m.ruleId : '',
+  };
+}
+
+function flattenEslintFileEntry(fileEntry) {
+  if (!fileEntry || typeof fileEntry !== 'object') return [];
+  const file = typeof fileEntry.filePath === 'string' ? fileEntry.filePath : '';
+  const messages = Array.isArray(fileEntry.messages) ? fileEntry.messages : [];
+  const out = [];
+  for (const m of messages) {
+    if (!m || typeof m !== 'object') continue;
+    out.push(flattenEslintMessage(file, m));
+  }
+  return out;
+}
+
 function flattenEslintReport(report) {
   if (!Array.isArray(report)) return [];
   const out = [];
   for (const fileEntry of report) {
-    if (!fileEntry || typeof fileEntry !== 'object') continue;
-    const file = typeof fileEntry.filePath === 'string' ? fileEntry.filePath : '';
-    const messages = Array.isArray(fileEntry.messages) ? fileEntry.messages : [];
-    for (const m of messages) {
-      if (!m || typeof m !== 'object') continue;
-      out.push({
-        file,
-        line: typeof m.line === 'number' ? m.line : 0,
-        ruleId: typeof m.ruleId === 'string' ? m.ruleId : '',
-      });
-    }
+    out.push(...flattenEslintFileEntry(fileEntry));
   }
   return out;
 }
@@ -184,6 +194,32 @@ function isInScope(violationFile, filesInScope) {
  * @param {{projectRoot:string, lintCommand:string|null, filesInScope:Set<string>}} opts
  * @returns {{warnings:Array<object>}}
  */
+/**
+ * Resolve the effective lint command and its source.
+ * Returns { command, source } on success, or { warning } if the caller-supplied
+ * command is unsafe.
+ */
+function resolveEffectiveLintCommand(opts, projectRoot) {
+  if (opts && opts.lintCommand !== undefined && opts.lintCommand !== null) {
+    if (typeof opts.lintCommand === 'string' && !SHELL_METACHAR_RE.test(opts.lintCommand)) {
+      return { command: opts.lintCommand, source: 'caller' };
+    }
+    if (typeof opts.lintCommand === 'string') {
+      return {
+        warning: {
+          kind: 'C',
+          file: '',
+          message:
+            'lint pre-check skipped: lintCommand contains shell metacharacters; refusing to execute.',
+          hint: `Resolve via: ${OPTIONS_LINE}.`,
+        },
+      };
+    }
+  }
+  const pkg = readPackageJson(projectRoot);
+  return { command: resolveLintCommand(pkg), source: 'package.json' };
+}
+
 function scan(opts) {
   const { projectRoot } = opts || {};
   const filesInScope = (opts && opts.filesInScope) || new Set();
@@ -199,57 +235,47 @@ function scan(opts) {
     return { warnings };
   }
 
-  // Resolve the command: caller-supplied overrides package.json. An
-  // explicit null/undefined means "use static-parse fallback".
-  let effectiveCommand = null;
-  let commandSource = 'caller';
-  if (opts && opts.lintCommand !== undefined && opts.lintCommand !== null) {
-    if (typeof opts.lintCommand === 'string' && !SHELL_METACHAR_RE.test(opts.lintCommand)) {
-      effectiveCommand = opts.lintCommand;
-    } else if (typeof opts.lintCommand === 'string') {
-      // Unsafe caller-supplied string: refuse to execute.
-      warnings.push({
-        kind: 'C',
-        file: '',
-        message: 'lint pre-check skipped: lintCommand contains shell metacharacters; refusing to execute.',
-        hint: `Resolve via: ${OPTIONS_LINE}.`,
-      });
-      return { warnings };
-    }
-  } else {
-    const pkg = readPackageJson(projectRoot);
-    effectiveCommand = resolveLintCommand(pkg);
-    commandSource = 'package.json';
+  const resolved = resolveEffectiveLintCommand(opts, projectRoot);
+  if (resolved.warning) {
+    warnings.push(resolved.warning);
+    return { warnings };
   }
 
-  let violations = [];
-  let searchedPath = null;
-
-  if (effectiveCommand) {
-    const ran = runLintCommand(effectiveCommand, projectRoot);
-    if (!ran) {
-      warnings.push({
-        kind: 'C',
-        file: '',
-        message: `lint pre-check skipped: command failed or produced no parseable JSON (source: ${commandSource}).`,
-        hint: `Resolve via: ${OPTIONS_LINE}.`,
-      });
-      return { warnings };
-    }
-    violations = ran.violations;
-  } else {
-    // Static-parse fallback: no `lint` script in package.json.
-    const fallback = staticParseEslintOutput(projectRoot);
-    violations = fallback.violations;
-    searchedPath = fallback.searchedPath;
+  const collected = collectViolations(resolved, projectRoot);
+  if (collected.warning) {
+    warnings.push(collected.warning);
+    return { warnings };
   }
 
-  for (const v of violations) {
+  for (const v of collected.violations) {
     if (isInScope(v.file, filesInScope)) continue;
-    warnings.push(buildViolationWarning(v, searchedPath));
+    warnings.push(buildViolationWarning(v, collected.searchedPath));
   }
 
   return { warnings };
+}
+
+/**
+ * Collect lint violations from either a running command or the static-parse
+ * fallback. Returns { violations, searchedPath } or { warning } on failure.
+ */
+function collectViolations(resolved, projectRoot) {
+  if (resolved.command) {
+    const ran = runLintCommand(resolved.command, projectRoot);
+    if (!ran) {
+      return {
+        warning: {
+          kind: 'C',
+          file: '',
+          message: `lint pre-check skipped: command failed or produced no parseable JSON (source: ${resolved.source}).`,
+          hint: `Resolve via: ${OPTIONS_LINE}.`,
+        },
+      };
+    }
+    return { violations: ran.violations, searchedPath: null };
+  }
+  const fallback = staticParseEslintOutput(projectRoot);
+  return { violations: fallback.violations, searchedPath: fallback.searchedPath };
 }
 
 module.exports = {
