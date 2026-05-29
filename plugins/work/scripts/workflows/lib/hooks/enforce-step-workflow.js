@@ -482,66 +482,121 @@ function getCurrentStep(state, steps) {
  * @returns {boolean}
  */
 function isTerminalCompleteBypass(cmd, ticketId) {
-  // Reject shell operators and substitutions FIRST — cheapest fail-fast.
-  if (/[;&|$`<>(){}\n]/.test(cmd)) return false;
+  const DEBUG_BYPASS = process.env.ENFORCE_HOOK_DEBUG === '1';
+  const trace = (reason, extra) => {
+    if (DEBUG_BYPASS) {
+      try {
+        process.stderr.write(
+          `[isTerminalCompleteBypass] ${reason}` +
+            (extra ? ` | ${JSON.stringify(extra)}` : '') +
+            '\n'
+        );
+      } catch {
+        /* never throw from debug */
+      }
+    }
+  };
 
-  // Token-based parsing (more robust than a single big regex). This mirrors
-  // the same parser Rule 3b uses (getNodeInvocations / extractSubCommand), so
-  // the bypass and the block decision can never disagree on what the user typed.
-  // Previous all-in-one regex with `\S+[\\/]work-state\.js` was observed to
-  // not match on the GitHub Actions runner for unquoted paths even though the
-  // quoted equivalent matched — switching to token parsing eliminates that
-  // regex-engine difference.
-  const tokens = String(cmd).trim().split(/\s+/);
+  // Reject shell operators and substitutions FIRST — cheapest fail-fast.
+  if (/[;&|$`<>(){}\n]/.test(cmd)) {
+    trace('reject: shell metachars');
+    return false;
+  }
+
+  // Normalize by stripping balanced surrounding quote pairs from any token.
+  // This collapses both `node /abs/work-state.js ...` and
+  // `node "/abs/work-state.js" ...` into a single canonical form before we
+  // tokenize. Doing this BEFORE split avoids any per-token edge case where
+  // a leading-quote token (which starts with `"`, not `-`) could later trip
+  // an unrelated guard. We only strip ASCII " and ' — no shell-style
+  // backslash escapes are honored, matching the strict shape of the bypass.
+  const normalized = String(cmd)
+    .trim()
+    .replace(/"([^"]*)"/g, '$1')
+    .replace(/'([^']*)'/g, '$1');
+
+  const tokens = normalized.split(/\s+/);
+  trace('tokens', { count: tokens.length, tokens });
 
   // Expect: node <path/work-state.js> complete <ticket>
-  // Allow optional inline env-assignments and -flags before the script path,
-  // mirroring how getNodeInvocations() tolerates them.
-  if (tokens.length < 4) return false;
+  // Allow optional inline env-assignments before the script path, mirroring
+  // how getNodeInvocations() tolerates them. Wrappers (timeout/nice/env) are
+  // rejected — the bypass is for the orchestrator's direct call only.
+  if (tokens.length < 4) {
+    trace('reject: too few tokens');
+    return false;
+  }
 
-  // Find the `node` (or `nodejs`) token, skipping any leading env-assignments
-  // like FOO=bar. Reject wrappers (timeout, nice, env) — the bypass is meant
-  // for the orchestrator's direct call only, not chained/wrapped invocations.
   let i = 0;
   while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i++;
-  if (i >= tokens.length || !/^(?:node|nodejs)$/.test(tokens[i])) return false;
+  if (i >= tokens.length || !/^(?:node|nodejs)$/.test(tokens[i])) {
+    trace('reject: no node token', { i, token: tokens[i] });
+    return false;
+  }
   i++;
 
-  // Strict bypass: no node flags allowed before the script path. Multi-arg
-  // flags like `--require evil.js` could otherwise smuggle in additional
-  // script execution before work-state.js runs.
-  if (i < tokens.length && tokens[i].startsWith('-')) return false;
+  // Strict bypass: no node flags allowed before the script path.
+  if (i < tokens.length && tokens[i].startsWith('-')) {
+    trace('reject: node flag before script', { token: tokens[i] });
+    return false;
+  }
 
-  // Script path token. Strip surrounding quotes (the shell already stripped
-  // them when the user actually typed quotes; we strip again defensively).
-  if (i >= tokens.length) return false;
-  let scriptPath = tokens[i].replace(/^['"]|['"]$/g, '');
+  // Script path token. Quote-stripping is unnecessary after normalization but
+  // kept defensively for nested-quote pathological inputs.
+  if (i >= tokens.length) {
+    trace('reject: no script token');
+    return false;
+  }
+  const scriptPath = tokens[i].replace(/^['"]|['"]$/g, '');
   i++;
-  if (!/[\\/]work-state\.js$/.test(scriptPath)) return false;
+  if (!/[\\/]work-state\.js$/.test(scriptPath)) {
+    trace('reject: not work-state.js', { scriptPath });
+    return false;
+  }
 
   // Sub-command must be exactly `complete`.
-  if (i >= tokens.length) return false;
-  if (tokens[i] !== 'complete') return false;
+  if (i >= tokens.length || tokens[i] !== 'complete') {
+    trace('reject: sub-command not complete', { token: tokens[i] });
+    return false;
+  }
   i++;
 
   // Ticket arg.
-  if (i >= tokens.length) return false;
+  if (i >= tokens.length) {
+    trace('reject: no ticket token');
+    return false;
+  }
   const targetTicket = tokens[i];
   i++;
 
   // No trailing tokens allowed — strict format only.
-  if (i !== tokens.length) return false;
+  if (i !== tokens.length) {
+    trace('reject: trailing tokens', { remaining: tokens.slice(i) });
+    return false;
+  }
 
   // Verify script path is trusted.
   const resolvedPath = expandPluginRoot(scriptPath);
-  if (!isTrustedScriptPath(resolvedPath, TRUSTED_SCRIPT_DIRS)) return false;
+  if (!isTrustedScriptPath(resolvedPath, TRUSTED_SCRIPT_DIRS)) {
+    trace('reject: untrusted script path', { resolvedPath });
+    return false;
+  }
 
   // Verify ticket arg matches active ticket.
-  if (targetTicket !== ticketId) return false;
+  if (targetTicket !== ticketId) {
+    trace('reject: ticket mismatch', { targetTicket, ticketId });
+    return false;
+  }
 
   // Verify terminal step — reuse shared helper for consistent multi-in_progress handling.
   const state = loadStateFile(ticketId, '.work-state.json');
-  return getCurrentStep(state, WORK_STEPS) === 'complete';
+  const currentStep = getCurrentStep(state, WORK_STEPS);
+  if (currentStep !== 'complete') {
+    trace('reject: not at terminal step', { currentStep });
+    return false;
+  }
+  trace('allow');
+  return true;
 }
 
 /**
@@ -564,8 +619,16 @@ function isTerminalSessionGuardBypass(cmd, ticketId) {
   // Reject shell operators and substitutions FIRST — cheapest fail-fast.
   if (/[;&|$`<>(){}\n]/.test(cmd)) return false;
 
+  // Normalize by stripping balanced surrounding quote pairs (see
+  // isTerminalCompleteBypass for rationale). Keeps quoted and unquoted forms
+  // tokenizing identically on every Node version / OS.
+  const normalized = String(cmd)
+    .trim()
+    .replace(/"([^"]*)"/g, '$1')
+    .replace(/'([^']*)'/g, '$1');
+
   // Token-based parsing (see isTerminalCompleteBypass for rationale).
-  const tokens = String(cmd).trim().split(/\s+/);
+  const tokens = normalized.split(/\s+/);
   if (tokens.length < 4) return false;
 
   let i = 0;
