@@ -168,11 +168,7 @@ function detectEmptyRed(task, projected, priorId) {
  * @param {{tasks: ParsedTask[], initialTree: string[]}} input
  * @returns {{warnings: Warning[], projectedTreeAfter: (n: number) => string[]}}
  */
-function simulate(input) {
-  const tasks = Array.isArray(input && input.tasks) ? input.tasks : [];
-  const initial = Array.isArray(input && input.initialTree) ? input.initialTree : [];
-  const snapshots = buildSnapshots(tasks, initial);
-
+function collectWarnings(tasks, snapshots) {
   const warnings = [];
   for (let i = 0; i < tasks.length; i += 1) {
     const task = tasks[i];
@@ -182,6 +178,14 @@ function simulate(input) {
     const w = detectEmptyRed(task, projected, priorId);
     if (w) warnings.push(w);
   }
+  return warnings;
+}
+
+function simulate(input) {
+  const tasks = Array.isArray(input && input.tasks) ? input.tasks : [];
+  const initial = Array.isArray(input && input.initialTree) ? input.initialTree : [];
+  const snapshots = buildSnapshots(tasks, initial);
+  const warnings = collectWarnings(tasks, snapshots);
   return {
     warnings,
     projectedTreeAfter(n) {
