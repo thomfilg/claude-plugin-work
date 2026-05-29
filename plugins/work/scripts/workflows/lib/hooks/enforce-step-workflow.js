@@ -592,7 +592,21 @@ function isTerminalCompleteBypass(cmd, ticketId) {
   const state = loadStateFile(ticketId, '.work-state.json');
   const currentStep = getCurrentStep(state, WORK_STEPS);
   if (currentStep !== 'complete') {
-    trace('reject: not at terminal step', { currentStep });
+    if (DEBUG_BYPASS) {
+      trace('reject: not at terminal step', {
+        currentStep,
+        ticketId,
+        TASKS_BASE,
+        safeTicketed: safeTicketPath(ticketId),
+        stateLoaded: !!state,
+        stateHasStepStatus: !!state?.stepStatus,
+        stepStatusKeys: state?.stepStatus ? Object.keys(state.stepStatus) : null,
+        completeVal: state?.stepStatus?.complete,
+        WORK_STEPS_len: WORK_STEPS.length,
+      });
+    } else {
+      trace('reject: not at terminal step', { currentStep });
+    }
     return false;
   }
   trace('allow');
