@@ -250,13 +250,20 @@ const RULES = [
     scope: 'memory',
     check(memory) {
       const body = typeof memory.body === 'string' ? memory.body : '';
-      if (!/\bSTOP\b/.test(body)) return [];
-      if (/retro|retrospective/i.test(body)) return [];
+      const events = Array.isArray(memory.events) ? memory.events : [];
+      const hasStopEvent = events.includes('Stop');
+      // Fire when the classifier assigned Stop (the retrospective channel) —
+      // bodies of Stop-event memories should describe what to look for AFTER
+      // the turn finishes. Body keywords like "after", "did I", "cleanup",
+      // "retrospective" all signal retro intent and silence the warning.
+      if (!hasStopEvent) return [];
+      if (/\b(retro|retrospective|after|when finished|did i|cleanup)\b/i.test(body)) return [];
       return [
         {
           rule: 'R8-stop-without-retro',
           memory: memory.name,
-          message: 'body uses literal "STOP" without retro/retrospective guidance',
+          message:
+            'memory has Stop event but body lacks retrospective guidance (retro/after/did I/cleanup)',
         },
       ];
     },
