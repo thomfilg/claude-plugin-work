@@ -113,7 +113,6 @@ function tokenize(text) {
 
 class InvertedIndex {
   constructor() {
-    this._postings = new Map();
     this._docFreq = new Map();
     this._docs = new Map();
     this._finalized = false;
@@ -135,13 +134,8 @@ class InvertedIndex {
       tf.set(tok, (tf.get(tok) || 0) + 1);
     }
     this._docs.set(docId, { tf, length: tokens.length });
-    for (const [term, count] of tf) {
-      if (!this._postings.has(term)) {
-        this._postings.set(term, []);
-        this._docFreq.set(term, 0);
-      }
-      this._postings.get(term).push({ docId, tf: count });
-      this._docFreq.set(term, this._docFreq.get(term) + 1);
+    for (const term of tf.keys()) {
+      this._docFreq.set(term, (this._docFreq.get(term) || 0) + 1);
     }
   }
 
