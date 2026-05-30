@@ -18,13 +18,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const EXPLAIN = path.resolve(
-  __dirname,
-  '..',
-  '..',
-  'scripts',
-  'synapsys-explain.js'
-);
+const EXPLAIN = path.resolve(__dirname, '..', '..', 'scripts', 'synapsys-explain.js');
 
 function writeMemory(storeDir, name, frontmatter, body = '') {
   const lines = ['---', `name: ${name}`];
@@ -119,18 +113,17 @@ test('G2: events-exclude reason for memory whose events list excludes current ev
   const { cwd, cleanup } = makeFixtureStore(defaultFourMemoryFixture());
   t.after(cleanup);
 
-  const result = runExplain([
-    '--event=UserPromptSubmit',
-    '--prompt=anything',
-    `--cwd=${cwd}`,
-  ]);
+  const result = runExplain(['--event=UserPromptSubmit', '--prompt=anything', `--cwd=${cwd}`]);
 
   assert.equal(result.status, 0, `exit non-zero. stderr=${result.stderr}`);
   // The PreToolUse-only memory should appear with events-exclude reason.
   const row = result.stdout
     .split('\n')
     .find((l) => l.includes('agent-must-use-ask-question-when-blocked'));
-  assert.ok(row, `expected row for agent-must-use-ask-question-when-blocked. stdout=${result.stdout}`);
+  assert.ok(
+    row,
+    `expected row for agent-must-use-ask-question-when-blocked. stdout=${result.stdout}`
+  );
   assert.match(row, /events-exclude/);
 });
 
@@ -159,9 +152,7 @@ test('G3: PreToolUse Edit with trigger_pretool_content content match fires', (t)
   ]);
 
   assert.equal(result.status, 0, `exit non-zero. stderr=${result.stderr}`);
-  const row = result.stdout
-    .split('\n')
-    .find((l) => l.includes('ui-component-Button'));
+  const row = result.stdout.split('\n').find((l) => l.includes('ui-component-Button'));
   assert.ok(row, `expected row for ui-component-Button. stdout=${result.stdout}`);
   assert.match(row, /✓/, `expected fired ✓ in row: ${row}`);
 });
@@ -191,9 +182,7 @@ test('G4: no-content-match reason when content pattern misses', (t) => {
   ]);
 
   assert.equal(result.status, 0, `exit non-zero. stderr=${result.stderr}`);
-  const row = result.stdout
-    .split('\n')
-    .find((l) => l.includes('ui-component-Button'));
+  const row = result.stdout.split('\n').find((l) => l.includes('ui-component-Button'));
   assert.ok(row, `expected row for ui-component-Button. stdout=${result.stdout}`);
   assert.match(row, /no-content-match/);
   assert.match(row, /✗/);
@@ -245,7 +234,11 @@ test('G7: invalid stdin JSON exits with code 2', (t) => {
 
   const result = runExplain(['--stdin', `--cwd=${cwd}`], { input: 'not json' });
 
-  assert.equal(result.status, 2, `expected exit 2, got ${result.status}. stdout=${result.stdout} stderr=${result.stderr}`);
+  assert.equal(
+    result.status,
+    2,
+    `expected exit 2, got ${result.status}. stdout=${result.stdout} stderr=${result.stderr}`
+  );
   assert.match(result.stderr, /invalid stdin JSON/i);
 });
 
@@ -257,7 +250,7 @@ test('G9: --verbose exposes matched alternative + substring for fired memory', (
       frontmatter: {
         description: 'Feature flag warning memory',
         events: 'UserPromptSubmit',
-        trigger_prompt: '(feature flag|enable.*in.*(prod|uat))',
+        trigger_prompt: 'feature flag|enable.*in.*(prod|uat)',
       },
       body: 'Be careful with feature flags in production.',
     },
@@ -268,23 +261,33 @@ test('G9: --verbose exposes matched alternative + substring for fired memory', (
   const result = runExplain([
     '--verbose',
     '--event=UserPromptSubmit',
-    '--prompt=deploy to prod',
+    '--prompt=enable preview in prod',
     `--cwd=${cwd}`,
   ]);
 
   assert.equal(result.status, 0, `exit non-zero. stderr=${result.stderr}`);
-  // (a) source trigger_prompt regex.
+  // Memory must actually fire so renderFiredBlock is exercised.
   assert.match(
     result.stdout,
-    /\(feature flag\|enable\.\*in\.\*\(prod\|uat\)\)/,
+    /fired: ✓/,
+    `expected memory to fire so matched.* fields are rendered. stdout=${result.stdout}`
+  );
+  // (a) source trigger_prompt regex appears in the trigger: line.
+  assert.match(
+    result.stdout,
+    /feature flag\|enable\.\*in\.\*\(prod\|uat\)/,
     `expected source regex in verbose output. stdout=${result.stdout}`
   );
-  // (b) matched alternative token.
+  // (b) matched.prompt_token names the alternative that fired ("enable...").
   assert.match(
     result.stdout,
-    /enable\.\*in\.\*\(prod\|uat\)/,
-    `expected matched alternative token. stdout=${result.stdout}`
+    /matched\.prompt_token:\s*enable\.\*in\.\*\(prod\|uat\)/,
+    `expected matched.prompt_token line. stdout=${result.stdout}`
   );
-  // (c) matched substring containing "prod".
-  assert.match(result.stdout, /prod/);
+  // (c) matched.prompt_substring contains the actually-matched substring.
+  assert.match(
+    result.stdout,
+    /matched\.prompt_substring:.*enable preview in prod/,
+    `expected matched.prompt_substring line. stdout=${result.stdout}`
+  );
 });
