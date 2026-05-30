@@ -37,23 +37,48 @@ function hasContentPatterns(memory) {
   return Array.isArray(memory.triggerPretoolContent) && memory.triggerPretoolContent.length > 0;
 }
 
-function matchPreTool(memory, payload) {
-  if (!memory.events.includes('PreToolUse')) return false;
-  if (!memory.triggerPretool.length) return false;
+// Stage 1: check that the memory wants PreToolUse and the tool/argv prefix
+// patterns match. Returns null on miss, or the resolved { toolName, toolInput }
+// on hit so callers can proceed to content evaluation.
+function _evaluatePreToolPrefix(memory, payload) {
+  if (!memory.events.includes('PreToolUse')) return null;
+  if (!memory.triggerPretool.length) return null;
   const toolName = payload?.tool_name || '';
   const toolInput = payload?.tool_input || {};
   const argBlob = JSON.stringify(toolInput);
   const prefixMatch = memory.triggerPretool.some((spec) =>
     pretoolSpecMatches(spec, toolName, argBlob)
   );
-  if (!prefixMatch) return false;
-  if (!hasContentPatterns(memory)) return true;
+  if (!prefixMatch) return null;
+  return { toolName, toolInput };
+}
+
+// Stage 2: given a prefix hit, evaluate positive and negative content
+// patterns. Returns the shared match result.
+function _evaluatePreToolContentStage(memory, toolName, toolInput) {
+  if (!hasContentPatterns(memory)) return { matched: true };
   const content = extractPretoolContent(toolName, toolInput);
-  if (content == null) return false;
-  if (!evaluatePretoolContent(memory, content)) return false;
-  if (!hasNegativeContentPatterns(memory)) return true;
+  if (content == null) return { matched: false };
+  if (!evaluatePretoolContent(memory, content)) return { matched: false };
+  if (!hasNegativeContentPatterns(memory)) return { matched: true };
   const negative = module.exports.evaluatePretoolContentNot(memory, content);
-  return !negative.excluded;
+  if (negative.excluded) return { matched: false, negative: { pattern: negative.pattern } };
+  return { matched: true };
+}
+
+// Shared internal evaluator for matchPreTool / matchPreToolResult.
+// Returns one of:
+//   { matched: true }
+//   { matched: false }
+//   { matched: false, negative: { pattern: P } }  // negative-excludes
+function _evaluatePreToolMatch(memory, payload) {
+  const prefix = _evaluatePreToolPrefix(memory, payload);
+  if (!prefix) return { matched: false };
+  return _evaluatePreToolContentStage(memory, prefix.toolName, prefix.toolInput);
+}
+
+function matchPreTool(memory, payload) {
+  return _evaluatePreToolMatch(memory, payload).matched;
 }
 
 function extractMultiEditContent(edits) {
@@ -138,25 +163,15 @@ function evaluatePretoolContentNot(memory, contentString) {
 // Broader MatchResult contract (other reasons, explainer CLI) is GH-443's domain;
 // this wrapper exposes only the negative-excludes signal.
 function matchPreToolResult(memory, payload) {
-  if (!memory.events.includes('PreToolUse')) return { matched: false };
-  if (!memory.triggerPretool.length) return { matched: false };
-  const toolName = payload?.tool_name || '';
-  const toolInput = payload?.tool_input || {};
-  const argBlob = JSON.stringify(toolInput);
-  const prefixMatch = memory.triggerPretool.some((spec) =>
-    pretoolSpecMatches(spec, toolName, argBlob)
-  );
-  if (!prefixMatch) return { matched: false };
-  if (!hasContentPatterns(memory)) return { matched: true };
-  const content = extractPretoolContent(toolName, toolInput);
-  if (content == null) return { matched: false };
-  if (!evaluatePretoolContent(memory, content)) return { matched: false };
-  if (!hasNegativeContentPatterns(memory)) return { matched: true };
-  const negative = module.exports.evaluatePretoolContentNot(memory, content);
-  if (negative.excluded) {
-    return { reason: 'negative-excludes', matched: { negative_pattern: negative.pattern } };
+  const result = _evaluatePreToolMatch(memory, payload);
+  if (result.matched) return { matched: true };
+  if (result.negative) {
+    return {
+      reason: 'negative-excludes',
+      matched: { negative_pattern: result.negative.pattern },
+    };
   }
-  return { matched: true };
+  return { matched: false };
 }
 
 function matchSession(memory) {
