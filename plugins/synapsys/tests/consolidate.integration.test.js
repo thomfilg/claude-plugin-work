@@ -7,12 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const SCRIPT_PATH = path.join(
-  __dirname,
-  '..',
-  'scripts',
-  'synapsys-consolidate.js'
-);
+const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'synapsys-consolidate.js');
 const SAMPLE_REPO = path.join(__dirname, 'fixtures', 'sample-repo');
 
 function mkTmpOut(label) {
@@ -38,10 +33,7 @@ const FIXTURE_PATH = path.join(
 );
 
 test('sample-repo components-catalog.md fixture exists and contains parseable component headings', () => {
-  assert.ok(
-    fs.existsSync(FIXTURE_PATH),
-    `expected fixture at ${FIXTURE_PATH} to exist`
-  );
+  assert.ok(fs.existsSync(FIXTURE_PATH), `expected fixture at ${FIXTURE_PATH} to exist`);
 
   const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
   const headings = text.split(/^### /m).slice(1);
@@ -55,13 +47,7 @@ test('sample-repo components-catalog.md fixture exists and contains parseable co
 test('Stub profiles do not crash and emit zero memories', () => {
   const stubs = ['testing-guide', 'migrations', 'playwright-docker'];
   for (const name of stubs) {
-    const modPath = path.join(
-      __dirname,
-      '..',
-      'scripts',
-      'consolidate-profiles',
-      `${name}.js`
-    );
+    const modPath = path.join(__dirname, '..', 'scripts', 'consolidate-profiles', `${name}.js`);
     assert.ok(fs.existsSync(modPath), `expected stub profile module at ${modPath}`);
     const mod = require(modPath);
     assert.equal(typeof mod.name, 'string', `${name}: exports.name must be a string`);
@@ -78,13 +64,7 @@ test('Stub profiles do not crash and emit zero memories', () => {
 });
 
 test('ui-catalog profile parses a catalog markdown into atomic items', () => {
-  const modPath = path.join(
-    __dirname,
-    '..',
-    'scripts',
-    'consolidate-profiles',
-    'ui-catalog.js'
-  );
+  const modPath = path.join(__dirname, '..', 'scripts', 'consolidate-profiles', 'ui-catalog.js');
   assert.ok(fs.existsSync(modPath), `expected ui-catalog profile at ${modPath}`);
   const mod = require(modPath);
 
@@ -103,27 +83,15 @@ test('ui-catalog profile parses a catalog markdown into atomic items', () => {
 
   assert.ok(Array.isArray(items), 'parse() must return an array');
   // Fixture has 7 component blocks (Button, DataGrid, Text, Heading, Paragraph, Alpha, Beta).
-  assert.ok(
-    items.length >= 4,
-    `expected at least 4 parsed items, got ${items.length}`
-  );
+  assert.ok(items.length >= 4, `expected at least 4 parsed items, got ${items.length}`);
 
   const byName = Object.fromEntries(items.map((i) => [i.name, i]));
   const button = byName.Button;
   assert.ok(button, 'parse() must include a Button item');
   assert.equal(button.name, 'Button');
-  assert.equal(
-    button.purpose,
-    'Standard interactive button primitive for forms and actions.'
-  );
-  assert.equal(
-    button.useCases,
-    'Form submission, dialog confirmation, toolbar actions.'
-  );
-  assert.equal(
-    button.features,
-    'Variants (primary/secondary/ghost), loading state, icon support.'
-  );
+  assert.equal(button.purpose, 'Standard interactive button primitive for forms and actions.');
+  assert.equal(button.useCases, 'Form submission, dialog confirmation, toolbar actions.');
+  assert.equal(button.features, 'Variants (primary/secondary/ghost), loading state, icon support.');
   // Backticks must be stripped from location/docsPath.
   assert.equal(button.location, 'packages/ui/src/primitives/Button.tsx');
   assert.equal(button.docsPath, 'packages/ui/docs/Button.md');
@@ -137,13 +105,9 @@ test('ui-catalog profile parses a catalog markdown into atomic items', () => {
 });
 
 test('Button component derives a raw-HTML content matcher', () => {
-  const mod = require(path.join(
-    __dirname,
-    '..',
-    'scripts',
-    'consolidate-profiles',
-    'ui-catalog.js'
-  ));
+  const mod = require(
+    path.join(__dirname, '..', 'scripts', 'consolidate-profiles', 'ui-catalog.js')
+  );
   const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
   const items = mod.parse(text, FIXTURE_PATH);
   const button = items.find((i) => i.name === 'Button');
@@ -167,10 +131,7 @@ test('Button component derives a raw-HTML content matcher', () => {
   assert.equal(memory.inject, 'full', 'memory.inject');
 
   assert.equal(typeof memory.body, 'string', 'memory.body must be a string');
-  assert.ok(
-    memory.body.includes(button.purpose),
-    'body must include the component purpose'
-  );
+  assert.ok(memory.body.includes(button.purpose), 'body must include the component purpose');
   assert.ok(
     memory.body.includes('packages/ui/src/primitives/Button.tsx'),
     'body must reference the Location path'
@@ -178,13 +139,9 @@ test('Button component derives a raw-HTML content matcher', () => {
 });
 
 test('DataGrid derives MUI-import escape-hatch matcher (no raw HTML primitive)', () => {
-  const mod = require(path.join(
-    __dirname,
-    '..',
-    'scripts',
-    'consolidate-profiles',
-    'ui-catalog.js'
-  ));
+  const mod = require(
+    path.join(__dirname, '..', 'scripts', 'consolidate-profiles', 'ui-catalog.js')
+  );
   const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
   const items = mod.parse(text, FIXTURE_PATH);
   const dataGrid = items.find((i) => i.name === 'DataGrid');
@@ -199,14 +156,8 @@ test('DataGrid derives MUI-import escape-hatch matcher (no raw HTML primitive)',
     'trigger_pretool_content must be an array'
   );
   const joined = memory.trigger_pretool_content.join('\n');
-  assert.ok(
-    /@mui\/material/.test(joined),
-    `expected an @mui/material pattern, got ${joined}`
-  );
-  assert.ok(
-    /\\bDataGrid\\b/.test(joined),
-    `expected a \\bDataGrid\\b pattern, got ${joined}`
-  );
+  assert.ok(/@mui\/material/.test(joined), `expected an @mui/material pattern, got ${joined}`);
+  assert.ok(/\\bDataGrid\\b/.test(joined), `expected a \\bDataGrid\\b pattern, got ${joined}`);
   // Escape-hatch path must NOT emit a raw HTML primitive matcher.
   assert.ok(
     !memory.trigger_pretool_content.some((p) => /^<[a-z]/.test(p)),
@@ -215,33 +166,19 @@ test('DataGrid derives MUI-import escape-hatch matcher (no raw HTML primitive)',
 });
 
 test('End-to-end consolidate run produces a valid writable manifest deterministically', () => {
-  assert.ok(
-    fs.existsSync(SCRIPT_PATH),
-    `expected driver script at ${SCRIPT_PATH}`
-  );
+  assert.ok(fs.existsSync(SCRIPT_PATH), `expected driver script at ${SCRIPT_PATH}`);
 
   const outA = mkTmpOut('e2e-a');
   const outB = mkTmpOut('e2e-b');
 
-  const runA = runConsolidate([
-    `--repo=${SAMPLE_REPO}`,
-    '--profile=ui-catalog',
-    `--out=${outA}`,
-  ]);
-  assert.equal(
-    runA.status,
-    0,
-    `run A should exit 0, got ${runA.status}. stderr=${runA.stderr}`
-  );
+  const runA = runConsolidate([`--repo=${SAMPLE_REPO}`, '--profile=ui-catalog', `--out=${outA}`]);
+  assert.equal(runA.status, 0, `run A should exit 0, got ${runA.status}. stderr=${runA.stderr}`);
   assert.ok(fs.existsSync(outA), `run A should write manifest at ${outA}`);
 
   const rawA = fs.readFileSync(outA, 'utf8');
   // Must be valid JSON.
   const manifestA = JSON.parse(rawA);
-  assert.ok(
-    Array.isArray(manifestA.memories),
-    'manifest.memories must be an array'
-  );
+  assert.ok(Array.isArray(manifestA.memories), 'manifest.memories must be an array');
   assert.ok(
     manifestA.memories.length > 0,
     `expected at least one memory from ui-catalog, got ${manifestA.memories.length}`
@@ -257,16 +194,8 @@ test('End-to-end consolidate run produces a valid writable manifest deterministi
   assert.ok(rawA.includes('\n  '), 'manifest must be pretty-printed JSON');
 
   // Determinism: a second run with identical inputs must be byte-identical.
-  const runB = runConsolidate([
-    `--repo=${SAMPLE_REPO}`,
-    '--profile=ui-catalog',
-    `--out=${outB}`,
-  ]);
-  assert.equal(
-    runB.status,
-    0,
-    `run B should exit 0, got ${runB.status}. stderr=${runB.stderr}`
-  );
+  const runB = runConsolidate([`--repo=${SAMPLE_REPO}`, '--profile=ui-catalog', `--out=${outB}`]);
+  assert.equal(runB.status, 0, `run B should exit 0, got ${runB.status}. stderr=${runB.stderr}`);
   const rawB = fs.readFileSync(outB, 'utf8');
   assert.equal(rawB, rawA, 'two consecutive runs must produce byte-identical manifests');
 
@@ -281,15 +210,20 @@ test('End-to-end consolidate run produces a valid writable manifest deterministi
   );
 
   // Cleanup.
-  try { fs.unlinkSync(outA); } catch (_) { /* ignore */ }
-  try { fs.unlinkSync(outB); } catch (_) { /* ignore */ }
+  try {
+    fs.unlinkSync(outA);
+  } catch (_) {
+    /* ignore */
+  }
+  try {
+    fs.unlinkSync(outB);
+  } catch (_) {
+    /* ignore */
+  }
 });
 
 test('Typography group (Text + Heading + Paragraph) merges into one memory', () => {
-  assert.ok(
-    fs.existsSync(SCRIPT_PATH),
-    `expected driver script at ${SCRIPT_PATH}`
-  );
+  assert.ok(fs.existsSync(SCRIPT_PATH), `expected driver script at ${SCRIPT_PATH}`);
 
   const outPath = mkTmpOut('typography-merge');
   const result = runConsolidate([
@@ -298,17 +232,11 @@ test('Typography group (Text + Heading + Paragraph) merges into one memory', () 
     `--out=${outPath}`,
   ]);
 
-  assert.equal(
-    result.status,
-    0,
-    `expected exit 0, got ${result.status}. stderr=${result.stderr}`
-  );
+  assert.equal(result.status, 0, `expected exit 0, got ${result.status}. stderr=${result.stderr}`);
   assert.ok(fs.existsSync(outPath), `expected manifest at ${outPath}`);
 
   const manifest = JSON.parse(fs.readFileSync(outPath, 'utf8'));
-  const byName = Object.fromEntries(
-    manifest.memories.map((m) => [m.name, m])
-  );
+  const byName = Object.fromEntries(manifest.memories.map((m) => [m.name, m]));
 
   // No per-typography-component memory should be emitted.
   assert.ok(
@@ -335,20 +263,15 @@ test('Typography group (Text + Heading + Paragraph) merges into one memory', () 
     ['<(p|h[1-6]|span)\\b'],
     'merged typography memory must use the canonical <(p|h[1-6]|span)\\b matcher'
   );
-  assert.ok(
-    merged.body.includes('Text'),
-    'merged body must mention Text component'
-  );
-  assert.ok(
-    merged.body.includes('Heading'),
-    'merged body must mention Heading component'
-  );
-  assert.ok(
-    merged.body.includes('Paragraph'),
-    'merged body must mention Paragraph component'
-  );
+  assert.ok(merged.body.includes('Text'), 'merged body must mention Text component');
+  assert.ok(merged.body.includes('Heading'), 'merged body must mention Heading component');
+  assert.ok(merged.body.includes('Paragraph'), 'merged body must mention Paragraph component');
 
-  try { fs.unlinkSync(outPath); } catch (_) { /* ignore */ }
+  try {
+    fs.unlinkSync(outPath);
+  } catch (_) {
+    /* ignore */
+  }
 });
 
 test('Unknown content-matcher collision emits a stdout warning', () => {
@@ -382,9 +305,9 @@ test('Unknown content-matcher collision emits a stdout warning', () => {
     },
   ];
 
-  const originalWrite = process.stdout.write.bind(process.stdout);
+  const originalWrite = process.stderr.write.bind(process.stderr);
   let captured = '';
-  process.stdout.write = (chunk, ...rest) => {
+  process.stderr.write = (chunk, ...rest) => {
     captured += typeof chunk === 'string' ? chunk : chunk.toString();
     return originalWrite(chunk, ...rest);
   };
@@ -393,7 +316,7 @@ test('Unknown content-matcher collision emits a stdout warning', () => {
   try {
     result = driver.mergeCollisions(memories);
   } finally {
-    process.stdout.write = originalWrite;
+    process.stderr.write = originalWrite;
   }
 
   // First kept, rest dropped — exactly one memory survives the collision.
@@ -411,18 +334,10 @@ test('Unknown content-matcher collision emits a stdout warning', () => {
   assert.match(
     captured,
     /\[synapsys-consolidate\] unexpected matcher collision/,
-    `expected stdout warning prefix, got: ${captured}`
+    `expected stderr warning prefix, got: ${captured}`
   );
-  assert.match(
-    captured,
-    /ui-component-Alpha/,
-    `warning must name Alpha, got: ${captured}`
-  );
-  assert.match(
-    captured,
-    /ui-component-Beta/,
-    `warning must name Beta, got: ${captured}`
-  );
+  assert.match(captured, /ui-component-Alpha/, `warning must name Alpha, got: ${captured}`);
+  assert.match(captured, /ui-component-Beta/, `warning must name Beta, got: ${captured}`);
   // Alpha must appear before Beta (alphabetised ordering).
   assert.ok(
     captured.indexOf('ui-component-Alpha') < captured.indexOf('ui-component-Beta'),
@@ -436,18 +351,9 @@ test('consolidate skill confirms before overwriting a manually-authored memory',
   // body documents the 11-step orchestration including the manual-overwrite
   // confirmation gate, sidecar registry path, stale-delete gate, and the
   // proceed/skip-conflicts/cancel option set.
-  const SKILL_PATH = path.join(
-    __dirname,
-    '..',
-    'skills',
-    'consolidate',
-    'SKILL.md'
-  );
+  const SKILL_PATH = path.join(__dirname, '..', 'skills', 'consolidate', 'SKILL.md');
 
-  assert.ok(
-    fs.existsSync(SKILL_PATH),
-    `expected consolidate skill at ${SKILL_PATH}`
-  );
+  assert.ok(fs.existsSync(SKILL_PATH), `expected consolidate skill at ${SKILL_PATH}`);
 
   const raw = fs.readFileSync(SKILL_PATH, 'utf8');
 
@@ -493,16 +399,11 @@ test('consolidate skill confirms before overwriting a manually-authored memory',
 });
 
 test('Missing source file is skipped with a stderr warning, not a crash', () => {
-  assert.ok(
-    fs.existsSync(SCRIPT_PATH),
-    `expected driver script at ${SCRIPT_PATH}`
-  );
+  assert.ok(fs.existsSync(SCRIPT_PATH), `expected driver script at ${SCRIPT_PATH}`);
 
   // Use an empty temp directory as --repo so ui-catalog's source path
   // (packages/ui/components-catalog.md) resolves to a non-existent file.
-  const emptyRepo = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'synapsys-consolidate-empty-repo-')
-  );
+  const emptyRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'synapsys-consolidate-empty-repo-'));
   const outPath = mkTmpOut('missing-source');
 
   const result = runConsolidate([
@@ -533,6 +434,14 @@ test('Missing source file is skipped with a stderr warning, not a crash', () => 
   );
 
   // Cleanup.
-  try { fs.unlinkSync(outPath); } catch (_) { /* ignore */ }
-  try { fs.rmdirSync(emptyRepo, { recursive: true }); } catch (_) { /* ignore */ }
+  try {
+    fs.unlinkSync(outPath);
+  } catch (_) {
+    /* ignore */
+  }
+  try {
+    fs.rmdirSync(emptyRepo, { recursive: true });
+  } catch (_) {
+    /* ignore */
+  }
 });

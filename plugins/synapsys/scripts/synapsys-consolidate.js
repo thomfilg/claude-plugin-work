@@ -134,7 +134,7 @@ function warnAndKeepFirst(group) {
   const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
   const names = sorted.map((m) => m.name);
   const pattern = group[0].trigger_pretool_content.join(',');
-  process.stdout.write(
+  process.stderr.write(
     `[synapsys-consolidate] unexpected matcher collision: ${names.join(' and ')} both derive ${pattern} — consider adding an explicit merge group\n`
   );
   return sorted[0];
@@ -189,7 +189,7 @@ function collectProfileMemories(profile, name, repo) {
     const memory = profile.toMemory(item, { source, repo });
     if (memory) memories.push(memory);
   }
-  process.stdout.write(
+  process.stderr.write(
     `profile=${name} sources=${(profile.sources || []).length} items=${items.length} memories=${memories.length} merged=[] skipped=[]\n`
   );
   return memories;
