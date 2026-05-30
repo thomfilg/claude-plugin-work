@@ -28,12 +28,7 @@ const { makeFlag } = require(path.join(__dirname, '..', 'lib', 'cli-args'));
 const memoryStore = require(path.join(__dirname, '..', 'lib', 'memory-store'));
 const matcher = require(path.join(__dirname, '..', 'lib', 'matcher'));
 
-const VALID_EVENTS = new Set([
-  'UserPromptSubmit',
-  'PreToolUse',
-  'SessionStart',
-  'Stop',
-]);
+const VALID_EVENTS = new Set(['UserPromptSubmit', 'PreToolUse', 'SessionStart', 'Stop']);
 
 const REASON_COL_MAX = 24;
 
@@ -112,10 +107,7 @@ function truncate(str, max) {
 }
 
 function renderTable(results) {
-  const nameWidth = Math.max(
-    6,
-    ...results.map((r) => r.memory.name.length)
-  );
+  const nameWidth = Math.max(6, ...results.map((r) => r.memory.name.length));
   const out = [];
   const header = `${'Memory'.padEnd(nameWidth)} | Fired | ${'Reason'.padEnd(REASON_COL_MAX)}`;
   out.push(header);
@@ -125,7 +117,7 @@ function renderTable(results) {
   for (const r of results) {
     const mark = r.result.fired ? '✓' : '✗';
     if (r.result.fired) fired++;
-    const reason = r.result.fired ? '' : (r.result.reason || '');
+    const reason = r.result.fired ? '' : r.result.reason || '';
     out.push(
       `${r.memory.name.padEnd(nameWidth)} | ${mark}     | ${truncate(reason, REASON_COL_MAX).padEnd(REASON_COL_MAX)}`
     );
@@ -152,42 +144,43 @@ function eventTriggerSource(memory, event) {
   return '';
 }
 
+const MATCHED_LABELS = [
+  ['prompt_token', 'matched.prompt_token'],
+  ['prompt_substring', 'matched.prompt_substring'],
+  ['pretool_pattern', 'matched.pretool_pattern'],
+  ['content_pattern', 'matched.content_pattern'],
+  ['content_substring', 'matched.content_substring'],
+];
+
+function renderFiredBlock(matched) {
+  const lines = ['  fired: ✓'];
+  const m = matched || {};
+  for (const [key, label] of MATCHED_LABELS) {
+    if (m[key] !== undefined) lines.push(`  ${label}: ${m[key]}`);
+  }
+  return lines;
+}
+
+function renderNotFiredBlock(memory, reason) {
+  const lines = [`  fired: ✗  (gate: ${reason || 'unknown'})`];
+  const bodyLines = (memory.body || '').split('\n').filter(Boolean).slice(0, 3);
+  if (bodyLines.length) {
+    lines.push('  body (first 3 lines):');
+    for (const bl of bodyLines) lines.push(`    ${bl}`);
+  }
+  return lines;
+}
+
 function renderVerboseBlock(memory, result, event) {
-  const lines = [];
-  lines.push(`# ${memory.name}`);
-  const eventsList = memory.events
-    .map((e) => (e === event ? `${e} ✓` : e))
-    .join(', ');
+  const lines = [`# ${memory.name}`];
+  const eventsList = memory.events.map((e) => (e === event ? `${e} ✓` : e)).join(', ');
   lines.push(`  events: ${eventsList}`);
   const trig = eventTriggerSource(memory, event);
   if (trig) lines.push(`  trigger: ${trig}`);
-
-  if (result.fired) {
-    lines.push(`  fired: ✓`);
-    const m = result.matched || {};
-    if (m.prompt_token !== undefined) {
-      lines.push(`  matched.prompt_token: ${m.prompt_token}`);
-    }
-    if (m.prompt_substring !== undefined) {
-      lines.push(`  matched.prompt_substring: ${m.prompt_substring}`);
-    }
-    if (m.pretool_pattern !== undefined) {
-      lines.push(`  matched.pretool_pattern: ${m.pretool_pattern}`);
-    }
-    if (m.content_pattern !== undefined) {
-      lines.push(`  matched.content_pattern: ${m.content_pattern}`);
-    }
-    if (m.content_substring !== undefined) {
-      lines.push(`  matched.content_substring: ${m.content_substring}`);
-    }
-  } else {
-    lines.push(`  fired: ✗  (gate: ${result.reason || 'unknown'})`);
-    const bodyLines = (memory.body || '').split('\n').filter(Boolean).slice(0, 3);
-    if (bodyLines.length) {
-      lines.push('  body (first 3 lines):');
-      for (const bl of bodyLines) lines.push(`    ${bl}`);
-    }
-  }
+  const body = result.fired
+    ? renderFiredBlock(result.matched)
+    : renderNotFiredBlock(memory, result.reason);
+  lines.push(...body);
   return lines.join('\n');
 }
 
@@ -203,64 +196,71 @@ function renderVerbose(results, event) {
   return out.join('\n') + '\n';
 }
 
-function main() {
-  const flag = makeFlag(process.argv.slice(2));
+function readStdinPayloadIfRequested(flag) {
+  if (!flag('stdin')) return {};
+  return parseStdinPayload(readStdinSync());
+}
 
-  const useStdin = !!flag('stdin');
-  let stdinPayload = {};
-  if (useStdin) {
-    const raw = readStdinSync();
-    stdinPayload = parseStdinPayload(raw);
-  }
-
-  const event =
-    flag('event') ||
-    stdinPayload.hook_event_name ||
-    'UserPromptSubmit';
+function resolveEvent(flag, stdinPayload) {
+  const event = flag('event') || stdinPayload.hook_event_name || 'UserPromptSubmit';
   if (!VALID_EVENTS.has(event)) {
     die(`unknown --event "${event}" (expected one of ${[...VALID_EVENTS].join(', ')})`, 2);
   }
+  return event;
+}
+
+function resolveToolInput(flag, stdinPayload) {
+  if (flag('tool-input') !== undefined) return parseToolInput(flag('tool-input'));
+  if (stdinPayload.tool_input !== undefined) return stdinPayload.tool_input;
+  return undefined;
+}
+
+function parseOnlyList(flag) {
+  const raw = flag('only');
+  if (typeof raw !== 'string') return null;
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function applyOnlyFilter(memories, only) {
+  if (!only || !only.length) return memories;
+  const names = new Set(memories.map((m) => m.name));
+  for (const n of only) {
+    if (!names.has(n)) {
+      process.stderr.write(`synapsys-explain: --only name "${n}" not found in store\n`);
+    }
+  }
+  const onlySet = new Set(only);
+  return memories.filter((m) => onlySet.has(m.name));
+}
+
+function buildPayload(event, prompt, tool, toolInput, cwd) {
+  return {
+    hook_event_name: event,
+    prompt: prompt === true ? '' : prompt || '',
+    tool_name: tool === true ? '' : tool || '',
+    tool_input: toolInput || {},
+    cwd,
+  };
+}
+
+function main() {
+  const flag = makeFlag(process.argv.slice(2));
+  const stdinPayload = readStdinPayloadIfRequested(flag);
+  const event = resolveEvent(flag, stdinPayload);
 
   const cwd = flag('cwd') || stdinPayload.cwd || process.cwd();
   const prompt = flag('prompt') !== undefined ? flag('prompt') : stdinPayload.prompt;
   const tool = flag('tool') !== undefined ? flag('tool') : stdinPayload.tool_name;
-  let toolInput;
-  if (flag('tool-input') !== undefined) {
-    toolInput = parseToolInput(flag('tool-input'));
-  } else if (stdinPayload.tool_input !== undefined) {
-    toolInput = stdinPayload.tool_input;
-  }
-
+  const toolInput = resolveToolInput(flag, stdinPayload);
   const verbose = !!flag('verbose');
-  const onlyRaw = flag('only');
-  const only =
-    typeof onlyRaw === 'string'
-      ? onlyRaw.split(',').map((s) => s.trim()).filter(Boolean)
-      : null;
+  const only = parseOnlyList(flag);
 
   const stores = loadStore(flag('store'), cwd);
-  let memories = loadMemories(stores);
-
-  if (only && only.length) {
-    const names = new Set(memories.map((m) => m.name));
-    for (const n of only) {
-      if (!names.has(n)) {
-        process.stderr.write(
-          `synapsys-explain: --only name "${n}" not found in store\n`
-        );
-      }
-    }
-    const onlySet = new Set(only);
-    memories = memories.filter((m) => onlySet.has(m.name));
-  }
-
-  const payload = {
-    hook_event_name: event,
-    prompt: prompt === true ? '' : (prompt || ''),
-    tool_name: tool === true ? '' : (tool || ''),
-    tool_input: toolInput || {},
-    cwd,
-  };
+  const memories = applyOnlyFilter(loadMemories(stores), only);
+  const payload = buildPayload(event, prompt, tool, toolInput, cwd);
 
   const results = memories.map((memory) => ({
     memory,

@@ -80,15 +80,17 @@ function splitTopLevelAlternation(source) {
   const out = [];
   let depth = 0;
   let buf = '';
+  let escaped = false;
   for (let i = 0; i < source.length; i++) {
     const ch = source[i];
-    const prev = i > 0 ? source[i - 1] : '';
-    if (ch === '\\' && prev !== '\\') {
+    if (escaped) {
       buf += ch;
-      if (i + 1 < source.length) {
-        buf += source[i + 1];
-        i++;
-      }
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      buf += ch;
+      escaped = true;
       continue;
     }
     if (ch === '(') depth++;
