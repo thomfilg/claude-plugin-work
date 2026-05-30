@@ -71,58 +71,75 @@ function buildFieldLineRe(labels) {
  *   includeBodyLines  boolean — if true, item.body retains the raw text
  *                     of the section (default true).
  */
-function walk(text, config) {
-  if (typeof text !== 'string' || text.length === 0) return [];
+function validateConfig(config) {
   const { itemHeadingLevel, fields = [], includeBodyLines = true } = config || {};
   if (!itemHeadingLevel || itemHeadingLevel < 1 || itemHeadingLevel > 6) {
     throw new Error('config.itemHeadingLevel must be 1..6');
   }
-  const fieldMap = buildFieldMap(fields);
-  const fieldLineRe = buildFieldLineRe(fields.map((f) => f.label));
+  return { itemHeadingLevel, fields, includeBodyLines };
+}
 
-  const annotated = annotateLines(text);
-  const items = [];
-  let current = null;
-  const boundaryPrefix = '#'.repeat(itemHeadingLevel) + ' ';
+function startItem(line, boundaryPrefix, fields) {
+  const m = HEADING_RE.exec(line);
+  const name = m ? m[2].trim() : line.slice(boundaryPrefix.length).trim();
+  if (!name) return null;
+  const item = { name, fields: {}, _bodyLines: [] };
+  // Initialize known fields to empty string so consumers can rely on
+  // shape regardless of which fields were present in source.
+  for (const f of fields) item.fields[f.key] = '';
+  return item;
+}
 
-  const commit = () => {
-    if (!current) return;
-    if (includeBodyLines) {
-      current.body = current._bodyLines.join('\n');
-    }
-    delete current._bodyLines;
-    items.push(current);
-    current = null;
-  };
+function applyFieldLine(item, line, fieldLineRe, fieldMap) {
+  if (!fieldLineRe) return;
+  const fm = fieldLineRe.exec(line.trim());
+  if (!fm) return;
+  const fieldDef = fieldMap.get(fm[1]);
+  if (!fieldDef) return;
+  const raw = fm[2].trim();
+  item.fields[fieldDef.key] = fieldDef.stripBackticks ? stripBackticks(raw) : raw;
+}
 
-  for (const { text: line, inFence, isFenceMarker } of annotated) {
-    if (inFence || isFenceMarker) {
-      if (current) current._bodyLines.push(line);
-      continue;
-    }
-    if (line.startsWith(boundaryPrefix)) {
-      commit();
-      const m = HEADING_RE.exec(line);
-      const name = m ? m[2].trim() : line.slice(boundaryPrefix.length).trim();
-      if (!name) continue;
-      current = { name, fields: {}, _bodyLines: [] };
-      // Initialize known fields to empty string so consumers can rely on
-      // shape regardless of which fields were present in source.
-      for (const f of fields) current.fields[f.key] = '';
-      continue;
-    }
-    if (!current) continue;
-    current._bodyLines.push(line);
-    if (!fieldLineRe) continue;
-    const fm = fieldLineRe.exec(line.trim());
-    if (!fm) continue;
-    const fieldDef = fieldMap.get(fm[1]);
-    if (!fieldDef) continue;
-    const raw = fm[2].trim();
-    current.fields[fieldDef.key] = fieldDef.stripBackticks ? stripBackticks(raw) : raw;
+function finalizeItem(item, includeBodyLines) {
+  if (includeBodyLines) item.body = item._bodyLines.join('\n');
+  delete item._bodyLines;
+  return item;
+}
+
+function handleLine(state, entry) {
+  const { line, inFence, isFenceMarker } = entry;
+  const { boundaryPrefix, fields, fieldLineRe, fieldMap, includeBodyLines, items } = state;
+  if (inFence || isFenceMarker) {
+    if (state.current) state.current._bodyLines.push(line);
+    return;
   }
-  commit();
-  return items;
+  if (line.startsWith(boundaryPrefix)) {
+    if (state.current) items.push(finalizeItem(state.current, includeBodyLines));
+    state.current = startItem(line, boundaryPrefix, fields);
+    return;
+  }
+  if (!state.current) return;
+  state.current._bodyLines.push(line);
+  applyFieldLine(state.current, line, fieldLineRe, fieldMap);
+}
+
+function walk(text, config) {
+  if (typeof text !== 'string' || text.length === 0) return [];
+  const { itemHeadingLevel, fields, includeBodyLines } = validateConfig(config);
+  const state = {
+    boundaryPrefix: '#'.repeat(itemHeadingLevel) + ' ',
+    fields,
+    fieldMap: buildFieldMap(fields),
+    fieldLineRe: buildFieldLineRe(fields.map((f) => f.label)),
+    includeBodyLines,
+    items: [],
+    current: null,
+  };
+  for (const { text: line, inFence, isFenceMarker } of annotateLines(text)) {
+    handleLine(state, { line, inFence, isFenceMarker });
+  }
+  if (state.current) state.items.push(finalizeItem(state.current, includeBodyLines));
+  return state.items;
 }
 
 module.exports = {
