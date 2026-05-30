@@ -77,23 +77,18 @@ function readSourcesForProfile(profile, repo) {
   return items;
 }
 
-const {
-  TYPOGRAPHY_SENTINEL,
-  TYPOGRAPHY_MATCHER,
-  TYPOGRAPHY_MERGED_NAME,
-} = require('./consolidate-profiles/_constants');
-
 /**
- * Post-toMemory merge step.
+ * Post-toMemory collision merge.
  *
- * Groups memories by their serialised `trigger_pretool_content`. Typography-
- * sentinel groups collapse into a single `ui-component-typography` memory
- * (matcher rewritten to the canonical `<(p|h[1-6]|span)\b`). For any OTHER
- * group of size > 1, emits a stdout warning naming BOTH colliding components
- * (alphabetised), keeps the first memory (alphabetised), and drops the rest.
+ * Groups memories by their serialised `trigger_pretool_content`. For a
+ * group of size > 1, emits a stderr warning naming ALL colliding
+ * components (alphabetised), keeps the first memory (alphabetised), and
+ * drops the rest. Profiles that need to merge naturally-similar items
+ * should produce them with identical matcher arrays; the consumer
+ * decides whether to widen the matcher manually.
  *
  * Pure with respect to its `memories` input — only side effect is the
- * stdout warning for unexpected collisions.
+ * stderr warning for collisions.
  */
 function groupByMatcher(memories) {
   const groups = new Map();
@@ -107,29 +102,6 @@ function groupByMatcher(memories) {
     groups.get(key).push(memory);
   }
   return { groups, order };
-}
-
-function isTypographyGroup(group) {
-  const tpc = group[0].trigger_pretool_content;
-  return Array.isArray(tpc) && tpc.length === 1 && tpc[0] === TYPOGRAPHY_SENTINEL;
-}
-
-function buildTypographyMerged(group) {
-  const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
-  const base = sorted[0];
-  const bodyParts = ['# Typography', ''];
-  for (const m of sorted) {
-    const compName = m.name.replace(/^ui-component-/, '');
-    bodyParts.push(`### ${compName}`, '', m.body, '');
-  }
-  return {
-    name: TYPOGRAPHY_MERGED_NAME,
-    events: base.events,
-    trigger_pretool: base.trigger_pretool,
-    trigger_pretool_content: [TYPOGRAPHY_MATCHER],
-    inject: base.inject,
-    body: bodyParts.join('\n').replace(/\n+$/, ''),
-  };
 }
 
 function warnAndKeepFirst(group) {
@@ -148,9 +120,7 @@ function mergeCollisions(memories) {
   const out = [];
   for (const key of order) {
     const group = groups.get(key);
-    if (isTypographyGroup(group)) {
-      out.push(buildTypographyMerged(group));
-    } else if (group.length === 1) {
+    if (group.length === 1) {
       out.push(group[0]);
     } else {
       out.push(warnAndKeepFirst(group));
@@ -186,9 +156,10 @@ function tryLoadProfile(name) {
 
 function collectProfileMemories(profile, name, repo) {
   const items = readSourcesForProfile(profile, repo);
+  const peers = items.map((entry) => entry.item);
   const memories = [];
   for (const { item, source } of items) {
-    const memory = profile.toMemory(item, { source, repo });
+    const memory = profile.toMemory(item, { source, repo, peers });
     if (memory) memories.push(memory);
   }
   process.stderr.write(

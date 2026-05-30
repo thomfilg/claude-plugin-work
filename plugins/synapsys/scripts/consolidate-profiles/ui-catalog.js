@@ -1,130 +1,53 @@
 'use strict';
 
 /**
- * ui-catalog profile — parses packages/ui/components-catalog.md into atomic
- * component items. `toMemory` is intentionally a null placeholder in this
- * task (Task 3); the raw-HTML-tag map, MUI escape-hatch, and typography
- * sentinel are added in Task 4.
+ * ui-catalog profile
+ *
+ * Thin config + structural mapper. All parsing goes through the shared
+ * markdown-walker; all trigger derivation goes through the shared
+ * inverted-index. No project-specific vocabulary, no hardcoded tag
+ * maps — distinguishing terms come from TF-IDF over the catalog body.
  */
 
-const FIELD_LINE_RE = /^\*\*(Purpose|Use Cases|Features|Location|Docs)\*\*:\s*(.+)$/;
+const walker = require('../../lib/consolidate-engine/markdown-walker');
+const { InvertedIndex } = require('../../lib/consolidate-engine/inverted-index');
 
-const FIELD_KEY = {
-  Purpose: 'purpose',
-  'Use Cases': 'useCases',
-  Features: 'features',
-  Location: 'location',
-  Docs: 'docsPath',
+const CONFIG = {
+  itemHeadingLevel: 3,
+  fields: [
+    { label: 'Purpose', key: 'purpose' },
+    { label: 'Use Cases', key: 'useCases' },
+    { label: 'Features', key: 'features' },
+    { label: 'Location', key: 'location', stripBackticks: true },
+    { label: 'Docs', key: 'docsPath', stripBackticks: true },
+  ],
 };
 
-/**
- * Strip surrounding backticks from inline-code values (location/docsPath
- * in the catalog are wrapped in backticks).
- */
-function stripBackticks(value) {
-  return value.replace(/^`+|`+$/g, '').trim();
-}
-
-/**
- * Parse one `### ` block (with the leading `### ` already stripped) into a
- * structured item. Returns null when the block has no recognisable name line.
- */
-function parseBlock(block) {
-  const lines = block.split('\n');
-  const name = (lines.shift() || '').trim();
-  if (!name) return null;
-
-  const item = {
-    name,
-    purpose: '',
-    useCases: '',
-    features: '',
-    location: '',
-    docsPath: '',
-  };
-
-  for (const line of lines) {
-    const match = FIELD_LINE_RE.exec(line.trim());
-    if (!match) continue;
-    const key = FIELD_KEY[match[1]];
-    const raw = match[2].trim();
-    item[key] = key === 'location' || key === 'docsPath' ? stripBackticks(raw) : raw;
-  }
-
-  return item;
-}
+const TOP_K = 2;
+const TFIDF_FIELDS = ['purpose', 'useCases', 'features'];
 
 function parse(text /* , sourcePath */) {
-  if (typeof text !== 'string' || text.length === 0) return [];
-  const blocks = text.split(/^### /m).slice(1);
-  const items = [];
-  for (const block of blocks) {
-    const item = parseBlock(block);
-    if (item) items.push(item);
-  }
-  return items;
+  const raw = walker.walk(text, CONFIG);
+  return raw.map((item) => ({ name: item.name, ...item.fields }));
 }
 
-/**
- * Raw HTML primitive map — component names whose runtime equivalent is a
- * single HTML tag. Used to derive a `<tag\b` content matcher.
- */
-const RAW_HTML_TAG = Object.freeze({
-  Button: '<button\\b',
-  Input: '<input\\b',
-  Select: '<select\\b',
-  Table: '<table\\b',
-  Dialog: '<dialog\\b',
-  Form: '<form\\b',
-  Textarea: '<textarea\\b',
-  Link: '<a\\b',
-  Image: '<img\\b',
-  List: '<(ul|ol)\\b',
-  ListItem: '<li\\b',
-  Span: '<span\\b',
-  Div: '<div\\b',
-});
-
-/**
- * Typography names that collapse into a single `ui-component-typography`
- * memory at the driver layer. The profile emits a sentinel marker; the
- * driver (Task 6) recognises it and merges.
- */
-const TYPOGRAPHY_NAMES = new Set(['Text', 'Heading', 'Paragraph']);
-const { TYPOGRAPHY_SENTINEL } = require('./_constants');
-
-/**
- * Components with no single raw-HTML equivalent — these trigger on the
- * `@mui/material` import escape-hatch instead.
- */
-const NO_PRIMITIVE_LIST = new Set([
-  'DataGrid',
-  'CodeEditor',
-  'Sidebar',
-  'Toast',
-  'CommandPalette',
-  'VirtualList',
-]);
-
-const SAFE_NAME_RE = /^[a-zA-Z0-9_]+$/;
-
-function muiEscapeHatch(name) {
-  // C3: validate Name before interpolation.
-  if (!SAFE_NAME_RE.test(name)) return null;
-  return [`from\\s+['"]@mui/material['"]`, `import\\s+\\{[^}]*\\b${name}\\b`];
+function buildIndex(items) {
+  const idx = new InvertedIndex();
+  for (const item of items) {
+    const text = TFIDF_FIELDS.map((k) => item[k] || '').join(' ');
+    idx.add(item.name, text);
+  }
+  return idx.finalize();
 }
 
-function deriveTriggerContent(name) {
-  if (TYPOGRAPHY_NAMES.has(name)) return [TYPOGRAPHY_SENTINEL];
-  if (Object.prototype.hasOwnProperty.call(RAW_HTML_TAG, name)) {
-    return [RAW_HTML_TAG[name]];
-  }
-  if (NO_PRIMITIVE_LIST.has(name)) return muiEscapeHatch(name);
-  return null;
+const _cache = new WeakMap();
+function indexFor(items) {
+  if (!_cache.has(items)) _cache.set(items, buildIndex(items));
+  return _cache.get(items);
 }
 
 function buildBody(item) {
-  const lines = [
+  return [
     `# ${item.name}`,
     '',
     `**Purpose**: ${item.purpose}`,
@@ -132,19 +55,21 @@ function buildBody(item) {
     `**Features**: ${item.features}`,
     `**Location**: ${item.location}`,
     `**Docs**: ${item.docsPath}`,
-  ];
-  return lines.join('\n');
+  ].join('\n');
 }
 
-function toMemory(item /* , ctx */) {
+function toMemory(item, ctx) {
   if (!item || typeof item.name !== 'string' || !item.name) return null;
-  const triggerContent = deriveTriggerContent(item.name);
-  if (!triggerContent) return null;
+  const peers = ctx && Array.isArray(ctx.peers) ? ctx.peers : [item];
+  const idx = indexFor(peers);
+  if (!idx.hasDoc(item.name)) return null;
+  const terms = idx.topK(item.name, TOP_K);
+  if (!terms.length) return null;
   return {
     name: `ui-component-${item.name}`,
     events: ['PreToolUse'],
     trigger_pretool: ['Edit:.*\\.tsx', 'Write:.*\\.tsx'],
-    trigger_pretool_content: triggerContent,
+    trigger_pretool_content: terms.map((t) => `\\b${t}\\b`),
     inject: 'full',
     body: buildBody(item),
   };
@@ -152,7 +77,8 @@ function toMemory(item /* , ctx */) {
 
 module.exports = {
   name: 'ui-catalog',
-  description: 'Parses packages/ui/components-catalog.md into per-component memories.',
+  description:
+    'Parses packages/ui/components-catalog.md into per-component memories with TF-IDF-derived content matchers.',
   sources: ['packages/ui/components-catalog.md'],
   parse,
   toMemory,
