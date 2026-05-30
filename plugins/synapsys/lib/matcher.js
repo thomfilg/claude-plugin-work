@@ -50,7 +50,10 @@ function matchPreTool(memory, payload) {
   if (!hasContentPatterns(memory)) return true;
   const content = extractPretoolContent(toolName, toolInput);
   if (content == null) return false;
-  return evaluatePretoolContent(memory, content);
+  if (!evaluatePretoolContent(memory, content)) return false;
+  if (!hasNegativeContentPatterns(memory)) return true;
+  const negative = module.exports.evaluatePretoolContentNot(memory, content);
+  return !negative.excluded;
 }
 
 function extractMultiEditContent(edits) {
@@ -94,6 +97,68 @@ function evaluatePretoolContent(memory, contentString) {
   return matched;
 }
 
+function hasNegativeContentPatterns(memory) {
+  return (
+    Array.isArray(memory.triggerPretoolContentNot) && memory.triggerPretoolContentNot.length > 0
+  );
+}
+
+function evaluatePretoolContentNot(memory, contentString) {
+  const patterns = memory.triggerPretoolContentNot;
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    return { excluded: false, pattern: null };
+  }
+  for (const pat of patterns) {
+    let re;
+    try {
+      re = new RegExp(pat, 'im');
+    } catch (err) {
+      process.stderr.write(
+        `[synapsys] memory ${memory.name}: invalid trigger_pretool_content_not regex "${pat}": ${err.message}\n`
+      );
+      continue;
+    }
+    if (re.test(contentString)) {
+      return { excluded: true, pattern: pat };
+    }
+  }
+  return { excluded: false, pattern: null };
+}
+
+// matchPreToolResult — object-mode wrapper around matchPreTool.
+//
+// Locked decision (GH-445 brief P0 #8 / spec §Architecture Decisions):
+//   On negative-exclude: { matched: false, reason: 'negative-excludes',
+//                          matched: { negative_pattern: P } }
+// In JS the later `matched` key wins, so the observable shape is
+//   { reason: 'negative-excludes', matched: { negative_pattern: P } }.
+// On positive match:   { matched: true }
+// On positive miss:    { matched: false }
+//
+// Broader MatchResult contract (other reasons, explainer CLI) is GH-443's domain;
+// this wrapper exposes only the negative-excludes signal.
+function matchPreToolResult(memory, payload) {
+  if (!memory.events.includes('PreToolUse')) return { matched: false };
+  if (!memory.triggerPretool.length) return { matched: false };
+  const toolName = payload?.tool_name || '';
+  const toolInput = payload?.tool_input || {};
+  const argBlob = JSON.stringify(toolInput);
+  const prefixMatch = memory.triggerPretool.some((spec) =>
+    pretoolSpecMatches(spec, toolName, argBlob)
+  );
+  if (!prefixMatch) return { matched: false };
+  if (!hasContentPatterns(memory)) return { matched: true };
+  const content = extractPretoolContent(toolName, toolInput);
+  if (content == null) return { matched: false };
+  if (!evaluatePretoolContent(memory, content)) return { matched: false };
+  if (!hasNegativeContentPatterns(memory)) return { matched: true };
+  const negative = module.exports.evaluatePretoolContentNot(memory, content);
+  if (negative.excluded) {
+    return { reason: 'negative-excludes', matched: { negative_pattern: negative.pattern } };
+  }
+  return { matched: true };
+}
+
 function matchSession(memory) {
   if (!memory.events.includes('SessionStart')) return false;
   return memory.triggerSession === true;
@@ -124,9 +189,12 @@ module.exports = {
   selectForEvent,
   matchPrompt,
   matchPreTool,
+  matchPreToolResult,
   matchSession,
   matchStop,
   safeRegex,
   extractPretoolContent,
   evaluatePretoolContent,
+  evaluatePretoolContentNot,
+  hasNegativeContentPatterns,
 };
