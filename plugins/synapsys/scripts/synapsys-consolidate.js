@@ -93,9 +93,7 @@ const TYPOGRAPHY_MERGED_NAME = 'ui-component-typography';
  * Pure with respect to its `memories` input — only side effect is the
  * stdout warning for unexpected collisions.
  */
-function mergeCollisions(memories) {
-  if (!Array.isArray(memories) || memories.length === 0) return [];
-
+function groupByMatcher(memories) {
   const groups = new Map();
   const order = [];
   for (const memory of memories) {
@@ -106,50 +104,56 @@ function mergeCollisions(memories) {
     }
     groups.get(key).push(memory);
   }
+  return { groups, order };
+}
 
+function isTypographyGroup(group) {
+  const tpc = group[0].trigger_pretool_content;
+  return Array.isArray(tpc) && tpc.length === 1 && tpc[0] === TYPOGRAPHY_SENTINEL;
+}
+
+function buildTypographyMerged(group) {
+  const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
+  const base = sorted[0];
+  const bodyParts = ['# Typography', ''];
+  for (const m of sorted) {
+    const compName = m.name.replace(/^ui-component-/, '');
+    bodyParts.push(`### ${compName}`, '', m.body, '');
+  }
+  return {
+    name: TYPOGRAPHY_MERGED_NAME,
+    events: base.events,
+    trigger_pretool: base.trigger_pretool,
+    trigger_pretool_content: [TYPOGRAPHY_MATCHER],
+    inject: base.inject,
+    body: bodyParts.join('\n').replace(/\n+$/, ''),
+  };
+}
+
+function warnAndKeepFirst(group) {
+  const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
+  const names = sorted.map((m) => m.name);
+  const pattern = group[0].trigger_pretool_content.join(',');
+  process.stdout.write(
+    `[synapsys-consolidate] unexpected matcher collision: ${names.join(' and ')} both derive ${pattern} — consider adding an explicit merge group\n`
+  );
+  return sorted[0];
+}
+
+function mergeCollisions(memories) {
+  if (!Array.isArray(memories) || memories.length === 0) return [];
+  const { groups, order } = groupByMatcher(memories);
   const out = [];
   for (const key of order) {
     const group = groups.get(key);
-    const isTypography =
-      Array.isArray(group[0].trigger_pretool_content) &&
-      group[0].trigger_pretool_content.length === 1 &&
-      group[0].trigger_pretool_content[0] === TYPOGRAPHY_SENTINEL;
-
-    if (isTypography) {
-      // Merge typography group deterministically: sort by component name.
-      const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
-      const base = sorted[0];
-      const bodyParts = ['# Typography', ''];
-      for (const m of sorted) {
-        const compName = m.name.replace(/^ui-component-/, '');
-        bodyParts.push(`### ${compName}`, '', m.body, '');
-      }
-      out.push({
-        name: TYPOGRAPHY_MERGED_NAME,
-        events: base.events,
-        trigger_pretool: base.trigger_pretool,
-        trigger_pretool_content: [TYPOGRAPHY_MATCHER],
-        inject: base.inject,
-        body: bodyParts.join('\n').replace(/\n+$/, ''),
-      });
-      continue;
-    }
-
-    if (group.length === 1) {
+    if (isTypographyGroup(group)) {
+      out.push(buildTypographyMerged(group));
+    } else if (group.length === 1) {
       out.push(group[0]);
-      continue;
+    } else {
+      out.push(warnAndKeepFirst(group));
     }
-
-    // Unexpected collision: alphabetise names, warn, keep first, drop rest.
-    const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
-    const names = sorted.map((m) => m.name);
-    const pattern = group[0].trigger_pretool_content.join(',');
-    process.stdout.write(
-      `[synapsys-consolidate] unexpected matcher collision: ${names.join(' and ')} both derive ${pattern} — consider adding an explicit merge group\n`
-    );
-    out.push(sorted[0]);
   }
-
   return out;
 }
 
@@ -158,6 +162,45 @@ function writeManifest(manifest, outPath) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, body);
   return body;
+}
+
+function tryLoadProfile(name) {
+  try {
+    const profile = loadProfile(name);
+    if (typeof profile.parse !== 'function' || typeof profile.toMemory !== 'function') {
+      process.stderr.write(
+        `[synapsys-consolidate] profile "${name}" is missing required exports — skipping\n`
+      );
+      return null;
+    }
+    return profile;
+  } catch (err) {
+    process.stderr.write(
+      `[synapsys-consolidate] failed to load profile "${name}": ${err.message}\n`
+    );
+    return null;
+  }
+}
+
+function collectProfileMemories(profile, name, repo) {
+  const items = readSourcesForProfile(profile, repo);
+  const memories = [];
+  for (const { item, source } of items) {
+    const memory = profile.toMemory(item, { source, repo });
+    if (memory) memories.push(memory);
+  }
+  process.stdout.write(
+    `profile=${name} sources=${(profile.sources || []).length} items=${items.length} memories=${memories.length} merged=[] skipped=[]\n`
+  );
+  return memories;
+}
+
+function emitManifest(manifest, dryRun, hasOutFlag, outPath) {
+  if (dryRun && !hasOutFlag) {
+    process.stdout.write(JSON.stringify(manifest, null, 2) + '\n');
+  } else if (!dryRun) {
+    writeManifest(manifest, outPath);
+  }
 }
 
 function main() {
@@ -183,52 +226,17 @@ function main() {
   );
 
   const memories = [];
-  // Iterate profiles sorted by name for deterministic output ordering.
   const sortedNames = [...profileNames].sort((a, b) => a.localeCompare(b));
-
   for (const name of sortedNames) {
-    let profile;
-    try {
-      profile = loadProfile(name);
-    } catch (err) {
-      process.stderr.write(
-        `[synapsys-consolidate] failed to load profile "${name}": ${err.message}\n`
-      );
-      continue;
-    }
-    if (typeof profile.parse !== 'function' || typeof profile.toMemory !== 'function') {
-      process.stderr.write(
-        `[synapsys-consolidate] profile "${name}" is missing required exports — skipping\n`
-      );
-      continue;
-    }
-    const items = readSourcesForProfile(profile, repo);
-    let emitted = 0;
-    for (const { item, source } of items) {
-      const memory = profile.toMemory(item, { source, repo });
-      if (memory) {
-        memories.push(memory);
-        emitted++;
-      }
-    }
-    process.stdout.write(
-      `profile=${name} sources=${(profile.sources || []).length} items=${items.length} memories=${emitted} merged=[] skipped=[]\n`
-    );
+    const profile = tryLoadProfile(name);
+    if (!profile) continue;
+    memories.push(...collectProfileMemories(profile, name, repo));
   }
 
   const mergedMemories = mergeCollisions(memories);
-  const manifest = { memories: mergedMemories };
+  emitManifest({ memories: mergedMemories }, dryRun, !!flag('out'), outPath);
 
-  if (dryRun && !flag('out')) {
-    process.stdout.write(JSON.stringify(manifest, null, 2) + '\n');
-  } else if (!dryRun) {
-    writeManifest(manifest, outPath);
-  }
-
-  if (mergedMemories.length === 0) {
-    process.exit(1);
-  }
-  process.exit(0);
+  process.exit(mergedMemories.length === 0 ? 1 : 0);
 }
 
 if (require.main === module) {
