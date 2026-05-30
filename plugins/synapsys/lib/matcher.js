@@ -292,6 +292,7 @@ function evaluatePretoolContentNot(memory, contentString) {
 // Broader MatchResult contract (other reasons, explainer CLI) is GH-443's domain;
 // this wrapper exposes only the negative-excludes signal.
 function matchPreToolResult(memory, payload) {
+  if (gateMemory(memory, 'PreToolUse')) return { matched: false };
   const result = _evaluatePreToolMatch(memory, payload);
   if (result.matched) return { matched: true };
   if (result.negative) {
