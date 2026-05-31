@@ -89,7 +89,10 @@ function applyJudgmentToEntry(entry, j) {
     entry.irrelevant = j.irrelevant || 0;
     entry.judge_failed = j.judge_failed || 0;
     entry.fp_rate = fpRate(entry.relevant, entry.irrelevant);
-  } else if (!entry._hasUps && entry._hasPtu) {
+  } else {
+    // PTU-only memories, and UPS memories that received no judgment
+    // (e.g. excluded by --max-judges sampling), are reported as
+    // "not judged" rather than "zero relevant".
     entry.relevant = null;
     entry.irrelevant = null;
     entry.fp_rate = null;
