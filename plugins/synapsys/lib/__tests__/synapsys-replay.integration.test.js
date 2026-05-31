@@ -1107,5 +1107,30 @@ test('@task:8 no-transcripts window exits 0 with a friendly message (P0 #12)', (
   assert.equal(result.status, 0, `expected exit 0, got ${result.status}: ${result.stderr}`);
   assert.match(result.stdout, /no transcripts in window/i, 'friendly stdout message');
   assert.equal(result.stderr, '', `stderr must be empty; got: ${result.stderr}`);
+
+  const jsonResult = spawnSync(
+    process.execPath,
+    [
+      REPLAY,
+      '--since=7d',
+      '--no-judge',
+      '--json',
+      `--store=${storeDir}`,
+      `--transcripts-base=${emptyBase}`,
+    ],
+    { encoding: 'utf8', env: { ...process.env, ANTHROPIC_API_KEY: '' } }
+  );
+  assert.equal(
+    jsonResult.status,
+    0,
+    `expected exit 0, got ${jsonResult.status}: ${jsonResult.stderr}`
+  );
+  const parsed = JSON.parse(jsonResult.stdout);
+  assert.deepEqual(parsed.memories, [], '--json no-transcripts: memories empty');
+  assert.deepEqual(parsed.suggestions, [], '--json no-transcripts: suggestions empty');
+  assert.equal(parsed.events_total, 0);
+  assert.equal(parsed.events_ups, 0);
+  assert.equal(parsed.events_ptu, 0);
+  assert.match(parsed.message || '', /no transcripts in window/i);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
