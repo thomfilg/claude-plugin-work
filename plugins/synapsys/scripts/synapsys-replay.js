@@ -124,6 +124,9 @@ function validateFlags(flags) {
       die(`invalid --project=${flags.project}`);
     }
   }
+  if (!Number.isFinite(flags.maxJudges) || flags.maxJudges < 0) {
+    die(`invalid --max-judges=${flags.maxJudges} (expected non-negative integer)`);
+  }
 }
 
 function applyOnlyFilter(memories, onlyFlag) {

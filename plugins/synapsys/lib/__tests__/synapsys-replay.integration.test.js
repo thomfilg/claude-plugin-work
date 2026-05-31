@@ -73,6 +73,14 @@ test('CLI exits 2 on --project values that allow path traversal', () => {
   }
 });
 
+test('CLI exits 2 on non-numeric --max-judges', () => {
+  const result = spawnSync(process.execPath, [REPLAY, '--max-judges=abc', '--no-judge'], {
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 2, '--max-judges=abc should exit 2');
+  assert.match(result.stderr, /max-judges/i);
+});
+
 test('CLI exits 0 and emits report JSON in --no-judge mode (Task 8 wired main)', () => {
   // Task 1 scaffold expected an echo of parsed flags. Task 8 wires main() to
   // the real pipeline, so we now assert the wired JSON shape against an empty
