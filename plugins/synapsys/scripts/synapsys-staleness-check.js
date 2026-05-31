@@ -159,7 +159,8 @@ function renderText(grouped, summary, opts) {
   }
   const summaryLine =
     `Summary: drifted=${summary.drifted} orphan=${summary.orphan} ` +
-    `fresh=${summary.fresh} memories_affected=${summary.totalAffectedMemories}`;
+    `fresh=${summary.fresh} memories_affected=${summary.totalAffectedMemories} ` +
+    `fresh_memories=${summary.fresh_memories}`;
   sections.push(summaryLine);
   return sections.join('\n\n') + '\n';
 }
@@ -184,6 +185,7 @@ function renderJson(grouped, summary, opts) {
       orphan: summary.orphan,
       fresh: summary.fresh,
       memories_affected: summary.totalAffectedMemories,
+      fresh_memories: summary.fresh_memories,
     },
   };
   return JSON.stringify(payload, null, 2) + '\n';
