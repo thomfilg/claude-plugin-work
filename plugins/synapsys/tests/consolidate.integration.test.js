@@ -9,6 +9,9 @@ const { spawnSync } = require('node:child_process');
 
 const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'synapsys-consolidate.js');
 const SAMPLE_REPO = path.join(__dirname, 'fixtures', 'sample-repo');
+const PROFILES_DIR = path.join(__dirname, '..', 'scripts', 'consolidate-profiles');
+const UI_CATALOG_PATH = path.join(PROFILES_DIR, 'ui-catalog.js');
+const FIXTURE_PATH = path.join(SAMPLE_REPO, 'packages', 'ui', 'components-catalog.md');
 
 function mkTmpOut(label) {
   return path.join(
@@ -18,26 +21,13 @@ function mkTmpOut(label) {
 }
 
 function runConsolidate(args) {
-  return spawnSync(process.execPath, [SCRIPT_PATH, ...args], {
-    encoding: 'utf8',
-  });
+  return spawnSync(process.execPath, [SCRIPT_PATH, ...args], { encoding: 'utf8' });
 }
-
-const FIXTURE_PATH = path.join(
-  __dirname,
-  'fixtures',
-  'sample-repo',
-  'packages',
-  'ui',
-  'components-catalog.md'
-);
 
 test('sample-repo components-catalog.md fixture exists and contains parseable component headings', () => {
   assert.ok(fs.existsSync(FIXTURE_PATH), `expected fixture at ${FIXTURE_PATH} to exist`);
-
   const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
   const headings = text.split(/^### /m).slice(1);
-
   assert.ok(
     headings.length >= 4,
     `expected at least 4 '### ' component blocks in fixture, found ${headings.length}`
@@ -45,19 +35,14 @@ test('sample-repo components-catalog.md fixture exists and contains parseable co
 });
 
 test('ui-catalog profile parses a catalog markdown into atomic items', () => {
-  const modPath = path.join(__dirname, '..', 'scripts', 'consolidate-profiles', 'ui-catalog.js');
-  assert.ok(fs.existsSync(modPath), `expected ui-catalog profile at ${modPath}`);
-  const mod = require(modPath);
+  assert.ok(fs.existsSync(UI_CATALOG_PATH), `expected ui-catalog profile at ${UI_CATALOG_PATH}`);
+  const mod = require(UI_CATALOG_PATH);
 
-  assert.equal(mod.name, 'ui-catalog', 'exports.name must be "ui-catalog"');
-  assert.equal(typeof mod.description, 'string', 'exports.description must be a string');
-  assert.deepEqual(
-    mod.sources,
-    ['packages/ui/components-catalog.md'],
-    'exports.sources must list components-catalog.md path'
-  );
-  assert.equal(typeof mod.parse, 'function', 'exports.parse must be a function');
-  assert.equal(typeof mod.toMemory, 'function', 'exports.toMemory must be a function');
+  assert.equal(mod.name, 'ui-catalog');
+  assert.equal(typeof mod.description, 'string');
+  assert.deepEqual(mod.sources, ['packages/ui/components-catalog.md']);
+  assert.equal(typeof mod.parse, 'function');
+  assert.equal(typeof mod.toMemory, 'function');
 
   const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
   const items = mod.parse(text, FIXTURE_PATH);
@@ -68,7 +53,6 @@ test('ui-catalog profile parses a catalog markdown into atomic items', () => {
   const byName = Object.fromEntries(items.map((i) => [i.name, i]));
   const button = byName.Button;
   assert.ok(button, 'parse() must include a Button item');
-  assert.equal(button.name, 'Button');
   assert.equal(button.purpose, 'Standard interactive button primitive for forms and actions.');
   assert.equal(button.useCases, 'Form submission, dialog confirmation, toolbar actions.');
   assert.equal(button.features, 'Variants (primary/secondary/ghost), loading state, icon support.');
@@ -81,43 +65,29 @@ test('ui-catalog profile parses a catalog markdown into atomic items', () => {
   assert.equal(dataGrid.location, 'packages/ui/src/data/DataGrid.tsx');
 });
 
-test('Button memory shape: TF-IDF-derived content matchers from body text', () => {
-  const mod = require(
-    path.join(__dirname, '..', 'scripts', 'consolidate-profiles', 'ui-catalog.js')
-  );
+test('Button memory derives a raw-HTML content matcher: ["<button\\\\b"]', () => {
+  const mod = require(UI_CATALOG_PATH);
   const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
   const items = mod.parse(text, FIXTURE_PATH);
   const button = items.find((i) => i.name === 'Button');
   assert.ok(button, 'fixture must include Button');
 
-  const memory = mod.toMemory(button, { peers: items });
+  const memory = mod.toMemory(button);
   assert.ok(memory && typeof memory === 'object', 'toMemory(Button) must return an object');
 
-  assert.equal(memory.name, 'ui-component-Button', 'memory.name');
-  assert.deepEqual(memory.events, ['PreToolUse'], 'memory.events');
+  assert.equal(memory.name, 'ui-component-Button');
+  assert.deepEqual(memory.events, ['PreToolUse']);
+  assert.deepEqual(memory.trigger_pretool, ['Edit:.*\\.tsx', 'Write:.*\\.tsx']);
+  assert.equal(memory.inject, 'full');
+
+  // Spec-literal: raw HTML tag matcher.
   assert.deepEqual(
-    memory.trigger_pretool,
-    ['Edit:.*\\.tsx', 'Write:.*\\.tsx'],
-    'memory.trigger_pretool'
-  );
-  assert.equal(memory.inject, 'full', 'memory.inject');
-
-  // Matchers are TF-IDF-derived `\b<term>\b` patterns from the body text.
-  assert.ok(
-    Array.isArray(memory.trigger_pretool_content) && memory.trigger_pretool_content.length > 0,
-    'trigger_pretool_content must be a non-empty array'
-  );
-  for (const pat of memory.trigger_pretool_content) {
-    assert.match(pat, /^\\b[a-z0-9_-]+\\b$/, `each matcher must be \\b<term>\\b, got: ${pat}`);
-  }
-  // "button" is the highest-IDF term unique to the Button entry — must
-  // appear in the derived matchers.
-  assert.ok(
-    memory.trigger_pretool_content.some((p) => p === '\\bbutton\\b'),
-    `expected \\bbutton\\b in matchers, got: ${memory.trigger_pretool_content.join(',')}`
+    memory.trigger_pretool_content,
+    ['<button\\b'],
+    `Button must use the raw-HTML-tag matcher per spec, got: ${JSON.stringify(memory.trigger_pretool_content)}`
   );
 
-  assert.equal(typeof memory.body, 'string', 'memory.body must be a string');
+  assert.equal(typeof memory.body, 'string');
   assert.ok(memory.body.includes(button.purpose), 'body must include the component purpose');
   assert.ok(
     memory.body.includes('packages/ui/src/primitives/Button.tsx'),
@@ -125,34 +95,78 @@ test('Button memory shape: TF-IDF-derived content matchers from body text', () =
   );
 });
 
-test('DataGrid memory shape: TF-IDF surfaces distinguishing terms (no hardcoded MUI hatch)', () => {
-  const mod = require(
-    path.join(__dirname, '..', 'scripts', 'consolidate-profiles', 'ui-catalog.js')
-  );
+test('DataGrid memory derives MUI-import escape-hatch matchers', () => {
+  const mod = require(UI_CATALOG_PATH);
   const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
   const items = mod.parse(text, FIXTURE_PATH);
   const dataGrid = items.find((i) => i.name === 'DataGrid');
   assert.ok(dataGrid, 'fixture must include DataGrid');
 
-  const memory = mod.toMemory(dataGrid, { peers: items });
-  assert.ok(memory && typeof memory === 'object', 'toMemory(DataGrid) must return an object');
+  const memory = mod.toMemory(dataGrid);
+  assert.ok(memory, 'toMemory(DataGrid) must return an object');
+  assert.equal(memory.name, 'ui-component-DataGrid');
 
-  assert.equal(memory.name, 'ui-component-DataGrid', 'memory.name');
+  const joined = memory.trigger_pretool_content.join('\n');
+  assert.match(joined, /@mui\/material/, 'expected an @mui/material import matcher');
+  assert.match(joined, /\\bDataGrid\\b/, 'expected a \\bDataGrid\\b import-list matcher');
+});
+
+test('Typography group (Text + Heading + Paragraph) merges into ui-component-typography', () => {
+  const mod = require(UI_CATALOG_PATH);
+  const driver = require(SCRIPT_PATH);
+  const text = fs.readFileSync(FIXTURE_PATH, 'utf8');
+  const items = mod.parse(text, FIXTURE_PATH);
+
+  const memories = items.map((i) => mod.toMemory(i)).filter(Boolean);
+  // Pre-merge: each typography component produces a memory with the sentinel.
+  const preTypo = memories.filter(
+    (m) =>
+      Array.isArray(m.trigger_pretool_content) && m.trigger_pretool_content[0] === '__TYPOGRAPHY__'
+  );
   assert.ok(
-    Array.isArray(memory.trigger_pretool_content) && memory.trigger_pretool_content.length > 0,
-    'trigger_pretool_content must be a non-empty array'
+    preTypo.length >= 3,
+    `expected at least 3 typography sentinel memories before merge, got ${preTypo.length}`
   );
-  for (const pat of memory.trigger_pretool_content) {
-    assert.match(pat, /^\\b[a-z0-9_-]+\\b$/, `each matcher must be \\b<term>\\b, got: ${pat}`);
+
+  const merged = driver.mergeCollisions(memories);
+  const typoMemories = merged.filter((m) => /typography/i.test(m.name));
+  assert.equal(
+    typoMemories.length,
+    1,
+    `expected exactly one typography memory, got ${typoMemories.length}: ${typoMemories
+      .map((m) => m.name)
+      .join(', ')}`
+  );
+
+  const typo = typoMemories[0];
+  assert.equal(typo.name, 'ui-component-typography');
+  assert.deepEqual(typo.trigger_pretool_content, ['<(p|h[1-6]|span)\\b']);
+  assert.match(typo.body, /Text/);
+  assert.match(typo.body, /Heading/);
+
+  const names = merged.map((m) => m.name);
+  assert.ok(!names.includes('ui-component-Text'), 'no separate ui-component-Text after merge');
+  assert.ok(
+    !names.includes('ui-component-Heading'),
+    'no separate ui-component-Heading after merge'
+  );
+  assert.ok(
+    !names.includes('ui-component-Paragraph'),
+    'no separate ui-component-Paragraph after merge'
+  );
+});
+
+test('Stub profiles (testing-guide, migrations, playwright-docker) load and emit zero memories', () => {
+  for (const stub of ['testing-guide', 'migrations', 'playwright-docker']) {
+    const p = path.join(PROFILES_DIR, `${stub}.js`);
+    assert.ok(fs.existsSync(p), `expected stub profile at ${p}`);
+    const mod = require(p);
+    assert.equal(mod.name, stub);
+    assert.equal(typeof mod.description, 'string');
+    assert.ok(Array.isArray(mod.sources));
+    assert.deepEqual(mod.parse('anything'), [], `${stub}.parse() must return []`);
+    assert.equal(mod.toMemory({ name: 'X' }), null, `${stub}.toMemory() must return null`);
   }
-  // TF-IDF must surface at least one term unique to the DataGrid entry in
-  // the fixture (i.e. not shared with Button/Text/Heading/Paragraph/Alpha/Beta).
-  const joined = memory.trigger_pretool_content.join(',');
-  assert.match(
-    joined,
-    /admin|column|tabular|virtualization|filtering|sorting|dataset|grid|pagination/,
-    `expected a DataGrid-distinguishing term, got: ${joined}`
-  );
 });
 
 test('End-to-end consolidate run produces a valid writable manifest deterministically', () => {
@@ -173,10 +187,10 @@ test('End-to-end consolidate run produces a valid writable manifest deterministi
     `expected at least one memory from ui-catalog, got ${manifestA.memories.length}`
   );
   for (const mem of manifestA.memories) {
-    assert.equal(typeof mem.name, 'string', 'each memory.name must be a string');
-    assert.ok(mem.name.length > 0, 'memory.name must be non-empty');
-    assert.ok(Array.isArray(mem.events), 'memory.events must be an array');
-    assert.equal(typeof mem.body, 'string', 'memory.body must be a string');
+    assert.equal(typeof mem.name, 'string');
+    assert.ok(mem.name.length > 0);
+    assert.ok(Array.isArray(mem.events));
+    assert.equal(typeof mem.body, 'string');
   }
   assert.ok(rawA.endsWith('\n'), 'manifest must end with newline');
   assert.ok(rawA.includes('\n  '), 'manifest must be pretty-printed JSON');
@@ -195,6 +209,12 @@ test('End-to-end consolidate run produces a valid writable manifest deterministi
     'manifest body must not embed the current PID'
   );
 
+  // Sentinel must be merged away by the time the manifest is written.
+  assert.ok(
+    !rawA.includes('__TYPOGRAPHY__'),
+    'manifest must not leak the typography sentinel — driver should have merged it'
+  );
+
   try {
     fs.unlinkSync(outA);
   } catch (_) {
@@ -209,11 +229,7 @@ test('End-to-end consolidate run produces a valid writable manifest deterministi
 
 test('Unknown content-matcher collision emits a stderr warning and keeps the first', () => {
   const driver = require(SCRIPT_PATH);
-  assert.equal(
-    typeof driver.mergeCollisions,
-    'function',
-    'synapsys-consolidate.js must export a mergeCollisions(memories) helper'
-  );
+  assert.equal(typeof driver.mergeCollisions, 'function');
 
   const memories = [
     {
@@ -248,32 +264,23 @@ test('Unknown content-matcher collision emits a stderr warning and keeps the fir
     process.stderr.write = originalWrite;
   }
 
-  assert.ok(Array.isArray(result), 'mergeCollisions must return an array');
+  assert.ok(Array.isArray(result));
   const survivors = result.filter(
     (m) => m.name === 'ui-component-Alpha' || m.name === 'ui-component-Beta'
   );
-  assert.equal(
-    survivors.length,
-    1,
-    `collision must keep exactly one of Alpha/Beta, got ${survivors.length}`
-  );
+  assert.equal(survivors.length, 1, `collision must keep exactly one of Alpha/Beta`);
 
-  assert.match(
-    captured,
-    /\[synapsys-consolidate\] unexpected matcher collision/,
-    `expected stderr warning prefix, got: ${captured}`
-  );
-  assert.match(captured, /ui-component-Alpha/, `warning must name Alpha, got: ${captured}`);
-  assert.match(captured, /ui-component-Beta/, `warning must name Beta, got: ${captured}`);
+  assert.match(captured, /\[synapsys-consolidate\] unexpected matcher collision/);
+  assert.match(captured, /ui-component-Alpha/);
+  assert.match(captured, /ui-component-Beta/);
   assert.ok(
     captured.indexOf('ui-component-Alpha') < captured.indexOf('ui-component-Beta'),
-    `warning must alphabetise component names, got: ${captured}`
+    'warning must alphabetise component names'
   );
 });
 
 test('consolidate skill confirms before overwriting a manually-authored memory', () => {
   const SKILL_PATH = path.join(__dirname, '..', 'skills', 'consolidate', 'SKILL.md');
-
   assert.ok(fs.existsSync(SKILL_PATH), `expected consolidate skill at ${SKILL_PATH}`);
 
   const raw = fs.readFileSync(SKILL_PATH, 'utf8');
@@ -281,16 +288,8 @@ test('consolidate skill confirms before overwriting a manually-authored memory',
   const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/);
   assert.ok(fmMatch, 'SKILL.md must start with YAML frontmatter');
   const frontmatter = fmMatch[1];
-  assert.match(
-    frontmatter,
-    /user-invocable:\s*true/,
-    `frontmatter must declare user-invocable: true, got:\n${frontmatter}`
-  );
-  assert.match(
-    frontmatter,
-    /allowed-tools:[^\n]*AskUserQuestion/,
-    `allowed-tools must include AskUserQuestion, got:\n${frontmatter}`
-  );
+  assert.match(frontmatter, /user-invocable:\s*true/);
+  assert.match(frontmatter, /allowed-tools:[^\n]*AskUserQuestion/);
 
   const requiredStrings = [
     'synapsys-crystallize-lint.js',
@@ -306,10 +305,7 @@ test('consolidate skill confirms before overwriting a manually-authored memory',
     'would overwrite manual',
   ];
   for (const needle of requiredStrings) {
-    assert.ok(
-      raw.includes(needle),
-      `SKILL.md body must contain the literal string ${JSON.stringify(needle)}`
-    );
+    assert.ok(raw.includes(needle), `SKILL.md must contain ${JSON.stringify(needle)}`);
   }
 });
 
@@ -331,16 +327,8 @@ test('Missing source file is skipped with a stderr warning, not a crash', () => 
   );
   assert.equal(result.signal, null, 'process must not be killed by a signal');
 
-  assert.match(
-    result.stderr,
-    /\[synapsys-consolidate\] source not found:/,
-    `expected stderr to contain "[synapsys-consolidate] source not found:", got: ${result.stderr}`
-  );
-  assert.match(
-    result.stderr,
-    /\(profile: ui-catalog\)/,
-    `expected stderr to attribute missing source to "ui-catalog" profile, got: ${result.stderr}`
-  );
+  assert.match(result.stderr, /\[synapsys-consolidate\] source not found:/);
+  assert.match(result.stderr, /\(profile: ui-catalog\)/);
 
   try {
     fs.unlinkSync(outPath);

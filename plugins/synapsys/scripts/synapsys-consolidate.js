@@ -114,9 +114,48 @@ function warnAndKeepFirst(group) {
   return sorted[0];
 }
 
+const TYPOGRAPHY_SENTINEL = '__TYPOGRAPHY__';
+
+function isTypographySentinel(memory) {
+  return (
+    memory &&
+    Array.isArray(memory.trigger_pretool_content) &&
+    memory.trigger_pretool_content[0] === TYPOGRAPHY_SENTINEL
+  );
+}
+
+function mergeTypographyGroup(typo) {
+  const sorted = [...typo].sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    name: 'ui-component-typography',
+    events: ['PreToolUse'],
+    trigger_pretool: ['Edit:.*\\.tsx', 'Write:.*\\.tsx'],
+    trigger_pretool_content: ['<(p|h[1-6]|span)\\b'],
+    inject: 'full',
+    body: sorted.map((m) => m.body).join('\n\n---\n\n'),
+  };
+}
+
 function mergeCollisions(memories) {
   if (!Array.isArray(memories) || memories.length === 0) return [];
-  const { groups, order } = groupByMatcher(memories);
+
+  // Typography sentinel merge: collapse Text/Heading/Paragraph (any
+  // memory whose first content matcher is the sentinel) into a single
+  // ui-component-typography memory with the canonical regex.
+  const typo = [];
+  const rest = [];
+  for (const m of memories) {
+    if (isTypographySentinel(m)) typo.push(m);
+    else rest.push(m);
+  }
+  const merged = [];
+  if (typo.length > 0) merged.push(mergeTypographyGroup(typo));
+  merged.push(...rest);
+
+  // Generic unknown-collision detection: any remaining group of size > 1
+  // sharing identical trigger_pretool_content gets a stderr warning and
+  // we keep the alphabetically-first member.
+  const { groups, order } = groupByMatcher(merged);
   const out = [];
   for (const key of order) {
     const group = groups.get(key);
