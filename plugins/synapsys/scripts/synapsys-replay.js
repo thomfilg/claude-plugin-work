@@ -182,6 +182,7 @@ async function runJudgePhase(tuples, flags, apiKey) {
   return {
     judgments,
     judgeCalls: Math.ceil(pipeline.results.length / JUDGE_BATCH_SIZE),
+    itemsJudged: pipeline.results.length,
     extrapolated: pipeline.extrapolated,
   };
 }
@@ -236,7 +237,20 @@ async function main(argv) {
     baseDir: flags.transcriptsBase,
   });
   if (files.length === 0) {
-    process.stdout.write('no transcripts in window\n');
+    if (flags.json) {
+      process.stdout.write(
+        `${JSON.stringify({
+          memories: [],
+          suggestions: [],
+          events_total: 0,
+          events_ups: 0,
+          events_ptu: 0,
+          message: 'no transcripts in window',
+        })}\n`
+      );
+    } else {
+      process.stdout.write('no transcripts in window\n');
+    }
     process.exit(0);
   }
 
@@ -251,9 +265,14 @@ async function main(argv) {
 
   let judgments;
   let judgeCalls = 0;
+  let itemsJudged = 0;
   let extrapolated = false;
   if (judging) {
-    ({ judgments, judgeCalls, extrapolated } = await runJudgePhase(tuples, flags, apiKey));
+    ({ judgments, judgeCalls, itemsJudged, extrapolated } = await runJudgePhase(
+      tuples,
+      flags,
+      apiKey
+    ));
   }
 
   const agg = aggregateReport(tuples, judgments);
@@ -267,6 +286,7 @@ async function main(argv) {
     events_ups: counts.ups,
     events_ptu: counts.ptu,
     judgeCalls,
+    itemsJudged,
     extrapolated,
   };
   writeOutput(flags, agg, suggestions, meta);

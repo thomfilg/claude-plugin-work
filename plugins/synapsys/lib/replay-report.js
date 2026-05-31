@@ -9,10 +9,11 @@
  *   - renderReport(agg, suggestions, meta)
  */
 
-// Cost model constants (R17): ~500 input + 5 output tokens per judge call.
-// Haiku pricing approx $1.00 / 1M input + $5.00 / 1M output tokens.
+// Cost model constants (R17): per SKILL.md the judge spends ~500 input + ~5
+// output tokens PER FIRED UPS MATCH (i.e. per judged item, not per batched
+// API call). Haiku pricing approx $1.00 / 1M input + $5.00 / 1M output tokens.
 const PRICE_PER_TOKEN = 1e-6; // ~$1/1M as a conservative per-token blend.
-const TOKENS_PER_JUDGE_CALL = 500 + 5;
+const TOKENS_PER_JUDGED_ITEM = 500 + 5;
 
 /**
  * Render the aggregated report as machine-readable JSON (R9, G6).
@@ -88,9 +89,12 @@ function renderSuggestionsBlock(suggestions) {
   );
 }
 
-function renderCostFooter(judgeCalls) {
-  const cost = TOKENS_PER_JUDGE_CALL * judgeCalls * PRICE_PER_TOKEN;
-  return ['', `est. cost ≈ $${cost.toFixed(4)} (${judgeCalls} judge calls)`];
+function renderCostFooter(itemsJudged, judgeCalls) {
+  const cost = TOKENS_PER_JUDGED_ITEM * itemsJudged * PRICE_PER_TOKEN;
+  return [
+    '',
+    `est. cost ≈ $${cost.toFixed(4)} (${itemsJudged} items judged across ${judgeCalls} batched API calls)`,
+  ];
 }
 
 /**
@@ -106,7 +110,12 @@ function renderReport(agg, suggestions, meta) {
   lines.push('', 'Suggestions:');
   lines.push(...renderSuggestionsBlock(suggestions));
   if (m.judgeCalls && m.judgeCalls > 0) {
-    lines.push(...renderCostFooter(m.judgeCalls));
+    // Prefer explicit `itemsJudged` from the pipeline; fall back to judgeCalls
+    // for callers that haven't been updated (back-compat). The cost formula
+    // is per-judged-item, NOT per batched API call (see SKILL.md).
+    const itemsJudged =
+      typeof m.itemsJudged === 'number' && m.itemsJudged >= 0 ? m.itemsJudged : m.judgeCalls;
+    lines.push(...renderCostFooter(itemsJudged, m.judgeCalls));
   }
   return lines.join('\n') + '\n';
 }
