@@ -63,6 +63,16 @@ test('CLI exits 2 on invalid --since (not matching /^\\d+d$/)', () => {
   assert.match(result.stderr, /since/i);
 });
 
+test('CLI exits 2 on --project values that allow path traversal', () => {
+  for (const bad of ['..', '.', 'a..b', '../etc']) {
+    const result = spawnSync(process.execPath, [REPLAY, '--project=' + bad, '--no-judge'], {
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 2, `--project=${bad} should exit 2`);
+    assert.match(result.stderr, /project/i);
+  }
+});
+
 test('CLI exits 0 and emits report JSON in --no-judge mode (Task 8 wired main)', () => {
   // Task 1 scaffold expected an echo of parsed flags. Task 8 wires main() to
   // the real pipeline, so we now assert the wired JSON shape against an empty

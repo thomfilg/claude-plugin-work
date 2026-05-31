@@ -116,8 +116,13 @@ function validateFlags(flags) {
   if (!/^\d+d$/.test(flags.since)) {
     die(`invalid --since=${flags.since} (expected format like 7d, 14d)`);
   }
-  if (flags.project !== undefined && !/^[\w.-]+$/.test(flags.project)) {
-    die(`invalid --project=${flags.project}`);
+  if (flags.project !== undefined) {
+    // Reject path-traversal: `..`, `.`, or any value containing consecutive
+    // dots. The character class `[\w.-]+` alone permits `..` which
+    // `path.join` resolves outside ~/.claude/projects/.
+    if (!/^[\w.-]+$/.test(flags.project) || /\.\./.test(flags.project) || flags.project === '.') {
+      die(`invalid --project=${flags.project}`);
+    }
   }
 }
 
