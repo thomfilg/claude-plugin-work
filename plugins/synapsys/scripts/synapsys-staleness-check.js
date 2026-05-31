@@ -230,10 +230,15 @@ function dispatchReconsolidate(grouped, opts) {
       );
       continue;
     }
+    // Route child stdout to stderr when --json is active so the parent's
+    // JSON payload remains the only thing on stdout.
+    const childStdio = opts.json
+      ? ['inherit', process.stderr, 'inherit']
+      : 'inherit';
     const result = spawnSync(
       process.execPath,
       [consolidateBin, '--profile=' + profile.name],
-      { stdio: 'inherit' }
+      { stdio: childStdio }
     );
     if (result.status !== 0) {
       sawSpawnFailure = true;
@@ -277,6 +282,7 @@ function maybeReconsolidate(grouped, opts) {
     consolidateBin,
     profilesDir,
     stderr: process.stderr,
+    json: opts.json,
   });
   return dispatched.sawSpawnFailure;
 }
