@@ -285,6 +285,28 @@ const TRUSTED_SCRIPT_DIRS = [
   path.resolve(__dirname, '..', '..', 'follow-up'), // workflows/follow-up/
 ];
 
+// GH-452: Normalise TRUSTED_SCRIPT_DIRS via fs.realpathSync at module load so the
+// prefix containment check does not depend on per-call realpath resolution
+// against a possibly-symlinked plugin-cache directory. Membership is NOT
+// widened — the same set of directories is normalised in place. Per-entry
+// realpath failure is fail-open (keep the unresolved path so
+// isTrustedScriptPath defence-in-depth per-call realpath retains today's
+// behaviour) and emits a `GH-452 trusted-dir realpath failed` warning on
+// stderr.
+function safeRealpath(entry) {
+  try {
+    return fs.realpathSync(entry);
+  } catch (err) {
+    process.stderr.write(
+      `GH-452 trusted-dir realpath failed: ${entry} (${err && err.code ? err.code : 'EUNKNOWN'})\n`
+    );
+    return entry;
+  }
+}
+for (let i = 0; i < TRUSTED_SCRIPT_DIRS.length; i++) {
+  TRUSTED_SCRIPT_DIRS[i] = safeRealpath(TRUSTED_SCRIPT_DIRS[i]);
+}
+
 // GH-452: Diagnostic instrumentation gated behind ENFORCE_HOOK_DEBUG=1.
 // Dumps __dirname and each TRUSTED_SCRIPT_DIRS entry alongside its realpath at
 // module load, plus a per-call candidate=<path> realpath=<resolved> line inside

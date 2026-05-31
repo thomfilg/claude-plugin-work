@@ -74,6 +74,29 @@ function atomicWriteJson(targetPath, value) {
   }
 }
 
+// GH-452: variant of atomicWriteJson for tests that need to write a
+// deliberately-malformed payload (corrupt-file regression tests). Same
+// tmp + rename + dir-fsync boundary; bytes are passed through verbatim
+// so the test can simulate disk corruption without going through
+// JSON.stringify.
+function writeRawAtomic(targetPath, rawBytes) {
+  const dir = path.dirname(targetPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmpPath = `${targetPath}.tmp.${process.pid}.${Date.now()}`;
+  fs.writeFileSync(tmpPath, rawBytes);
+  fs.renameSync(tmpPath, targetPath);
+  try {
+    const fd = fs.openSync(dir, 'r');
+    try {
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 function writeWorkState(stepStatus, status = 'in_progress') {
   if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
   const state = {
@@ -720,14 +743,20 @@ describe('enforce-step-workflow', () => {
 
     it('handles corrupt evidence file gracefully', () => {
       if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
-      fs.writeFileSync(path.join(TASKS_DIR, '.step-evidence.json'), 'not json {{{');
+      // GH-452: write corrupt payload through the atomic helper so the rename
+      // boundary matches every other state-file writer in this suite. The
+      // helper takes a JS value (it JSON.stringifies internally), so we wrap
+      // the deliberately-malformed payload in a small atomic-equivalent
+      // sequence that preserves the raw bytes the test needs.
+      writeRawAtomic(path.join(TASKS_DIR, '.step-evidence.json'), 'not json {{{');
       const evidence = readEvidence('.step-evidence.json');
       assert.deepEqual(evidence, {});
     });
 
     it('handles corrupt workflow-state file gracefully', () => {
       if (!fs.existsSync(TASKS_DIR)) fs.mkdirSync(TASKS_DIR, { recursive: true });
-      fs.writeFileSync(path.join(TASKS_DIR, '.work-pr.workflow-state.json'), 'corrupted');
+      // GH-452: see note above — atomic write of a deliberately-corrupt body.
+      writeRawAtomic(path.join(TASKS_DIR, '.work-pr.workflow-state.json'), 'corrupted');
       // Should not crash — fail-open
     });
   });
@@ -4903,6 +4932,301 @@ describe('enforce-step-workflow', () => {
         !stateBlocked,
         `expected no spurious BLOCKED due to missing state, got: ${stateBlocked && stateBlocked.stderr}`
       );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GH-452: Self-scan — every state-file write MUST go through atomicWriteJson
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe('GH-452 atomic state-file write coverage', () => {
+    it('test file contains zero raw fs.writeFileSync(...) calls targeting state JSON shapes', () => {
+      const src = fs.readFileSync(__filename, 'utf-8');
+      // Strip the helper definition itself (atomicWriteJson uses writeFileSync
+      // internally — that single call is the sanctioned escape) and any comment
+      // lines or string-literal lines (those are simulated agent fixtures, not
+      // real writers we control).
+      const lines = src.split('\n');
+      const offenders = [];
+      const stateShapeRe =
+        /fs\.writeFileSync\s*\([^)]*\.(work-state|workflow-state|step-evidence)[^)]*\.json/;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Skip strings: lines that contain the writeFileSync call inside a
+        // quoted JS string (simulated agent code). Detect by leading quote
+        // or "'const fs = require" prefix.
+        if (/^\s*['"`]/.test(line.trim())) continue;
+        // Skip comment lines.
+        if (/^\s*\/\//.test(line)) continue;
+        if (stateShapeRe.test(line)) {
+          offenders.push(`${i + 1}: ${line.trim()}`);
+        }
+      }
+      assert.equal(
+        offenders.length,
+        0,
+        `GH-452: state-file writers must use atomicWriteJson(), found raw fs.writeFileSync calls:\n${offenders.join('\n')}`
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GH-452 Task 3 — Normalise TRUSTED_SCRIPT_DIRS at module load via realpathSync
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe('GH-452 Task 3: TRUSTED_SCRIPT_DIRS module-load realpath normalisation', () => {
+    // Resolve the real workflows root (the source-of-truth dir whose subtree
+    // contains the hook). We use this as the realpath target for the symlink
+    // shim so the spawned child can require the hook through a symlinked
+    // ancestor and we can inspect its normalised trustedDirs.
+    const REAL_WORKFLOWS_DIR = fs.realpathSync(
+      path.resolve(__dirname, '..', '..') // .../scripts/workflows
+    );
+
+    // Spawn a fresh node process that requires the hook through `requirePath`
+    // with ENFORCE_HOOK_DEBUG=1 so Task 1's logGh452Diagnostics() dumps each
+    // trusted-dir entry on stderr at module load. Parse those lines back into
+    // an array. We need a child process so module load happens fresh on every
+    // test (parent's require cache already holds the unsymlinked instance).
+    function loadTrustedDirsVia(requirePath, extraEnv = {}) {
+      return new Promise((resolve, reject) => {
+        // We don't care about hook exit code or its normal stdout — we only
+        // care about ENFORCE_HOOK_DEBUG stderr lines emitted at module load.
+        const code = `
+          try {
+            require(${JSON.stringify(requirePath)});
+          } catch (err) {
+            process.stderr.write('LOAD_ERROR: ' + err.message + '\\n' + err.stack + '\\n');
+            process.exit(7);
+          }
+        `;
+        // --preserve-symlinks keeps the symlinked require path intact in
+        // __dirname, mirroring the Node 20 plugin-cache symlink behaviour
+        // that the GH-452 RCA blames for the trust-prefix mismatch. Without
+        // this flag Node's loader auto-realpaths __dirname and the bug is
+        // invisible.
+        const child = spawn(process.execPath, ['--preserve-symlinks', '-e', code], {
+          env: {
+            ...process.env,
+            ENFORCE_HOOK_DEBUG: '1',
+            // Hook is not running under Claude — avoid hook-self-reentrancy
+            // checks by clearing CLAUDE_HOOK_TYPE.
+            CLAUDE_HOOK_TYPE: '',
+            ...extraEnv,
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d) => {
+          stdout += d.toString();
+        });
+        child.stderr.on('data', (d) => {
+          stderr += d.toString();
+        });
+        child.on('error', reject);
+        child.on('close', (exitCode) => {
+          // Extract trusted-dir entries from stderr. Task 1's diagnostic
+          // format: `GH-452 trusted-dir entry=<path> realpath=<resolved>`
+          const trustedDirs = [];
+          const realpathByEntry = new Map();
+          for (const line of stderr.split('\n')) {
+            const m = /^GH-452 trusted-dir entry=(.+?) realpath=(.+)$/.exec(line);
+            if (m) {
+              trustedDirs.push(m[1]);
+              realpathByEntry.set(m[1], m[2]);
+            }
+          }
+          resolve({ exitCode, stdout, stderr, trustedDirs, realpathByEntry });
+        });
+      });
+    }
+
+    it('normalises TRUSTED_SCRIPT_DIRS to realpaths when hook is loaded via a symlinked plugin-cache ancestor', async () => {
+      // Create a temp dir, symlink it to the real workflows dir, then require
+      // the hook through the symlink. The hook's __dirname will live under
+      // /tmp/.../symlink-cache/lib/hooks; without realpath normalisation the
+      // resulting TRUSTED_SCRIPT_DIRS entries will contain "/symlink-cache/"
+      // rather than the realpath. With Task 3 normalisation they must contain
+      // the realpath segment of REAL_WORKFLOWS_DIR.
+      const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gh452-task3-symlink-'));
+      const symlinkCache = path.join(tmpRoot, 'symlink-cache');
+      fs.symlinkSync(REAL_WORKFLOWS_DIR, symlinkCache, 'dir');
+      const requirePath = path.join(symlinkCache, 'lib', 'hooks', 'enforce-step-workflow.js');
+
+      try {
+        const { exitCode, stderr, trustedDirs } = await loadTrustedDirsVia(requirePath);
+        assert.equal(exitCode, 0, `child exited non-zero. stderr=${stderr}`);
+        assert.ok(
+          trustedDirs.length > 0,
+          `expected at least one trusted-dir entry in stderr; got stderr:\n${stderr}`
+        );
+        // Every entry whose realpath would succeed must have been normalised
+        // away from the symlink path. The symlink segment is "/symlink-cache/";
+        // it must NOT appear in any normalised entry.
+        const symlinkSegment = `${path.sep}symlink-cache${path.sep}`;
+        const unNormalised = trustedDirs.filter((d) => d.includes(symlinkSegment));
+        assert.deepEqual(
+          unNormalised,
+          [],
+          `expected zero trustedDirs containing the symlink path; found:\n${unNormalised.join('\n')}`
+        );
+        // And the realpath segment of the workflows root must appear in at
+        // least one entry — confirming the dirs were actually realpath'd
+        // through to the underlying target.
+        const normalisedCount = trustedDirs.filter((d) => d.startsWith(REAL_WORKFLOWS_DIR)).length;
+        assert.ok(
+          normalisedCount > 0,
+          `expected at least one trustedDir to start with realpath ${REAL_WORKFLOWS_DIR}; got entries:\n${trustedDirs.join('\n')}`
+        );
+      } finally {
+        try {
+          fs.rmSync(tmpRoot, { recursive: true, force: true });
+        } catch {
+          /* cleanup */
+        }
+      }
+    });
+
+    it('warns to stderr with GH-452 marker and retains unresolved path when a trusted-dir realpath fails', async () => {
+      // Build a fake mini-workflows-tree where the hook can require its
+      // siblings, but one of the trusted-dir entries' underlying real path is
+      // missing. We achieve this by copying just enough of the real tree and
+      // deliberately omitting one sibling that TRUSTED_SCRIPT_DIRS references
+      // (e.g. workflows/work-cleanup/). The expected behaviour: load succeeds
+      // (fail-open per entry), stderr contains a `GH-452 trusted-dir realpath
+      // failed` line, and trustedDirs still includes the unresolved path.
+      //
+      // Simpler implementation: symlink the whole real workflows tree (so the
+      // hook can load all its requires), but ALSO place an outer wrapper dir
+      // where one of the resolved trusted dirs gets pre-broken by overlay. We
+      // can't easily break a sibling that real code depends on, so instead we
+      // verify fail-open via a different mechanism: symlink the workflows
+      // dir as before, but additionally create a broken symlink at one of
+      // the trusted-dir locations inside an OVERLAY tree and require through
+      // that overlay.
+      //
+      // Approach: copy the workflows directory structure shallowly into a
+      // tmpdir (just dirs, no files) for sibling entries; copy the real lib/
+      // subtree so the hook can require its dependencies; and break one
+      // trusted-dir entry by replacing it with a dangling symlink. realpath
+      // on a dangling symlink throws ENOENT.
+      const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gh452-task3-failopen-'));
+      const fakeWorkflows = path.join(tmpRoot, 'workflows');
+      fs.mkdirSync(fakeWorkflows);
+
+      // Symlink lib/ to the real lib/ — the hook itself + all its dependencies
+      // load through here.
+      const realLib = path.join(REAL_WORKFLOWS_DIR, 'lib');
+      fs.symlinkSync(realLib, path.join(fakeWorkflows, 'lib'), 'dir');
+
+      // For each sibling dir referenced by TRUSTED_SCRIPT_DIRS, create a
+      // matching symlink to the real one — EXCEPT for `work-cleanup`, which
+      // we replace with a dangling symlink to force realpathSync to throw.
+      const siblings = [
+        'work',
+        'check',
+        'work-implement',
+        'work-brief',
+        'work-spec',
+        'work-tasks',
+        'work-pr-step',
+        'work-ci',
+        'work-completion-checker',
+        'work-code-checker',
+        'work-qa-feature-tester',
+        'work-pr-reviewer',
+        'work-task-review',
+        'work-reports',
+        'check2',
+        'follow-up',
+      ];
+      for (const sib of siblings) {
+        const realSib = path.join(REAL_WORKFLOWS_DIR, sib);
+        if (fs.existsSync(realSib)) {
+          fs.symlinkSync(realSib, path.join(fakeWorkflows, sib), 'dir');
+        }
+      }
+      // The dangling entry — `work-cleanup` symlink pointing at a nonexistent
+      // target. realpathSync on this entry should throw ENOENT.
+      const danglingTarget = path.join(tmpRoot, 'does-not-exist');
+      fs.symlinkSync(danglingTarget, path.join(fakeWorkflows, 'work-cleanup'), 'dir');
+
+      const requirePath = path.join(fakeWorkflows, 'lib', 'hooks', 'enforce-step-workflow.js');
+      try {
+        const { exitCode, stderr, trustedDirs } = await loadTrustedDirsVia(requirePath);
+        assert.equal(exitCode, 0, `child exited non-zero. stderr=${stderr}`);
+        // (a) stderr must contain the GH-452 realpath-failed warning emitted by
+        // the Task 3 safeRealpath() helper at module load.
+        assert.ok(
+          /GH-452 trusted-dir realpath failed/.test(stderr),
+          `expected GH-452 trusted-dir realpath warning on stderr; got:\n${stderr}`
+        );
+        // (b) The unresolved (dangling) path must remain in TRUSTED_SCRIPT_DIRS
+        // — fail-open semantics keep the entry rather than dropping it.
+        const danglingEntryRetained = trustedDirs.some((d) =>
+          d.endsWith(`${path.sep}work-cleanup`)
+        );
+        assert.ok(
+          danglingEntryRetained,
+          `expected unresolved work-cleanup entry to be retained in trustedDirs; got:\n${trustedDirs.join('\n')}`
+        );
+      } finally {
+        try {
+          fs.rmSync(tmpRoot, { recursive: true, force: true });
+        } catch {
+          /* cleanup */
+        }
+      }
+    });
+
+    // GH-452 Task 3 deliverable 3.2.3: shared fixture for placing a
+    // fake-but-correctly-named script at an untrusted (os.tmpdir) path.
+    // The fake's basename is preserved so the hook's basename-based exempt-
+    // script matcher fires, then the trust-prefix check rejects it.
+    async function withTempFakeScript(name, fn) {
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), `gh452-task3-fake-${process.pid}-`)
+      );
+      const fakePath = path.join(tmpDir, name);
+      fs.writeFileSync(
+        fakePath,
+        'const fs = require("fs"); fs.writeFileSync(".work-state.json", "{}");'
+      );
+      try {
+        return await fn(fakePath);
+      } finally {
+        try {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+          /* cleanup */
+        }
+      }
+    }
+
+    // GH-452 Vector 3 boundary preservation
+    // The fake script MUST be named `work-orchestrator.js` (an EXEMPT script
+    // basename) and live at an untrusted path. The hook should match the
+    // basename, then fail the trust-prefix check and BLOCK. This locks in the
+    // trust boundary so the Task 3 normalisation cannot silently widen trust.
+    it('still BLOCKs an untrusted os.tmpdir()-placed fake work-orchestrator.js after normalisation', async () => {
+      writeWorkState(makeStepStatus('implement', WORK_STEPS));
+      await withTempFakeScript('work-orchestrator.js', async (fakePath) => {
+        const { code, stderr } = await runHook(
+          {
+            tool_name: 'Bash',
+            tool_input: { command: `node ${fakePath} transition TEST-1 commit` },
+          },
+          'PreToolUse'
+        );
+        assert.equal(
+          code,
+          2,
+          `Vector 3: untrusted exempt-named path must BLOCK; got exit=${code} stderr=${stderr}`
+        );
+        assert.ok(
+          stderr.includes('BLOCKED'),
+          `Vector 3: stderr must contain BLOCKED; got:\n${stderr}`
+        );
+      });
     });
   });
 });
