@@ -188,23 +188,6 @@ function summarise(grouped) {
   return summary;
 }
 
-/**
- * Look up which consolidate profile (if any) owns a given source path by
- * scanning all `.js` files under `profilesDir`. Each profile module must
- * export an object containing at least a `sources` array. Profiles
- * intersecting the requested `sourcePath` are collected.
- *
- *   - No `profilesDir` or directory missing → returns `null` (tolerated).
- *   - 0 hits                                → returns `null`.
- *   - 1 hit                                 → returns `{ name }` (falls back
- *                                             to the filename stem when the
- *                                             module did not export `name`).
- *   - >1 hits                               → returns
- *                                             `{ ambiguous: true, profiles: [names] }`.
- *
- * @param {string} sourcePath repo-relative source path (e.g. 'docs/a.md')
- * @param {{ profilesDir?: string }} [opts]
- */
 function loadProfileModule(absPath) {
   try {
     delete require.cache[require.resolve(absPath)];
@@ -233,6 +216,23 @@ function listProfileEntries(profilesDir) {
   }
 }
 
+/**
+ * Look up which consolidate profile (if any) owns a given source path by
+ * scanning all `.js` files under `profilesDir`. Each profile module must
+ * export an object containing at least a `sources` array. Profiles
+ * intersecting the requested `sourcePath` are collected.
+ *
+ *   - No `profilesDir` or directory missing → returns `null` (tolerated).
+ *   - 0 hits                                → returns `null`.
+ *   - 1 hit                                 → returns `{ name }` (falls back
+ *                                             to the filename stem when the
+ *                                             module did not export `name`).
+ *   - >1 hits                               → returns
+ *                                             `{ ambiguous: true, profiles: [names] }`.
+ *
+ * @param {string} sourcePath repo-relative source path (e.g. 'docs/a.md')
+ * @param {{ profilesDir?: string }} [opts]
+ */
 function getProfileForSource(sourcePath, opts) {
   const profilesDir = opts && opts.profilesDir;
   const entries = listProfileEntries(profilesDir);
