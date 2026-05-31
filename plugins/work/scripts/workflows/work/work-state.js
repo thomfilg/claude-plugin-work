@@ -60,6 +60,8 @@ const TASKS_BASE = config.TASKS_BASE;
 
 const { ALL_STEPS: STEPS } = require(path.join(__dirname, 'step-registry'));
 const { taskSegment } = require('../lib/allocate-output-folder');
+// GH-410: verdict parsing for checkpoint auto-completion in completeWork().
+const { hasVerdict } = require('../lib/parse-completion-status');
 
 const SUBTASK_STEPS = ['implement', 'commit'];
 
@@ -261,6 +263,52 @@ function addError(ticketId, step, error) {
  * GH-106: Made idempotent — if already completed, returns existing state.
  * Returns { error: ... } when no state found (caller must check).
  */
+/**
+ * GH-410: Auto-complete checkpoint tasks that have an APPROVED/COMPLETE
+ * completion.check.md report. Mutates `state` in place. Returns the array
+ * of audit entries appended (empty if nothing changed).
+ *
+ * A checkpoint task is a verification-only roll-up with no source deliverables.
+ * The check step already verifies its outcome via completion.check.md, so the
+ * tasksMeta bookkeeping just needs to follow.
+ */
+function autoCompleteCheckpointTasks(state, ticketId) {
+  const closed = [];
+  if (!state || !state.tasksMeta || !Array.isArray(state.tasksMeta.tasks)) return closed;
+
+  const reportPath = path.join(TASKS_BASE, safeId(ticketId), 'completion.check.md');
+  let reportContent = null;
+  let reportApproved = false;
+  if (fs.existsSync(reportPath)) {
+    try {
+      reportContent = fs.readFileSync(reportPath, 'utf8');
+      reportApproved = hasVerdict(reportContent, ['COMPLETE', 'APPROVED']);
+    } catch {
+      reportApproved = false;
+    }
+  }
+
+  if (!reportApproved) return closed;
+
+  for (const entry of state.tasksMeta.tasks) {
+    if (entry && entry.kind === 'checkpoint' && entry.status !== 'completed') {
+      entry.status = 'completed';
+      closed.push({
+        taskId: entry.id,
+        title: entry.title || entry.id,
+        reason: 'APPROVED completion.check.md present',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  if (closed.length > 0) {
+    if (!Array.isArray(state.autoCompleted)) state.autoCompleted = [];
+    state.autoCompleted.push(...closed);
+  }
+  return closed;
+}
+
 function completeWork(ticketId) {
   let state = loadState(ticketId);
   if (!state) {
@@ -272,12 +320,25 @@ function completeWork(ticketId) {
     return state;
   }
 
-  // Terminal guard: block completion if tasks are still pending (GH-245)
-  // Array.isArray guards against corrupted state files where tasksMeta.tasks is not an array
+  // GH-410: Auto-complete checkpoint tasks before the terminal guard so a
+  // verification-only roll-up doesn't wedge the `complete` step. Persists if
+  // anything changed so the audit trail survives.
+  const autoClosed = autoCompleteCheckpointTasks(state, ticketId);
+  if (autoClosed.length > 0) {
+    saveState(ticketId, state);
+  }
+
+  // Terminal guard: block completion if tasks are still pending (GH-245).
+  // GH-410: emit a directive message when the only pending tasks are
+  // checkpoint-kind without an APPROVED completion.check.md report.
   if (state.tasksMeta && Array.isArray(state.tasksMeta.tasks)) {
     const pendingTasks = state.tasksMeta.tasks.filter((t) => t.status !== 'completed');
     if (pendingTasks.length > 0) {
-      return { error: `Cannot complete workflow: ${pendingTasks.length} tasks still pending` };
+      const allCheckpoint = pendingTasks.every((t) => t && t.kind === 'checkpoint');
+      const msg = allCheckpoint
+        ? `Cannot complete workflow: ${pendingTasks.length} checkpoint task(s) still pending — expected APPROVED completion.check.md to auto-close them (see GH-410)`
+        : `Cannot complete workflow: ${pendingTasks.length} tasks still pending`;
+      return { error: msg };
     }
   }
 

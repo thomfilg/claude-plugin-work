@@ -809,6 +809,119 @@ describe('work-state.js', () => {
     });
   });
 
+
+  describe('completeWork checkpoint auto-completion (GH-410)', () => {
+    const TICKET_APPROVED = 'TEST-CHK-APPROVED-001';
+    const TICKET_NO_REPORT = 'TEST-CHK-NOREPORT-001';
+    const TICKET_INCOMPLETE = 'TEST-CHK-INCOMPLETE-001';
+    const TICKET_NON_CKPT = 'TEST-CHK-NONCKPT-001';
+    const TICKET_LEGACY = 'TEST-CHK-LEGACY-001';
+    const TICKET_MSG = 'TEST-CHK-MSG-001';
+    const TICKET_MSG_MIXED = 'TEST-CHK-MIXED-001';
+
+    after(() => {
+      cleanupTempWorkState(TICKET_APPROVED);
+      cleanupTempWorkState(TICKET_NO_REPORT);
+      cleanupTempWorkState(TICKET_INCOMPLETE);
+      cleanupTempWorkState(TICKET_NON_CKPT);
+      cleanupTempWorkState(TICKET_LEGACY);
+      cleanupTempWorkState(TICKET_MSG);
+      cleanupTempWorkState(TICKET_MSG_MIXED);
+    });
+
+    function seedTicket(ticket, tasks) {
+      const dir = path.join(TEMP_TASKS_BASE, ticket);
+      fs.mkdirSync(dir, { recursive: true });
+      const state = {
+        ticketId: ticket,
+        status: 'in_progress',
+        stepStatus: {},
+        tasksMeta: { totalTasks: tasks.length, currentTaskIndex: tasks.length, tasks },
+      };
+      fs.writeFileSync(path.join(dir, '.work-state.json'), JSON.stringify(state));
+      return dir;
+    }
+
+    function writeReport(dir, status) {
+      fs.writeFileSync(path.join(dir, 'completion.check.md'), `# Completion Report\nStatus: ${status}\n`);
+    }
+
+    it('auto-completes a pending checkpoint task when completion.check.md is APPROVED', async () => {
+      const dir = seedTicket(TICKET_APPROVED, [
+        { id: 'task_1', status: 'completed', kind: 'backend' },
+        { id: 'task_2', status: 'pending', kind: 'checkpoint' },
+      ]);
+      writeReport(dir, 'APPROVED');
+      const { result, code } = await runWorkState(['complete', TICKET_APPROVED]);
+      assert.equal(code, 0);
+      assert.equal(result.status, 'completed');
+      assert.ok(Array.isArray(result.autoCompleted));
+      assert.equal(result.autoCompleted.length, 1);
+      assert.equal(result.autoCompleted[0].taskId, 'task_2');
+      assert.match(result.autoCompleted[0].reason, /APPROVED/);
+    });
+
+    it('blocks completion when checkpoint task has no completion.check.md', async () => {
+      seedTicket(TICKET_NO_REPORT, [
+        { id: 'task_1', status: 'completed', kind: 'backend' },
+        { id: 'task_2', status: 'pending', kind: 'checkpoint' },
+      ]);
+      const { code, stderr } = await runWorkState(['complete', TICKET_NO_REPORT]);
+      assert.notEqual(code, 0);
+      assert.match(stderr, /tasks still pending|checkpoint/i);
+    });
+
+    it('blocks completion when verdict is INCOMPLETE', async () => {
+      const dir = seedTicket(TICKET_INCOMPLETE, [
+        { id: 'task_1', status: 'pending', kind: 'checkpoint' },
+      ]);
+      writeReport(dir, 'INCOMPLETE');
+      const { code, stderr } = await runWorkState(['complete', TICKET_INCOMPLETE]);
+      assert.notEqual(code, 0);
+      assert.match(stderr, /tasks still pending|checkpoint/i);
+    });
+
+    it('does NOT auto-complete non-checkpoint pending tasks even with APPROVED report', async () => {
+      const dir = seedTicket(TICKET_NON_CKPT, [
+        { id: 'task_1', status: 'pending', kind: 'backend' },
+      ]);
+      writeReport(dir, 'APPROVED');
+      const { code, stderr } = await runWorkState(['complete', TICKET_NON_CKPT]);
+      assert.notEqual(code, 0);
+      assert.match(stderr, /tasks still pending/i);
+    });
+
+    it('does NOT auto-complete tasks lacking a kind field (legacy state)', async () => {
+      const dir = seedTicket(TICKET_LEGACY, [
+        { id: 'task_1', status: 'pending' },
+      ]);
+      writeReport(dir, 'APPROVED');
+      const { code, stderr } = await runWorkState(['complete', TICKET_LEGACY]);
+      assert.notEqual(code, 0);
+      assert.match(stderr, /tasks still pending/i);
+    });
+
+    it('emits a checkpoint-directive error when all pending are checkpoint without report', async () => {
+      seedTicket(TICKET_MSG, [
+        { id: 'task_1', status: 'pending', kind: 'checkpoint' },
+      ]);
+      const { code, stderr } = await runWorkState(['complete', TICKET_MSG]);
+      assert.notEqual(code, 0);
+      assert.match(stderr, /checkpoint/i);
+      assert.match(stderr, /completion\.check\.md|APPROVED/);
+    });
+
+    it('emits the generic message when at least one pending task is not checkpoint', async () => {
+      seedTicket(TICKET_MSG_MIXED, [
+        { id: 'task_1', status: 'pending', kind: 'backend' },
+        { id: 'task_2', status: 'pending', kind: 'checkpoint' },
+      ]);
+      const { code, stderr } = await runWorkState(['complete', TICKET_MSG_MIXED]);
+      assert.notEqual(code, 0);
+      assert.match(stderr, /2 tasks still pending/);
+    });
+  });
+
   describe('task-init descriptor array (GH-410)', () => {
     const TICKET_STDIN = 'TEST-TASKINIT-STDIN-001';
     const TICKET_ENV = 'TEST-TASKINIT-ENV-001';
