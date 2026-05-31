@@ -245,56 +245,60 @@ function dispatchReconsolidate(grouped, opts) {
   return { sawSpawnFailure };
 }
 
-function main() {
+function parseCliOptions() {
   const { flag, cwd: rawCwd } = setupCli();
-  const cwd = path.resolve(rawCwd);
-  const cwdFlagExplicit = typeof flag('cwd') === 'string';
-  const json = !!flag('json');
-  const verbose = !!flag('verbose');
-  const noColor = !!flag('no-color') || !!process.env.NO_COLOR;
-  const reConsolidate = !!flag('re-consolidate');
-
   const storeFlag = flag('store');
-  const { stores, error } = resolveStores(
-    typeof storeFlag === 'string' ? storeFlag : null,
-    cwd
-  );
+  return {
+    cwd: path.resolve(rawCwd),
+    cwdFlagExplicit: typeof flag('cwd') === 'string',
+    json: !!flag('json'),
+    verbose: !!flag('verbose'),
+    noColor: !!flag('no-color') || !!process.env.NO_COLOR,
+    reConsolidate: !!flag('re-consolidate'),
+    storeFlag: typeof storeFlag === 'string' ? storeFlag : null,
+  };
+}
+
+function renderReport(grouped, summary, opts) {
+  return opts.json
+    ? renderJson(grouped, summary, { store: opts.storeFlag || 'all' })
+    : renderText(grouped, summary, { verbose: opts.verbose, useColor: !opts.noColor });
+}
+
+function maybeReconsolidate(grouped, opts) {
+  if (!opts.reConsolidate) return false;
+  const consolidateBin =
+    process.env.SYNAPSYS_CONSOLIDATE_BIN_FOR_TEST ||
+    path.join(__dirname, 'synapsys-consolidate.js');
+  const profilesDir =
+    process.env.SYNAPSYS_PROFILES_DIR_FOR_TEST ||
+    path.join(__dirname, 'consolidate-profiles');
+  const dispatched = dispatchReconsolidate(grouped, {
+    consolidateBin,
+    profilesDir,
+    stderr: process.stderr,
+  });
+  return dispatched.sawSpawnFailure;
+}
+
+function main() {
+  const opts = parseCliOptions();
+  const { stores, error } = resolveStores(opts.storeFlag, opts.cwd);
   if (error) {
     process.stderr.write(error + '\n');
     process.exit(2);
     return;
   }
 
-  const repoRoot = cwdFlagExplicit ? cwd : findRepoRoot(cwd);
+  const repoRoot = opts.cwdFlagExplicit ? opts.cwd : findRepoRoot(opts.cwd);
   const grouped = classifyStores(stores, repoRoot);
   const summary = summarise(grouped);
 
-  const storeLabel = typeof storeFlag === 'string' ? storeFlag : 'all';
-  const out = json
-    ? renderJson(grouped, summary, { store: storeLabel })
-    : renderText(grouped, summary, { verbose, useColor: !noColor });
-  process.stdout.write(out);
+  process.stdout.write(renderReport(grouped, summary, opts));
 
-  let sawSpawnFailure = false;
-  if (reConsolidate) {
-    const consolidateBin =
-      process.env.SYNAPSYS_CONSOLIDATE_BIN_FOR_TEST ||
-      path.join(__dirname, 'synapsys-consolidate.js');
-    const profilesDir =
-      process.env.SYNAPSYS_PROFILES_DIR_FOR_TEST ||
-      path.join(__dirname, 'consolidate-profiles');
-    const dispatched = dispatchReconsolidate(grouped, {
-      consolidateBin,
-      profilesDir,
-      stderr: process.stderr,
-    });
-    sawSpawnFailure = dispatched.sawSpawnFailure;
-  }
-
-  if (summary.drifted > 0 || summary.orphan > 0 || sawSpawnFailure) {
-    process.exit(1);
-  }
-  process.exit(0);
+  const sawSpawnFailure = maybeReconsolidate(grouped, opts);
+  const hasIssue = summary.drifted > 0 || summary.orphan > 0 || sawSpawnFailure;
+  process.exit(hasIssue ? 1 : 0);
 }
 
 main();

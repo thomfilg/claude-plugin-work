@@ -189,34 +189,41 @@ function summarise(grouped) {
  * @param {string} sourcePath repo-relative source path (e.g. 'docs/a.md')
  * @param {{ profilesDir?: string }} [opts]
  */
-function getProfileForSource(sourcePath, opts) {
-  const profilesDir = opts && opts.profilesDir;
-  if (!profilesDir || typeof profilesDir !== 'string') return null;
-  if (!fs.existsSync(profilesDir)) return null;
-  let entries;
+function loadProfileModule(absPath) {
   try {
-    entries = fs.readdirSync(profilesDir);
+    delete require.cache[require.resolve(absPath)];
+    return require(absPath);
   } catch (_e) {
     return null;
   }
+}
+
+function profileClaimsSource(mod, sourcePath) {
+  return mod && Array.isArray(mod.sources) && mod.sources.includes(sourcePath);
+}
+
+function profileName(mod, entry) {
+  if (mod && typeof mod.name === 'string' && mod.name.length > 0) return mod.name;
+  return path.basename(entry, '.js');
+}
+
+function listProfileEntries(profilesDir) {
+  if (!profilesDir || typeof profilesDir !== 'string') return [];
+  if (!fs.existsSync(profilesDir)) return [];
+  try {
+    return fs.readdirSync(profilesDir).filter((e) => e.endsWith('.js'));
+  } catch (_e) {
+    return [];
+  }
+}
+
+function getProfileForSource(sourcePath, opts) {
+  const profilesDir = opts && opts.profilesDir;
+  const entries = listProfileEntries(profilesDir);
   const hits = [];
   for (const entry of entries) {
-    if (!entry.endsWith('.js')) continue;
-    const abs = path.join(profilesDir, entry);
-    let mod;
-    try {
-      // Bust require cache so test sandboxes are not contaminated.
-      delete require.cache[require.resolve(abs)];
-      mod = require(abs);
-    } catch (_e) {
-      continue;
-    }
-    if (!mod || !Array.isArray(mod.sources)) continue;
-    if (!mod.sources.includes(sourcePath)) continue;
-    const name = typeof mod.name === 'string' && mod.name.length > 0
-      ? mod.name
-      : path.basename(entry, '.js');
-    hits.push(name);
+    const mod = loadProfileModule(path.join(profilesDir, entry));
+    if (profileClaimsSource(mod, sourcePath)) hits.push(profileName(mod, entry));
   }
   if (hits.length === 0) return null;
   if (hits.length === 1) return { name: hits[0] };
