@@ -26,8 +26,19 @@ function splitTopLevelAlternation(triggerPrompt) {
   const arms = [];
   const depth = { paren: 0, bracket: 0 };
   let buf = '';
+  let escaped = false;
   for (let i = 0; i < triggerPrompt.length; i++) {
     const ch = triggerPrompt[i];
+    if (escaped) {
+      buf += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      buf += ch;
+      escaped = true;
+      continue;
+    }
     updateDepth(depth, ch);
     if (ch === '|' && depth.paren === 0 && depth.bracket === 0) {
       arms.push(buf);

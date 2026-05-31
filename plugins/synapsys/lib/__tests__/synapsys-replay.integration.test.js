@@ -528,6 +528,8 @@ test('@task:5 heuristic tightening suggestion fires for fp_rate > 0.70 with shor
   ]);
   // Top-level only — `|` inside `(...)` / `[...]` is not split.
   assert.deepEqual(splitTopLevelAlternation('(a|b)|cd|[e|f]'), ['(a|b)', 'cd', '[e|f]']);
+  // Backslash-escaped `|` is not a separator.
+  assert.deepEqual(splitTopLevelAlternation('auth\\|login|admin'), ['auth\\|login', 'admin']);
 
   // Memory with short alternation arms and high fp_rate → suggestion.
   const noisyMem = {
