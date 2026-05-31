@@ -210,6 +210,9 @@ function initTasksMeta(ticketId, taskCountOrTasks) {
       if (src && typeof src.type === 'string') {
         entry.kind = src.type;
       }
+      if (src && typeof src.title === 'string' && src.title) {
+        entry.title = src.title;
+      }
     }
     tasks.push(entry);
   }

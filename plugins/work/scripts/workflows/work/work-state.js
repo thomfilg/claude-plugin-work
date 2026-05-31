@@ -797,8 +797,6 @@ async function readTaskInitDescriptors(secondArg) {
       process.stdin.setEncoding('utf8');
       process.stdin.on('data', (c) => { buf += c; });
       process.stdin.on('end', () => resolve(buf));
-      // Don't hang if stdin produces no data:
-      setTimeout(() => resolve(buf), 50).unref();
     });
   }
   if (!raw || !raw.trim()) return null;

@@ -122,4 +122,17 @@ describe('initTasksMeta — kind persistence (GH-410)', () => {
     assert.equal(result.tasksMeta.tasks[1].id, 'task_2');
     assert.equal(result.tasksMeta.tasks[1].status, 'pending');
   });
+
+  it('persists title from descriptor for audit-readable autoCompleted entries', () => {
+    const ticket = freshTicket('GH-410-KIND-TITLE');
+    const descriptors = [
+      { num: 1, type: 'checkpoint', title: 'End-to-end verification' },
+      { num: 2, type: 'backend' },
+    ];
+    const result = initTasksMeta(ticket, descriptors);
+    assert.ok(result.success);
+    assert.equal(result.tasksMeta.tasks[0].title, 'End-to-end verification');
+    assert.equal(result.tasksMeta.tasks[1].title, undefined,
+      'descriptor without title must NOT carry a title field');
+  });
 });

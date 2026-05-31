@@ -194,6 +194,7 @@ module.exports = function implementStep(add, s, ctx) {
       const descriptors = taskData.map((t) => ({
         num: t.num,
         type: t.type,
+        title: t.title,
         dependencies: t.dependencies,
       }));
       execFileSync(process.execPath, [wsPath, 'task-init', safeName], {

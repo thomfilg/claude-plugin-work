@@ -849,7 +849,7 @@ describe('work-state.js', () => {
     it('auto-completes a pending checkpoint task when completion.check.md is APPROVED', async () => {
       const dir = seedTicket(TICKET_APPROVED, [
         { id: 'task_1', status: 'completed', kind: 'backend' },
-        { id: 'task_2', status: 'pending', kind: 'checkpoint' },
+        { id: 'task_2', status: 'pending', kind: 'checkpoint', title: 'Wrap-up verification' },
       ]);
       writeReport(dir, 'APPROVED');
       const { result, code } = await runWorkState(['complete', TICKET_APPROVED]);
@@ -858,6 +858,8 @@ describe('work-state.js', () => {
       assert.ok(Array.isArray(result.autoCompleted));
       assert.equal(result.autoCompleted.length, 1);
       assert.equal(result.autoCompleted[0].taskId, 'task_2');
+      assert.equal(result.autoCompleted[0].title, 'Wrap-up verification',
+        'audit must capture human-readable title, not just task id');
       assert.match(result.autoCompleted[0].reason, /APPROVED/);
     });
 
