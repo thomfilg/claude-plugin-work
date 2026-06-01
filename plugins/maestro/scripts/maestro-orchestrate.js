@@ -140,7 +140,9 @@ function handlePhaseStall(ctx, stallHit) {
 const SPINNER_RE_INTERRUPT_MIN = parseInt(process.env.SPINNER_RE_INTERRUPT_MIN || '5', 10);
 
 // Spinner hang is an immediate interrupt; doesn't go through nudge counter.
-// Returns true when handled (caller should skip remaining detectors).
+// Returns true ONLY when a fresh interrupt was just sent (caller skips remaining
+// detectors so we don't double-message the pane in the same tick). Cooldown
+// suppresses the re-interrupt but lets the other detectors keep observing.
 function runSpinnerDetector(ctx) {
   const sHit = DETECTORS.spinner.detect(ctx);
   if (!sHit.hit) {
@@ -149,9 +151,9 @@ function runSpinnerDetector(ctx) {
   }
   const prev = state.read(ctx.ticket, 'spinner');
   if (prev && state.minutesSince(prev.lastInterruptAt) < SPINNER_RE_INTERRUPT_MIN) {
-    // Within cooldown — already nudged this hang. Stay quiet so the pane
-    // doesn't fill with repeated interrupt messages.
-    return true;
+    // Within cooldown — already nudged this hang. Stay quiet on the spinner,
+    // but let other detectors run; they observe independent signals.
+    return false;
   }
   actions.interrupt(ctx.session, `spinner stuck ${sHit.elapsedMin}m: ${sHit.line}`);
   state.write(ctx.ticket, 'spinner', { lastInterruptAt: state.now() });
