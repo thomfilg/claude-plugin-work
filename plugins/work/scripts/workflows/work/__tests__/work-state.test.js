@@ -829,7 +829,7 @@ describe('work-state.js', () => {
       cleanupTempWorkState(TICKET_MSG_MIXED);
     });
 
-    function seedTicket(ticket, tasks) {
+    function seedTicket(ticket, tasks, opts = {}) {
       const dir = path.join(TEMP_TASKS_BASE, ticket);
       fs.mkdirSync(dir, { recursive: true });
       const state = {
@@ -839,6 +839,21 @@ describe('work-state.js', () => {
         tasksMeta: { totalTasks: tasks.length, currentTaskIndex: tasks.length, tasks },
       };
       fs.writeFileSync(path.join(dir, '.work-state.json'), JSON.stringify(state));
+      // By default write a tasks.md that matches the seeded tasksMeta. The
+      // auto-completion path re-verifies kind:'checkpoint' against tasks.md,
+      // so absent this file the gate refuses to close anything. Pass
+      // `opts.skipTasksMd: true` to test the tasks.md-missing fallback path,
+      // or `opts.tasksMdKinds` to deliberately desync tasks.md from state
+      // (e.g. for the tampering-defense test).
+      if (!opts.skipTasksMd) {
+        const kinds = opts.tasksMdKinds || tasks.map((t) => (t && t.kind) || 'backend');
+        const sections = tasks.map((t, i) => {
+          const num = i + 1;
+          const title = (t && t.title) || `Task ${num}`;
+          return `## Task ${num} — ${title}\n\n### Type\n${kinds[i] || 'backend'}\n`;
+        });
+        fs.writeFileSync(path.join(dir, 'tasks.md'), sections.join('\n'));
+      }
       return dir;
     }
 
@@ -926,6 +941,27 @@ describe('work-state.js', () => {
       const { code, stderr } = await runWorkState(['complete', TICKET_LEGACY]);
       assert.notEqual(code, 0);
       assert.match(stderr, /tasks still pending/i);
+    });
+
+    it('refuses to auto-close when state says checkpoint but tasks.md disagrees', async () => {
+      // Security review on PR #470: re-verify the source of truth (tasks.md)
+      // before auto-closing. An attacker who can write .work-state.json
+      // directly could flip kind:"checkpoint" on a real implementation task —
+      // the tasks.md re-check defeats that path.
+      const TICKET_TAMPER = 'TEST-CHK-TAMPER-001';
+      cleanupTempWorkState(TICKET_TAMPER);
+      // tasksMeta claims task_1 is checkpoint, but tasks.md says backend.
+      const dir = seedTicket(
+        TICKET_TAMPER,
+        [{ id: 'task_1', status: 'pending', kind: 'checkpoint', title: 'fake checkpoint' }],
+        { tasksMdKinds: ['backend'] }
+      );
+      writeReport(dir, 'APPROVED', ['task_1']);
+      const { code, stderr } = await runWorkState(['complete', TICKET_TAMPER]);
+      assert.notEqual(code, 0,
+        'complete must fail — tasks.md disagrees with state on kind');
+      assert.match(stderr, /tasks still pending|checkpoint/i);
+      cleanupTempWorkState(TICKET_TAMPER);
     });
 
     it('does NOT match task_1 as a substring of task_10 in the report', async () => {

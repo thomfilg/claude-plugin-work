@@ -271,7 +271,8 @@ function autoCompleteCheckpointTasks(state, ticketId) {
   const closed = [];
   if (!state || !state.tasksMeta || !Array.isArray(state.tasksMeta.tasks)) return closed;
 
-  const reportPath = path.join(TASKS_BASE, safeId(ticketId), 'completion.check.md');
+  const ticketDir = path.join(TASKS_BASE, safeId(ticketId));
+  const reportPath = path.join(ticketDir, 'completion.check.md');
   let reportContent = null;
   let matchedVerdict = null;
   if (fs.existsSync(reportPath)) {
@@ -286,6 +287,40 @@ function autoCompleteCheckpointTasks(state, ticketId) {
 
   if (!matchedVerdict) return closed;
 
+  // Re-verify checkpoint classification against tasks.md (not just persisted
+  // state). Without this, an attacker who can write `.work-state.json`
+  // directly could flip `kind:"checkpoint"` on a real implementation task
+  // and trigger the auto-close path. tasks.md is the source of truth for
+  // task classification — `kind_assign` already validates `type` against
+  // VALID_KINDS at tasks-step time, so re-parsing here gives us a fresh
+  // read of an authority that wasn't reachable via state-file tampering.
+  let tasksMdCheckpointNums = null;
+  try {
+    const tasksMdPath = path.join(ticketDir, 'tasks.md');
+    if (fs.existsSync(tasksMdPath)) {
+      // Lazy require to avoid circular deps at module-load time.
+      // eslint-disable-next-line global-require
+      const { parseTasks } = require('./lib/task-parser');
+      const parsed = parseTasks(ticketDir);
+      if (Array.isArray(parsed)) {
+        // Trust ONLY the explicit `type: checkpoint` from tasks.md.
+        // parseTasks also sets `isCheckpoint` via a title regex
+        // (/checkpoint/i.test(title)), but that title-prose path is the
+        // same kind of unreliable signal we already rejected for the
+        // per-task linkage check — a real implementation task with
+        // "checkpoint" in its title would otherwise pass the gate here.
+        tasksMdCheckpointNums = new Set(
+          parsed
+            .filter((t) => t && t.type === 'checkpoint')
+            .map((t) => t.num)
+            .filter((n) => Number.isInteger(n))
+        );
+      }
+    }
+  } catch {
+    tasksMdCheckpointNums = null;
+  }
+
   // Per-task linkage with id-only token-boundary matching.
   //
   // We deliberately do NOT match on titles. Titles are free-form prose
@@ -298,9 +333,21 @@ function autoCompleteCheckpointTasks(state, ticketId) {
   // from `task_10`; we use an explicit `[^A-Za-z0-9_]` boundary instead so
   // a report naming only `task_10` does not auto-close `task_1`.
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const idToNum = (id) => {
+    const m = /^task_(\d+)$/.exec(String(id || ''));
+    return m ? Number(m[1]) : null;
+  };
   for (const entry of state.tasksMeta.tasks) {
     if (!entry || entry.kind !== 'checkpoint' || entry.status === 'completed') continue;
     if (!entry.id) continue;
+    // Source-of-truth re-check: if we successfully parsed tasks.md, the
+    // task's num MUST appear there with type=checkpoint. If we couldn't
+    // parse tasks.md (missing, malformed), fall through to the report-name
+    // check below — the verdict gate + per-task linkage are still in force.
+    if (tasksMdCheckpointNums) {
+      const num = idToNum(entry.id);
+      if (num === null || !tasksMdCheckpointNums.has(num)) continue;
+    }
     const re = new RegExp(`(^|[^A-Za-z0-9_])${escapeRe(entry.id)}([^A-Za-z0-9_]|$)`);
     if (!re.test(reportContent)) continue;
     entry.status = 'completed';
