@@ -79,6 +79,18 @@ function isHaltedWaitingForUser(pane) {
   return HALTED_WAITING_PATTERNS.some((re) => re.test(pane));
 }
 
+// Advance a marker after sending a nudge/alert. `alerted=true` flips the
+// one-shot flag so subsequent ticks suppress re-alerting until the marker is
+// reset (phase advance, HEAD change, etc.).
+function bumpMarker(ticket, key, marker, alerted) {
+  state.write(ticket, key, {
+    ...marker,
+    nudges: (marker.nudges || 0) + 1,
+    lastNudgeAt: state.now(),
+    ...(alerted ? { alerted: true } : {}),
+  });
+}
+
 function handlePhaseStall(ctx, stallHit) {
   const profile = phaseFor(ctx.phase);
   if (profile.exempts(ctx)) {
@@ -115,23 +127,12 @@ function handlePhaseStall(ctx, stallHit) {
       budgetMin: stallHit.budgetMin,
       nudges: marker.nudges,
     });
-    state.write(ctx.ticket, 'phase', {
-      ...marker,
-      nudges: marker.nudges + 1,
-      lastNudgeAt: state.now(),
-      alerted: true,
-    });
-    return;
   } else if (escalation === 'interrupt') {
     actions.interrupt(ctx.session, reason);
   } else {
     actions.soft(ctx.session, reason);
   }
-  state.write(ctx.ticket, 'phase', {
-    ...marker,
-    nudges: marker.nudges + 1,
-    lastNudgeAt: state.now(),
-  });
+  bumpMarker(ctx.ticket, 'phase', marker, escalation === 'alert');
 }
 
 // Spinner hang is an immediate interrupt; doesn't go through nudge counter.
@@ -218,23 +219,12 @@ function handlePrComments(ctx, cHit) {
       elapsedMin: cHit.minsStuck,
       summary: cHit.summary,
     });
-    state.write(ctx.ticket, 'pr-comments', {
-      ...marker,
-      nudges: nudges + 1,
-      lastNudgeAt: state.now(),
-      alerted: true,
-    });
-    return;
   } else if (escalation === 'interrupt') {
     actions.interrupt(ctx.session, reason);
   } else {
     actions.soft(ctx.session, reason);
   }
-  state.write(ctx.ticket, 'pr-comments', {
-    ...marker,
-    nudges: nudges + 1,
-    lastNudgeAt: state.now(),
-  });
+  bumpMarker(ctx.ticket, 'pr-comments', marker, escalation === 'alert');
 }
 
 function main() {
