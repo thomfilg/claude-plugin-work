@@ -163,6 +163,9 @@ function handlePrComments(ctx, cHit) {
   if (marker.lastNudgeAt && sinceLastNudge < profile.reNudgeMin) return;
 
   const nudges = marker.nudges || 0;
+  // Once nudges are exhausted, stop re-alerting until HEAD moves or the
+  // comments are gone. The detector resets the marker on either change.
+  if (nudges >= (profile.maxNudges || 3)) return;
   const top = cHit.summary.map(s => `${s.file}:${s.line} [${s.severity||'?'}] ${s.title}`).join(' | ');
   const reason = `PR #${cHit.prNumber} has ${cHit.count} unaddressed bot comment(s), HEAD unchanged ${cHit.minsStuck}m. Top: ${top}`;
   const escalation = escalationFor(ctx.phase, nudges);
