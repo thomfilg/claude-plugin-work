@@ -37,8 +37,9 @@ const TICK_SEC = parseInt(process.env.TICK_SEC || '60', 10);
 /** Build the context object passed to every detector. */
 function ctxFor(session) {
   const ticket = session.replace(/-work$/, '');
-  const phase = workstate.currentPhase(ticket);
-  const step = workstate.currentStep(ticket);
+  // Single read so phase and step come from the same on-disk snapshot
+  // (the file can be rewritten by /work between reads otherwise).
+  const { phase, step } = workstate.snapshot(ticket);
   const worktree = path.join(workstate.WORKTREES_BASE, `${REPO_NAME}-${ticket}`);
   const pane = tmux.capture(session);
   return { session, ticket, phase, step, worktree, pane };

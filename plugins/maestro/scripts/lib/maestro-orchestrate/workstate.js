@@ -25,18 +25,33 @@ function read(ticket) {
   }
 }
 
-/** First non-completed step, or 'complete' if everything done. */
-function currentPhase(ticket) {
-  const s = read(ticket);
+function phaseFromState(s) {
   if (!s) return null;
   const ss = s.stepStatus || {};
   const pending = Object.entries(ss).find(([, v]) => v !== 'completed');
   return pending ? pending[0] : 'complete';
 }
 
-function currentStep(ticket) {
-  const s = read(ticket);
+function stepFromState(s) {
   return s && typeof s.currentStep !== 'undefined' ? s.currentStep : null;
 }
 
-module.exports = { read, currentPhase, currentStep, WORKTREES_BASE };
+/** First non-completed step, or 'complete' if everything done. */
+function currentPhase(ticket) {
+  return phaseFromState(read(ticket));
+}
+
+function currentStep(ticket) {
+  return stepFromState(read(ticket));
+}
+
+/**
+ * Atomic single-read snapshot for callers that need a consistent
+ * (phase, step) pair (avoids the TOCTOU window between two reads).
+ */
+function snapshot(ticket) {
+  const s = read(ticket);
+  return { phase: phaseFromState(s), step: stepFromState(s) };
+}
+
+module.exports = { read, currentPhase, currentStep, snapshot, WORKTREES_BASE };
