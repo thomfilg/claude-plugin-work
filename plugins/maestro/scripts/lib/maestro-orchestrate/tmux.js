@@ -13,15 +13,6 @@ function sh(cmd) {
   }
 }
 
-function shVoid(cmd) {
-  try {
-    execSync(cmd, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Run a command via argv (no shell) so arguments containing shell metacharacters
  * (backticks, $, \, quotes) cannot trigger command substitution or word-splitting.
