@@ -76,6 +76,16 @@ test('ticketIdFor strips work | dev | listen suffix', () => {
   assert.strictEqual(tmux.ticketIdFor('ECHO-5327-other'), 'ECHO-5327-other');
 });
 
+test('discovery rejects ambiguous compound suffixes like GH-42-dev-work', () => {
+  // Regression: an earlier [A-Z0-9-]+ ticket-id class would greedily consume
+  // "42-dev" and let the suffix group match "-work", classifying a stray
+  // session name as a valid -work ticket. Numeric-only ticket id avoids it.
+  const fakeDir = makeFakeTmuxDir(['GH-42-dev-work', 'GH-42-work']);
+  const tmux = loadFreshTmux(null, fakeDir);
+  const discovered = tmux.listSessions();
+  assert.deepStrictEqual(discovered, ['GH-42-work']);
+});
+
 test('SESSION_PATTERN env overrides the dynamic default', () => {
   const sessions = ['ECHO-1-work', 'CUSTOM-9'];
   const fakeDir = makeFakeTmuxDir(sessions);

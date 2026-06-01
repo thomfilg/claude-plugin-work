@@ -66,7 +66,11 @@ function listSessions(pattern) {
     if (process.env.SESSION_PATTERN) {
       regex = new RegExp(process.env.SESSION_PATTERN);
     } else {
-      regex = new RegExp(`^${resolveTicketPrefix()}-[A-Z0-9-]+-(${SESSION_SUFFIX_ALT})$`);
+      // Numeric ticket-id portion only ([0-9]+) — same as the bash original.
+      // A character class including '-' here would let "GH-42-dev-work"
+      // greedily consume the helper-suffix, with the suffix group then
+      // matching '-work' and yielding the wrong ticket id "GH-42-dev".
+      regex = new RegExp(`^${resolveTicketPrefix()}-[0-9]+-(${SESSION_SUFFIX_ALT})$`);
     }
   }
   return sh('tmux ls 2>/dev/null')
