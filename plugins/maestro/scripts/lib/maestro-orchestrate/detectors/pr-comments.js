@@ -22,37 +22,66 @@ const state = require('../state');
 const BOT_RE = /(cursor|copilot|bugbot|codex|sourcery)/i;
 
 function sh(cmd) {
-  try { return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString(); }
-  catch { return ''; }
+  try {
+    return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+  } catch {
+    return '';
+  }
 }
 
 function headSha(worktree) {
   return sh(`git -C ${worktree} rev-parse HEAD 2>/dev/null`).trim();
 }
 
-function prNumberFor(ticket) {
-  // Branch convention from maestro-bootstrap: <ticket>-maestro
-  const json = sh(`gh pr list --repo thomfilg/claude-plugin-work --head ${ticket}-maestro --state open --json number --limit 1`);
-  if (!json) return null;
-  try { const arr = JSON.parse(json); return arr[0] && arr[0].number; }
-  catch { return null; }
+function deriveRepo(worktree) {
+  const url = sh(`git -C ${worktree || '.'} remote get-url origin 2>/dev/null`).trim();
+  if (!url) return '';
+  // Match owner/repo from https://github.com/owner/repo(.git) or git@github.com:owner/repo(.git)
+  const m = url.match(/[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/);
+  return m ? `${m[1]}/${m[2]}` : '';
 }
 
-function fetchBotComments(prNumber) {
-  const json = sh(`gh api repos/thomfilg/claude-plugin-work/pulls/${prNumber}/comments --paginate 2>/dev/null`);
+function repoSlug(worktree) {
+  return process.env.GITHUB_REPO || deriveRepo(worktree);
+}
+
+function prNumberFor(ticket, worktree) {
+  const repo = repoSlug(worktree);
+  if (!repo) return null;
+  // Branch convention from maestro-bootstrap: <ticket>-maestro
+  const json = sh(
+    `gh pr list --repo ${repo} --head ${ticket}-maestro --state open --json number --limit 1`
+  );
+  if (!json) return null;
+  try {
+    const arr = JSON.parse(json);
+    return arr[0] && arr[0].number;
+  } catch {
+    return null;
+  }
+}
+
+function fetchBotComments(prNumber, worktree) {
+  const repo = repoSlug(worktree);
+  if (!repo) return [];
+  const json = sh(`gh api repos/${repo}/pulls/${prNumber}/comments --paginate 2>/dev/null`);
   if (!json) return [];
   let arr;
-  try { arr = JSON.parse(json); } catch { return []; }
-  return arr.filter(c => {
+  try {
+    arr = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  return arr.filter((c) => {
     const login = (c.user && c.user.login) || '';
     return BOT_RE.test(login) && c.position !== null;
   });
 }
 
 function summarize(comments) {
-  return comments.slice(0, 5).map(c => {
+  return comments.slice(0, 5).map((c) => {
     const sev = (c.body || '').match(/\*\*([A-Z][a-z]+) Severity\*\*/);
-    const title = (c.body || '').split('\n').find(l => l.startsWith('###')) || '';
+    const title = (c.body || '').split('\n').find((l) => l.startsWith('###')) || '';
     return {
       file: c.path,
       line: c.original_line || c.line,
@@ -65,10 +94,10 @@ function summarize(comments) {
 function detect({ ticket, worktree }) {
   if (!ticket || !worktree) return { hit: false };
 
-  const prNumber = prNumberFor(ticket);
-  if (!prNumber) return { hit: false };  // no open PR yet
+  const prNumber = prNumberFor(ticket, worktree);
+  if (!prNumber) return { hit: false }; // no open PR yet
 
-  const comments = fetchBotComments(prNumber);
+  const comments = fetchBotComments(prNumber, worktree);
   const count = comments.length;
   const sha = headSha(worktree);
 
