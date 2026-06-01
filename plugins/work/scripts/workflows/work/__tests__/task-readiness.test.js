@@ -6,7 +6,7 @@
  * (loadState/saveState/initState) is wired up the same way production uses it.
  */
 
-const { describe, it, after, beforeEach } = require('node:test');
+const { describe, it, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs');
