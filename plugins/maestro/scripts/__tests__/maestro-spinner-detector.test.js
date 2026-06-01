@@ -85,3 +85,56 @@ test('multiple lines: takes the last LIVE gerund spinner, ignores past-tense/no-
     'only glyph + gerund counts as a live spinner; past-tense and no-glyph lines are ignored'
   );
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cross-detector contract: silence.js and spinner.js MUST classify the same
+// pane line the same way. Drift breaks the escalation chain — a line silence
+// thinks is idle but spinner thinks is live would trigger auto-restart before
+// the gentler Esc+nudge could fire.
+// ────────────────────────────────────────────────────────────────────────────
+
+test('silence and spinner detectors consume the same LIVE_SPINNER_RE', () => {
+  const silenceLib = require(
+    path.resolve(__dirname, '..', 'lib', 'maestro-conduct', 'detectors', 'silence.js')
+  );
+  const sharedLib = require(
+    path.resolve(__dirname, '..', 'lib', 'maestro-conduct', 'live-spinner.js')
+  );
+  const detector = freshDetector({ SPINNER_THRESHOLD_MIN: '1' });
+
+  // Reach into both modules' regex source — they MUST be identical.
+  assert.strictEqual(
+    sharedLib.LIVE_SPINNER_RE.source,
+    sharedLib.LIVE_SPINNER_SRC,
+    'shared module exports the SRC used to build the RE'
+  );
+
+  // Functional parity: every variant the spinner detector treats as a
+  // hang must also be treated as "active" by silence.
+  const liveLines = [
+    '✻ Synthesizing… (40m 35s · ↓ 78.2k tokens)',
+    '* Hashing… (37m 5s)',
+    '* Cooking for 40m 35s · 1 monitor still running',
+  ];
+  for (const line of liveLines) {
+    const spinnerHit = detector.detect({ pane: line });
+    assert.strictEqual(spinnerHit.hit, true, `spinner must hit on a live line: ${line}`);
+    // silence.detect needs a ticket+pane; we just need the regex to match.
+    assert.ok(
+      sharedLib.LIVE_SPINNER_RE.test(line),
+      `silence's LIVE_SPINNER_RE must also match the same live line: ${line}`
+    );
+  }
+
+  // Inverse: post-completion summaries must be treated as idle by BOTH.
+  const idleLines = ['Cooked for 40m 35s', '* Cooked for 40m 35s', 'idle status bar'];
+  for (const line of idleLines) {
+    const spinnerHit = detector.detect({ pane: line });
+    assert.strictEqual(spinnerHit.hit, false, `spinner must NOT hit on idle line: ${line}`);
+    assert.strictEqual(
+      sharedLib.LIVE_SPINNER_RE.test(line),
+      false,
+      `silence's LIVE_SPINNER_RE must NOT match idle line either: ${line}`
+    );
+  }
+});

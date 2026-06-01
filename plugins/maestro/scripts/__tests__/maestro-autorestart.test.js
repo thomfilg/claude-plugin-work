@@ -176,7 +176,7 @@ function seedStaleSilenceMarker(stateDir, ticket, secAgo, paneText) {
   );
 }
 
-test('one tick: -work session past SILENCE_LIMIT_SEC IS relaunched', () => {
+test('silent -work session with present worktree still relaunches exactly once', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tick-work-'));
   const stateDir = path.join(tmpDir, 'state');
   fs.mkdirSync(stateDir);
@@ -213,7 +213,7 @@ test('one tick: -work session past SILENCE_LIMIT_SEC IS relaunched', () => {
   assert.strictEqual(launched.length, 1, 'new-session must fire for -work');
 });
 
-test('one tick: -listen / -dev helpers past SILENCE_LIMIT_SEC are NOT relaunched', () => {
+test('auto-restart never relaunches a non-work helper session', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tick-helper-'));
   const stateDir = path.join(tmpDir, 'state');
   fs.mkdirSync(stateDir);
@@ -265,7 +265,7 @@ test('one tick: -listen / -dev helpers past SILENCE_LIMIT_SEC are NOT relaunched
   );
 });
 
-test('one tick: mix of -work + -listen — only -work relaunches, helper still discovered', () => {
+test('discovery surfaces helper sessions but only -work is restart-eligible', () => {
   // Regression test for the old "discovery surfaces helper sessions but only
   // -work is restart-eligible" contract: a tick with BOTH session types must
   // relaunch -work but neither kill nor relaunch the helper.

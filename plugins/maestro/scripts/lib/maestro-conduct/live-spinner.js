@@ -1,31 +1,30 @@
 /**
- * live-spinner.js — single source of truth for "what counts as a live Claude
- * TUI spinner line".
+ * live-spinner.js — single source of truth for the live-spinner pane pattern.
  *
- * Both detectors/silence.js and detectors/spinner.js consume this regex so the
- * two never drift. (They used to drift: spinner.js accepted a "still running"
- * tail variant that silence.js missed, which made the silence detector
- * classify a still-running-but-no-hash-change pane as inactive and auto-restart
- * before the gentler spinner Esc+nudge ever fired.)
+ * Both detectors/silence.js (decides whether the pane is "active") and
+ * detectors/spinner.js (decides whether a spinner has been live too long)
+ * MUST agree on what counts as a live spinner. If they disagree the
+ * escalation chain breaks: a line treated as idle by silence triggers
+ * auto-restart before the spinner detector's gentler Esc+nudge can fire.
  *
- * A live spinner line requires THREE anchors:
- *   - a leading bullet/spinner glyph from the rotating set
- *   - a gerund verb form (-ing) — not past tense like "Cooked"
- *   - EITHER the ellipsis + (timer …) paren block ("Verbing… (40m 35s)")
- *     OR a ".*still running" tail emitted while a parallel job is in flight
+ * A live Claude TUI spinner line has all of:
+ *   - leading bullet/spinner glyph (rotates through SPINNER_GLYPHS)
+ *   - a gerund verb form ending in -ing
+ *     (NOT past tense; "Cooked for 40m" is a completion summary, not a spinner)
+ *   - either the ellipsis-with-timer variant (`… (40m 35s · …)`)
+ *     or the "still running" tail (`Verbing for 1m still running`)
  *
- * Lines that miss any anchor (no glyph, past tense, no timer/no still-running)
- * signal completed work, not a live spinner.
- *
- * Mirrors the original maestro-conduct.sh pane_has_live_spinner contract
- * (glyph + gerund + ellipsis + paren), generalized to also accept the
- * "still running" tail the TUI emits in parallel-job mode.
+ * Mirrors the bash original pane_has_live_spinner from the deleted
+ * maestro-conduct.sh.
  */
+
 const SPINNER_GLYPHS = '●○◯•*✻✶✢·✽✣✤✱⏵⏶';
 
-const LIVE_SPINNER_RE = new RegExp(
-  `^[${SPINNER_GLYPHS}]\\s+[A-Z][a-z]+ing(?:…\\s*\\([0-9]+[mh]|.*still running)`,
-  'm'
-);
+// Source: glyph + space + gerund + (ellipsis-with-paren OR "still running")
+const LIVE_SPINNER_SRC =
+  `^[${SPINNER_GLYPHS}]\\s+[A-Z][a-z]+ing` + `(?:…\\s*\\([0-9]+[mh]|.*still running)`;
 
-module.exports = { LIVE_SPINNER_RE, SPINNER_GLYPHS };
+// Multi-line flag so detectors can scan a whole pane buffer.
+const LIVE_SPINNER_RE = new RegExp(LIVE_SPINNER_SRC, 'm');
+
+module.exports = { LIVE_SPINNER_RE, LIVE_SPINNER_SRC, SPINNER_GLYPHS };
