@@ -137,7 +137,14 @@ function detect({ ticket, worktree }) {
     return { hit: false };
   }
 
-  // Same sha, comments still present → agent sat on them.
+  // Count changed (bot still posting comments) → reset the stable-read clock
+  // without clearing alerted, so a noisy review doesn't trigger premature nudges.
+  if (prev.count !== count) {
+    state.write(ticket, 'pr-comments', { ...prev, count, firstSeenAt: now });
+    return { hit: false };
+  }
+
+  // Same sha and same count two reads in a row → agent sat on them.
   const minsStuck = state.minutesSince(prev.firstSeenAt);
   return {
     hit: true,
