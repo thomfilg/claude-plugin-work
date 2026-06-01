@@ -69,9 +69,11 @@ test('sendLine passes backtick/$ payload to tmux as a literal arg (no shell eval
   assert.equal(invocations.length, 3, 'expected three tmux send-keys calls');
 
   const [first, second, third] = invocations;
-  assert.deepEqual(first.slice(0, 3), ['send-keys', '-t', 'GH-TEST-work']);
+  // sendLine uses -l for literal delivery so short payloads can't collide with
+  // tmux key names (e.g. "Enter", "Space").
+  assert.deepEqual(first.slice(0, 4), ['send-keys', '-l', '-t', 'GH-TEST-work']);
   assert.equal(
-    first[3],
+    first[4],
     'hi `id` $(whoami) $USER \\ \' "x"',
     'payload must reach tmux verbatim with backticks/$ intact'
   );
