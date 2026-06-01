@@ -36,7 +36,21 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
+
+// Strict allowlist for git rev ranges passed to `git diff`. Accepts:
+//   - refs/branches/tags/SHAs containing [A-Za-z0-9._/-]
+//   - optional `..` or `...` separator between two such refs
+// Anything with shell metacharacters (`;`, `|`, `&`, `$`, backticks, spaces,
+// quotes, redirects, newlines, etc.) is rejected. This is defence-in-depth on
+// top of execFileSync (no shell), to keep CodeQL happy and to fail fast on
+// obviously bogus values from BUMP_RANGE.
+const SAFE_REV = '[A-Za-z0-9._/-]+';
+const SAFE_RANGE_RE = new RegExp(`^${SAFE_REV}(\\.\\.\\.?${SAFE_REV})?$`);
+
+function isSafeRange(range) {
+  return typeof range === 'string' && range.length > 0 && SAFE_RANGE_RE.test(range);
+}
 
 // __dirname = plugins/work/scripts/workflows/lib/scripts → repo root is 6 levels up
 const ROOT = path.join(__dirname, '..', '..', '..', '..', '..', '..');
@@ -107,9 +121,15 @@ function discoverPlugins() {
  */
 function pluginsTouchedIn(range, pluginNames) {
   if (!range) return null;
+  if (!isSafeRange(range)) {
+    console.warn(
+      `[bump-version] BUMP_RANGE="${range}" rejected (must match ${SAFE_RANGE_RE}) — falling back to "all plugins"`
+    );
+    return null;
+  }
   let diff;
   try {
-    diff = execSync(`git diff --name-only ${range}`, {
+    diff = execFileSync('git', ['diff', '--name-only', range], {
       cwd: ROOT,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
