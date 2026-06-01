@@ -39,12 +39,33 @@ function spawnOut(cmd, args) {
   return res.stdout.toString();
 }
 
-/** List sessions matching a regex (default GH-*-work). */
-function listSessions(pattern = /^GH-[A-Z0-9-]+-work$/) {
+/**
+ * Resolve the ticket prefix used to build the default session-name regex.
+ *
+ * Mirrors resolve-prefix.sh (sourced by maestro-conduct.sh / maestro-bootstrap.sh)
+ * so the JS orchestrator and the shell conductor cannot drift to different
+ * prefixes. Honors the TICKET_PREFIX env var (set by callers that have already
+ * resolved the provider) and falls back to "GH" on empty/invalid values, using
+ * the same strict ^[A-Z][A-Z0-9]*$ validation as the shell helper.
+ */
+function resolveTicketPrefix() {
+  const raw = process.env.TICKET_PREFIX || '';
+  return /^[A-Z][A-Z0-9]*$/.test(raw) ? raw : 'GH';
+}
+
+/**
+ * List sessions matching a regex.
+ *
+ * Default pattern is built dynamically from TICKET_PREFIX (default "GH") so
+ * non-GitHub providers (Linear ECHO-*, Jira PROJ-*, etc.) are discovered too.
+ * Callers can pass an explicit RegExp to override entirely.
+ */
+function listSessions(pattern) {
+  const regex = pattern || new RegExp(`^${resolveTicketPrefix()}-[A-Z0-9-]+-work$`);
   return sh('tmux ls 2>/dev/null')
     .split('\n')
     .map((l) => l.split(':')[0])
-    .filter((name) => pattern.test(name));
+    .filter((name) => regex.test(name));
 }
 
 /** Capture pane (visible + extra scrollback so tall menus aren't truncated). */
