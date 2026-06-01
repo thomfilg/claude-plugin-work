@@ -7,7 +7,6 @@
  * Does NOT itself trigger a nudge; the main loop pairs this with
  * phase-stall to enrich alerts.
  */
-const path = require('path');
 const { spawnSync } = require('child_process');
 
 const COMMIT_STALL_MIN = parseInt(process.env.COMMIT_STALL_MIN || '30', 10);

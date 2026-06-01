@@ -85,7 +85,7 @@ function handleQuestion(ctx, qHit) {
 // When detected, phase-stall is suppressed — the agent is not stuck.
 const HALTED_WAITING_PATTERNS = [
   /awaiting.*merge|wait.*merge|Once you( click| have)? merge/i,
-  /Per.*never-auto-merge|won['']t merge|won['']t auto-merge/i,
+  /Per.*never-auto-merge|won['’]t merge|won['’]t auto-merge/i,
   /CI is green.*[Mm]erge when ready/i,
 ];
 

@@ -94,9 +94,8 @@ test('multiple lines: takes the last LIVE gerund spinner, ignores past-tense/no-
 // ────────────────────────────────────────────────────────────────────────────
 
 test('silence and spinner detectors consume the same LIVE_SPINNER_RE', () => {
-  const silenceLib = require(
-    path.resolve(__dirname, '..', 'lib', 'maestro-conduct', 'detectors', 'silence.js')
-  );
+  // Loading silence.js verifies it require()s the shared module without throwing.
+  require(path.resolve(__dirname, '..', 'lib', 'maestro-conduct', 'detectors', 'silence.js'));
   const sharedLib = require(
     path.resolve(__dirname, '..', 'lib', 'maestro-conduct', 'live-spinner.js')
   );
