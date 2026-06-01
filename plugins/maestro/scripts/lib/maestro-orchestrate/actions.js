@@ -11,6 +11,7 @@
  * uncommitted work (the 'commit agent' is the orchestrator's commit-writer).
  * Avoid literal CLI strings that trip the enforce-agent-usage hook.
  */
+const { spawnSync } = require('child_process');
 const tmux = require('./tmux');
 const alerts = require('./alerts');
 
@@ -31,8 +32,8 @@ function interrupt(session, reason) {
   alerts.log(`${session} NUDGE interrupt: ${reason}`);
   tmux.sendKey(session, 'Escape');
   // Brief pause so the TUI registers the Esc before we push text.
-  const until = Date.now() + 1500;
-  while (Date.now() < until) { /* spin */ }
+  // Use spawnSync('sleep') so we block without pinning a CPU core.
+  spawnSync('sleep', ['1.5']);
   tmux.sendLine(session, msgFor(reason, 'interrupt'));
 }
 
