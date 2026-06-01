@@ -37,7 +37,7 @@ case "$LINTER" in
     ;;
   eslint)
     ESLINT_CONFIG_ARGS=""
-    if [ -f "$ROOT_DIR/eslint.config.js" ] || [ -f "$ROOT_DIR/eslint.config.mjs" ] || [ -f "$ROOT_DIR/eslint.config.cjs" ]; then
+    if [ -f "$ROOT_DIR/eslint.config.js" ] || [ -f "$ROOT_DIR/eslint.config.mjs" ] || [ -f "$ROOT_DIR/eslint.config.cjs" ] || [ -f "$ROOT_DIR/eslint.config.ts" ] || [ -f "$ROOT_DIR/eslint.config.mts" ] || [ -f "$ROOT_DIR/eslint.config.cts" ]; then
       :
     elif [ -f "$SCRIPT_DIR/../quality/configs/quality-lint-rules.js" ]; then
       ESLINT_CONFIG_ARGS="--config $SCRIPT_DIR/../quality/configs/quality-lint-rules.js"
