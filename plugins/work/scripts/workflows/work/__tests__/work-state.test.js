@@ -928,6 +928,25 @@ describe('work-state.js', () => {
       assert.match(stderr, /tasks still pending/i);
     });
 
+    it('does NOT match task_1 as a substring of task_10 in the report', async () => {
+      // Security review on PR #470 (cursor bot): a substring `includes()` check
+      // would accept `task_1` as a hit when the report only names `task_10`,
+      // since one is a prefix of the other. The linkage check must use a
+      // word/token boundary so each checkpoint closure is individually backed.
+      const TICKET_PREFIX = 'TEST-CHK-PREFIX-001';
+      cleanupTempWorkState(TICKET_PREFIX);
+      const dir = seedTicket(TICKET_PREFIX, [
+        { id: 'task_1', status: 'pending', kind: 'checkpoint', title: 'first' },
+        { id: 'task_10', status: 'pending', kind: 'checkpoint', title: 'tenth' },
+      ]);
+      // Report names only task_10 — task_1 must NOT be auto-closed.
+      writeReport(dir, 'APPROVED', ['task_10']);
+      const { code, stderr } = await runWorkState(['complete', TICKET_PREFIX]);
+      assert.notEqual(code, 0, 'complete must fail because task_1 was not named');
+      assert.match(stderr, /tasks still pending|checkpoint/i);
+      cleanupTempWorkState(TICKET_PREFIX);
+    });
+
     it('does NOT blanket-close every pending checkpoint when only one is named in the report', async () => {
       // Security review on PR #470: a single APPROVED verdict must NOT close
       // every pending checkpoint task. Each closure must be backed by the

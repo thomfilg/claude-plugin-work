@@ -286,14 +286,23 @@ function autoCompleteCheckpointTasks(state, ticketId) {
 
   if (!matchedVerdict) return closed;
 
+  // Per-task linkage with token-boundary matching. A plain `includes()` check
+  // would accept `task_1` as a hit when the report only names `task_10`, since
+  // one is a prefix of the other — defeating the security intent.
+  // We require the id/title to appear with a non-word-character (or string
+  // boundary) on each side. JS `\b` treats `_` as a word char and so does not
+  // separate `task_1` from `task_10`; we use an explicit `[^A-Za-z0-9_]`
+  // boundary instead.
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const namesEntry = (token) => {
+    if (!token) return false;
+    const re = new RegExp(`(^|[^A-Za-z0-9_])${escapeRe(token)}([^A-Za-z0-9_]|$)`);
+    return re.test(reportContent);
+  };
   for (const entry of state.tasksMeta.tasks) {
     if (!entry || entry.kind !== 'checkpoint' || entry.status === 'completed') continue;
-    // Per-task linkage: require the checkpoint's id (or title) to appear in
-    // the report text. A single APPROVED verdict must NOT blanket-close every
-    // pending checkpoint in the ticket — each closure has to be backed by a
-    // verdict that names the task it verified.
-    const idHit = entry.id && reportContent.includes(entry.id);
-    const titleHit = entry.title && reportContent.includes(entry.title);
+    const idHit = namesEntry(entry.id);
+    const titleHit = namesEntry(entry.title);
     if (!idHit && !titleHit) continue;
     entry.status = 'completed';
     closed.push({
