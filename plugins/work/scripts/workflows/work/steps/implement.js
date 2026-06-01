@@ -219,9 +219,15 @@ module.exports = function implementStep(add, s, ctx) {
         });
         try {
           const actionsPath = pathMod.join(tasksDir, '.work-actions.json');
-          const prev = fs.existsSync(actionsPath)
-            ? JSON.parse(fs.readFileSync(actionsPath, 'utf8'))
-            : [];
+          // Single read inside try/catch — no TOCTOU between existsSync and
+          // readFileSync. ENOENT (or anything else) starts a fresh array.
+          let prev = [];
+          try {
+            prev = JSON.parse(fs.readFileSync(actionsPath, 'utf8'));
+            if (!Array.isArray(prev)) prev = [];
+          } catch {
+            prev = [];
+          }
           prev.push({
             type: 'task-init-descriptor-fallback',
             ticket: safeName,
