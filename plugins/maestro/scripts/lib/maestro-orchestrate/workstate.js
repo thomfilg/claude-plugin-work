@@ -5,9 +5,10 @@
  * which scans script text for the literal filename.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
-const WORKTREES_BASE = process.env.WORKTREES_BASE || '/home/thomfilg/p/w-claude-plugin';
+const WORKTREES_BASE = process.env.WORKTREES_BASE || path.join(os.homedir(), 'worktrees');
 const STATE_BASENAME = '.work-state' + '.json';
 
 function stateFile(ticket) {
@@ -17,7 +18,11 @@ function stateFile(ticket) {
 function read(ticket) {
   const f = stateFile(ticket);
   if (!fs.existsSync(f)) return null;
-  try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; }
+  try {
+    return JSON.parse(fs.readFileSync(f, 'utf8'));
+  } catch {
+    return null;
+  }
 }
 
 /** First non-completed step, or 'complete' if everything done. */
