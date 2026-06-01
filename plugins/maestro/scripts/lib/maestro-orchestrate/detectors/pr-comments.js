@@ -16,25 +16,21 @@
  * The PR number is resolved from the branch name `<ticket>-maestro` via
  * `gh pr list --head`. Result is cached per tick.
  */
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const state = require('../state');
 
 const BOT_RE = /(cursor|copilot|bugbot|codex|sourcery)/i;
 
-function sh(cmd) {
-  try {
-    return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-  } catch {
-    return '';
-  }
-}
-
-function gitOut(worktree, args) {
-  const res = spawnSync('git', ['-C', worktree, ...args], {
+function spawnOut(cmd, args) {
+  const res = spawnSync(cmd, args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   });
-  return res.status === 0 ? (res.stdout || '').trim() : '';
+  return res.status === 0 ? res.stdout || '' : '';
+}
+
+function gitOut(worktree, args) {
+  return spawnOut('git', ['-C', worktree, ...args]).trim();
 }
 
 function headSha(worktree) {
@@ -57,9 +53,20 @@ function prNumberFor(ticket, worktree) {
   const repo = repoSlug(worktree);
   if (!repo) return null;
   // Branch convention from maestro-bootstrap: <ticket>-maestro
-  const json = sh(
-    `gh pr list --repo ${repo} --head ${ticket}-maestro --state open --json number --limit 1`
-  );
+  const json = spawnOut('gh', [
+    'pr',
+    'list',
+    '--repo',
+    repo,
+    '--head',
+    `${ticket}-maestro`,
+    '--state',
+    'open',
+    '--json',
+    'number',
+    '--limit',
+    '1',
+  ]);
   if (!json) return null;
   try {
     const arr = JSON.parse(json);
@@ -72,7 +79,7 @@ function prNumberFor(ticket, worktree) {
 function fetchBotComments(prNumber, worktree) {
   const repo = repoSlug(worktree);
   if (!repo) return [];
-  const json = sh(`gh api repos/${repo}/pulls/${prNumber}/comments --paginate 2>/dev/null`);
+  const json = spawnOut('gh', ['api', `repos/${repo}/pulls/${prNumber}/comments`, '--paginate']);
   if (!json) return [];
   let arr;
   try {
