@@ -52,22 +52,36 @@ test('completion summary WITHOUT glyph is IGNORED — does not trigger hang', ()
   assert.strictEqual(detector.detect({ pane }).hit, false);
 });
 
-test('live "still running" line WITH glyph past threshold fires', () => {
+test('live gerund spinner with "still running" tail fires past threshold', () => {
   const detector = freshDetector({ SPINNER_THRESHOLD_MIN: '15' });
-  const pane = '* Cooked for 40m 35s · 1 monitor still running\n';
+  const pane = '* Cooking for 40m 35s · 1 monitor still running\n';
   const hit = detector.detect({ pane });
   assert.strictEqual(hit.hit, true);
   assert.strictEqual(hit.elapsedMin, 40);
 });
 
-test('multiple lines: takes the last LIVE spinner, ignores completion summaries above', () => {
+test('past-tense glyph line ("Cooked for") is IGNORED even with leading glyph', () => {
+  // Even with the leading glyph, "Cooked" is past tense — a completion line,
+  // not a live spinner. The gerund "-ing" requirement (parity with the bash
+  // pane_has_live_spinner) means this must not fire.
   const detector = freshDetector({ SPINNER_THRESHOLD_MIN: '15' });
-  const pane = ['Cooked for 99m 0s', '✽ Frosting… (20m 12s)', 'Cooked for 50m 0s'].join('\n');
+  const pane = '* Cooked for 40m 35s · 1 monitor still running\n';
+  assert.strictEqual(detector.detect({ pane }).hit, false);
+});
+
+test('multiple lines: takes the last LIVE gerund spinner, ignores past-tense/no-glyph lines', () => {
+  const detector = freshDetector({ SPINNER_THRESHOLD_MIN: '15' });
+  const pane = [
+    'Cooked for 99m 0s', // no glyph, past tense → ignored
+    '* Cooked for 80m 0s', // glyph but past tense → ignored
+    '✽ Frosting… (20m 12s)', // glyph + gerund → MATCHES
+    'Cooked for 50m 0s', // ignored
+  ].join('\n');
   const hit = detector.detect({ pane });
   assert.strictEqual(hit.hit, true);
   assert.strictEqual(
     hit.elapsedMin,
     20,
-    'last live spinner is the one with the glyph; the bare completion lines are ignored'
+    'only glyph + gerund counts as a live spinner; past-tense and no-glyph lines are ignored'
   );
 });

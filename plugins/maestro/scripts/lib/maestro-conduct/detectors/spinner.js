@@ -24,11 +24,14 @@
 const THRESHOLD_MIN = parseInt(process.env.SPINNER_THRESHOLD_MIN || '15', 10);
 
 const SPINNER_GLYPHS = '●○◯•*✻✶✢·✽✣✤✱⏵⏶';
-// Live spinner = glyph + word + (ellipsis-with-parens OR "still running" tail).
-// The glyph anchor is what distinguishes a running spinner from a post-completion
-// summary the TUI prints with no leading glyph after the tool returns.
+// Live spinner = glyph + gerund verb + (ellipsis-with-parens OR "still running" tail).
+// The glyph anchor distinguishes a running spinner from a post-completion summary
+// (no glyph after the tool returns). The gerund "-ing" anchor distinguishes a live
+// thinking-spinner from past-tense completion lines like "Cooked for 40m" with no
+// glyph; the bash original required both anchors and dropping either lets stale
+// summary lines look like a hang.
 const LIVE_SPINNER_RE = new RegExp(
-  `^[${SPINNER_GLYPHS}]\\s+[A-Z][a-z]+(?:…\\s*\\([0-9]+[mh]|.*still running)`
+  `^[${SPINNER_GLYPHS}]\\s+[A-Z][a-z]+ing(?:…\\s*\\([0-9]+[mh]|.*still running)`
 );
 
 // Match a trailing elapsed-time token like "40m 35s" or "1h 5m".

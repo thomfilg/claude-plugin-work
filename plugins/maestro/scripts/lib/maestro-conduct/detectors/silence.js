@@ -24,8 +24,14 @@ const SILENCE_LIMIT_SEC = parseInt(process.env.SILENCE_LIMIT_SEC || '300', 10);
 // Matches Claude TUI live spinner lines, e.g.:
 //   "✻ Jitterbugging… (3s · thinking with medium effort)"
 //   "* Hashing… (37s · ↓ 7.4k tokens)"
-// Always paired with a leading bullet/spinner glyph AND the ellipsis variant.
-const LIVE_SPINNER_RE = /^[●○◯•*✻✶✢·✽✣✤✱⏵⏶]\s+[A-Z][a-z]+…\s*\(/m;
+// Requirements (mirrors maestro-conduct.sh pane_has_live_spinner):
+//   - leading bullet/spinner glyph
+//   - gerund verb form ending in -ing (NOT past tense like "Cooked" or
+//     generic completion words — those signal a finished action, not a live
+//     spinner). Dropping this requirement would let any "Word… (" line keep
+//     the session marked active and suppress silence auto-restart.
+//   - ellipsis followed by the (timer …) paren block
+const LIVE_SPINNER_RE = /^[●○◯•*✻✶✢·✽✣✤✱⏵⏶]\s+[A-Z][a-z]+ing…\s*\(/m;
 
 function paneTokens(pane) {
   if (!pane) return null;
