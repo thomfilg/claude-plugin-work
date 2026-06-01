@@ -136,12 +136,25 @@ function handlePhaseStall(ctx, stallHit) {
   bumpMarker(ctx.ticket, 'phase', marker, escalation === 'alert');
 }
 
+// Cooldown so spinner interrupts don't repeat every tick and flood the pane.
+const SPINNER_RE_INTERRUPT_MIN = parseInt(process.env.SPINNER_RE_INTERRUPT_MIN || '5', 10);
+
 // Spinner hang is an immediate interrupt; doesn't go through nudge counter.
 // Returns true when handled (caller should skip remaining detectors).
 function runSpinnerDetector(ctx) {
   const sHit = DETECTORS.spinner.detect(ctx);
-  if (!sHit.hit) return false;
+  if (!sHit.hit) {
+    if (state.read(ctx.ticket, 'spinner')) state.clear(ctx.ticket, 'spinner');
+    return false;
+  }
+  const prev = state.read(ctx.ticket, 'spinner');
+  if (prev && state.minutesSince(prev.lastInterruptAt) < SPINNER_RE_INTERRUPT_MIN) {
+    // Within cooldown — already nudged this hang. Stay quiet so the pane
+    // doesn't fill with repeated interrupt messages.
+    return true;
+  }
   actions.interrupt(ctx.session, `spinner stuck ${sHit.elapsedMin}m: ${sHit.line}`);
+  state.write(ctx.ticket, 'spinner', { lastInterruptAt: state.now() });
   return true;
 }
 
