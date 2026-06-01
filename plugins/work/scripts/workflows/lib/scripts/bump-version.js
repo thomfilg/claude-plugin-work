@@ -40,12 +40,13 @@ const { execFileSync } = require('child_process');
 
 // Strict allowlist for git rev ranges passed to `git diff`. Accepts:
 //   - refs/branches/tags/SHAs containing [A-Za-z0-9._/-]
+//   - the standard git rev modifiers `~` and `^` (e.g. HEAD~1, HEAD^)
 //   - optional `..` or `...` separator between two such refs
 // Anything with shell metacharacters (`;`, `|`, `&`, `$`, backticks, spaces,
 // quotes, redirects, newlines, etc.) is rejected. This is defence-in-depth on
 // top of execFileSync (no shell), to keep CodeQL happy and to fail fast on
 // obviously bogus values from BUMP_RANGE.
-const SAFE_REV = '[A-Za-z0-9._/-]+';
+const SAFE_REV = '[A-Za-z0-9._/~^-]+';
 const SAFE_RANGE_RE = new RegExp(`^${SAFE_REV}(\\.\\.\\.?${SAFE_REV})?$`);
 
 function isSafeRange(range) {
