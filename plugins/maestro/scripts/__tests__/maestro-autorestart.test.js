@@ -357,3 +357,58 @@ test('per-session keying: -work + helper sharing a ticket do NOT clobber each ot
     'each session must have its own silence marker keyed by full session name'
   );
 });
+
+test('idle helper session does not spam silence log on every tick', () => {
+  // Regression: when a -dev / -listen helper exceeds SILENCE_LIMIT_SEC the
+  // first tick logs the "AUTO-RESTART skipped" line, but subsequent ticks
+  // must reset the silence marker so the message doesn't repeat every tick
+  // and other detectors keep running for that session.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'helper-nospam-'));
+  const stateDir = path.join(tmpDir, 'state');
+  fs.mkdirSync(stateDir);
+  const wtBase = path.join(tmpDir, 'wt');
+  fs.mkdirSync(path.join(wtBase, 'fake-repo-ECHO-7'), { recursive: true });
+  const logPath = path.join(tmpDir, 'tmux.log');
+  const eventLog = path.join(tmpDir, 'events.log');
+
+  const idlePane = 'idle helper pane — nothing here';
+  const fakeDir = makeFakeTmuxWithLsAndCapture({
+    logPath,
+    sessions: ['ECHO-7-listen'],
+    pane: idlePane,
+  });
+  const conduct = reloadConductFresh({
+    PATH: `${fakeDir}:${process.env.PATH}`,
+    TICKET_PREFIX: 'ECHO',
+    STATE_DIR: stateDir,
+    WORKTREES_BASE: wtBase,
+    REPO_NAME: 'fake-repo',
+    CLAUDE_BIN: 'fake-claude',
+    SKILL_NAME: 'work',
+    SILENCE_LIMIT_SEC: '300',
+    LOG_FILE: eventLog,
+  });
+
+  // First tick: seed a stale marker so silence trips immediately, then run.
+  seedStaleSilenceMarker(stateDir, 'ECHO-7-listen', 600, idlePane);
+  conduct.tick();
+
+  // Second tick: marker should now be fresh (lastActiveAt ≈ now), so silence
+  // does NOT fire and no skipped-helper line is logged.
+  conduct.tick();
+
+  // Third tick: still fresh, still no log.
+  conduct.tick();
+
+  const logLines = fs.existsSync(eventLog)
+    ? fs.readFileSync(eventLog, 'utf8').split('\n').filter(Boolean)
+    : [];
+  const skippedLines = logLines.filter((l) =>
+    l.includes('AUTO-RESTART skipped: non-work helper session')
+  );
+  assert.strictEqual(
+    skippedLines.length,
+    1,
+    `helper silence skip should be logged ONCE across multiple ticks, not every tick — got ${skippedLines.length}\nlog:\n${logLines.join('\n')}`
+  );
+});

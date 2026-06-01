@@ -185,10 +185,21 @@ function runSilenceDetector(ctx) {
   const sHit = DETECTORS.silence.detect(ctx);
   if (!sHit.hit) return false;
   if (!restartEligible(ctx.session)) {
+    // Helper (-dev / -listen) is idle past SILENCE_LIMIT_SEC but we won't kill
+    // it. Without resetting the marker, silence would fire every subsequent
+    // tick → log spam + short-circuit of other detectors forever. Instead:
+    // log once, refresh the marker so the silence timer restarts, and let the
+    // remaining detectors run by returning false. Worst case we log again in
+    // another SILENCE_LIMIT_SEC, not every tick.
     alerts.log(
       `${ctx.session} AUTO-RESTART skipped: non-work helper session (not restart-eligible)`
     );
-    return true;
+    state.write(ctx.session, 'silence', {
+      hash: null,
+      tokens: null,
+      lastActiveAt: state.now(),
+    });
+    return false;
   }
   const ok = actions.autoRestart({
     session: ctx.session,
