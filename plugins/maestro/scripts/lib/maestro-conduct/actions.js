@@ -12,6 +12,7 @@
  * Avoid literal CLI strings that trip the enforce-agent-usage hook.
  */
 const fs = require('fs');
+const path = require('path');
 const { spawnSync } = require('child_process');
 const tmux = require('./tmux');
 const alerts = require('./alerts');
@@ -19,6 +20,59 @@ const state = require('./state');
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const SKILL_NAME = process.env.SKILL_NAME || 'work';
+
+const SESSION_MANIFEST_DIR =
+  process.env.MAESTRO_SESSION_DIR ||
+  path.join(process.env.HOME || '/tmp', '.cache', 'maestro', 'sessions');
+const BOOTSTRAP_SCRIPT = path.join(__dirname, '..', '..', 'maestro-bootstrap.sh');
+const REPO_NAME = process.env.REPO_NAME || 'claude-plugin-work';
+
+/**
+ * Look across every orchestration manifest in ~/.cache/maestro/sessions/ for
+ * the next pending task whose deps are all done. Returns { topic, taskId } or
+ * null. First match wins (lowest priority across all manifests).
+ */
+function findNextEligibleTask() {
+  if (!fs.existsSync(SESSION_MANIFEST_DIR)) return null;
+  let best = null;
+  for (const entry of fs.readdirSync(SESSION_MANIFEST_DIR)) {
+    if (!entry.endsWith('.json')) continue;
+    let manifest;
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(SESSION_MANIFEST_DIR, entry), 'utf8'));
+    } catch {
+      continue;
+    }
+    const tasks = Array.isArray(manifest.tasks) ? manifest.tasks : [];
+    const doneIds = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
+    const pending = tasks.filter(
+      (t) => t.status === 'pending' && (t.deps || []).every((d) => doneIds.has(d))
+    );
+    if (pending.length === 0) continue;
+    pending.sort((a, b) => (a.priority || 9999) - (b.priority || 9999));
+    const top = pending[0];
+    if (!best || (top.priority || 9999) < (best.priority || 9999)) {
+      best = { topic: manifest.topic || entry.replace(/\.json$/, ''), taskId: top.id, priority: top.priority };
+    }
+  }
+  return best;
+}
+
+/**
+ * Optionally bootstrap a fresh tmux + worktree for the next ticket. Returns
+ * true on launch. Gated by AUTO_BOOTSTRAP_NEXT=1 (default off — explicit
+ * opt-in).
+ */
+function maybeAutoBootstrap(taskId) {
+  if (process.env.AUTO_BOOTSTRAP_NEXT !== '1') return false;
+  if (!taskId || !/^[A-Z]+-\d+$/.test(taskId)) return false;
+  if (!fs.existsSync(BOOTSTRAP_SCRIPT)) return false;
+  const res = spawnSync('bash', [BOOTSTRAP_SCRIPT, taskId], {
+    stdio: 'ignore',
+    env: { ...process.env, REPO_NAME },
+  });
+  return res.status === 0;
+}
 
 // Restart-loop guard: how many auto-restarts within RESTART_WINDOW_MIN before
 // we declare the session WEDGED and stop restarting. Caller is freed of state
@@ -65,6 +119,19 @@ function alert(reasonObj) {
 function autoRestart({ session, ticket, worktree, silenceSec }) {
   if (!worktree || !fs.existsSync(worktree)) {
     alerts.log(`${session} AUTO-RESTART skipped: worktree ${worktree} not found`);
+    return false;
+  }
+
+  // CI-gate slot-freed guard. If freeCIGateSlot already killed this ticket's
+  // tmux because its PR hit pr-ready, do NOT resurrect it — the agent's job
+  // is done until operator merges. Marker is per-ticket, written by
+  // freeCIGateSlot / freeDeadEndSlot. Cleared automatically on SHA change
+  // (next pr-ready emit with a new sha overwrites the marker).
+  const ciFreed = state.read(ticket, 'ci-gate-freed');
+  if (ciFreed && ciFreed.killed) {
+    alerts.log(
+      `${session} AUTO-RESTART skipped: ticket ${ticket} CI-gate-freed at sha=${(ciFreed.sha || '').slice(0, 7)}; awaiting operator merge`
+    );
     return false;
   }
 
@@ -145,14 +212,35 @@ function autoRestart({ session, ticket, worktree, silenceSec }) {
 function freeCIGateSlot({ session, ticket, prNumber, sha }) {
   if (process.env.AUTO_FREE_CI_SLOT === '0') return false;
   const marker = state.read(session, 'slot-freed') || {};
-  if (marker.sha === sha) return false; // already freed for this SHA
-  // Kill -work and -listen panes. Tmux kill-session is idempotent; ignore errors.
+  const ciFreed = state.read(ticket, 'ci-gate-freed') || {};
+  // Always kill any alive tmux sessions for this ticket — defensive against
+  // sessions resurrected by autoRestart between ticks. tmux kill-session is
+  // idempotent and silent when the session is already gone.
   for (const suffix of ['work', 'listen']) {
     spawnSync('tmux', ['kill-session', '-t', `${ticket}-${suffix}`], { stdio: 'ignore' });
   }
+  // Per-ticket marker that autoRestart consults to refuse resurrection.
+  // Overwritten on each fresh SHA so a force-push that re-opens CI naturally
+  // re-engages the agent.
+  state.write(ticket, 'ci-gate-freed', { killed: true, sha, prNumber, freedAt: state.now() });
+  // Skip alert + bootstrap if this exact SHA was already announced — prevents
+  // spam on every tick. The kill above still runs (defensive).
+  if (marker.sha === sha && ciFreed.sha === sha) return false;
   state.write(session, 'slot-freed', { sha, prNumber, freedAt: state.now() });
+  const next = findNextEligibleTask();
+  const autoBootstrapped = next && maybeAutoBootstrap(next.taskId);
+  let instruction;
+  if (autoBootstrapped) {
+    instruction = `Slot freed for PR #${prNumber} (sha=${(sha || '').slice(0, 7)}). NEXT_ACTION=auto-bootstrapped ${next.taskId} from manifest "${next.topic}". No operator action needed unless bootstrap log shows failure.`;
+  } else if (next) {
+    instruction = `Slot freed for PR #${prNumber} (sha=${(sha || '').slice(0, 7)}). NEXT_ACTION=bootstrap ${next.taskId} (manifest "${next.topic}", priority=${next.priority}). Run: bash plugins/maestro/scripts/maestro-bootstrap.sh ${next.taskId}. Set AUTO_BOOTSTRAP_NEXT=1 to skip this step. Operator merges PR #${prNumber} separately.`;
+  } else {
+    instruction = `Slot freed for PR #${prNumber} (sha=${(sha || '').slice(0, 7)}). NEXT_ACTION=do-nothing — no eligible pending task across orchestration manifests. Operator merges PR #${prNumber} separately.`;
+  }
   alerts.log(
-    `${session} SLOT-FREED at CI gate — PR #${prNumber} sha=${(sha || '').slice(0, 7)} awaiting operator merge; tmux -work + -listen killed`
+    `${session} SLOT-FREED at CI gate — PR #${prNumber} sha=${(sha || '').slice(0, 7)} awaiting operator merge; tmux -work + -listen killed${
+      autoBootstrapped ? `; AUTO-BOOTSTRAPPED ${next.taskId}` : ''
+    }`
   );
   alert({
     session,
@@ -160,7 +248,10 @@ function freeCIGateSlot({ session, ticket, prNumber, sha }) {
     kind: 'slot-freed',
     prNumber,
     sha,
-    instruction: `Pool slot free. Pick next bug: gh issue list --repo thomfilg/claude-plugin-work --state open --label bug --json number,title | head; then: bash plugins/maestro/scripts/maestro-bootstrap.sh GH-<pick>. Skip tickets whose diff overlaps PR #${prNumber}.`,
+    nextTask: next ? next.taskId : null,
+    nextTopic: next ? next.topic : null,
+    autoBootstrapped: !!autoBootstrapped,
+    instruction,
   });
   return true;
 }
@@ -183,7 +274,21 @@ function freeDeadEndSlot({ session, ticket, kind, repeatCount, sha }) {
     spawnSync('tmux', ['kill-session', '-t', `${ticket}-${suffix}`], { stdio: 'ignore' });
   }
   state.write(ticket, 'dead-end', { killed: true, freedAt: state.now(), trigger: kind });
-  alerts.log(`${session} DEAD-END ${kind} re-fired ${repeatCount}x — tmux killed, slot freed`);
+  const next = findNextEligibleTask();
+  const autoBootstrapped = next && maybeAutoBootstrap(next.taskId);
+  let instruction;
+  if (autoBootstrapped) {
+    instruction = `DEAD-END on ${ticket} after ${kind} ×${repeatCount}. NEXT_ACTION=auto-bootstrapped ${next.taskId} from manifest "${next.topic}". No operator action needed unless bootstrap log shows failure.`;
+  } else if (next) {
+    instruction = `DEAD-END on ${ticket} after ${kind} ×${repeatCount}. NEXT_ACTION=bootstrap ${next.taskId} (manifest "${next.topic}", priority=${next.priority}). Run: bash plugins/maestro/scripts/maestro-bootstrap.sh ${next.taskId}. Set AUTO_BOOTSTRAP_NEXT=1 to skip this step.`;
+  } else {
+    instruction = `DEAD-END on ${ticket} after ${kind} ×${repeatCount}. NEXT_ACTION=do-nothing — no eligible pending task across orchestration manifests.`;
+  }
+  alerts.log(
+    `${session} DEAD-END ${kind} re-fired ${repeatCount}x — tmux killed, slot freed${
+      autoBootstrapped ? `; AUTO-BOOTSTRAPPED ${next.taskId}` : ''
+    }`
+  );
   alert({
     session,
     ticket,
@@ -191,7 +296,10 @@ function freeDeadEndSlot({ session, ticket, kind, repeatCount, sha }) {
     trigger: kind,
     repeatCount,
     sha,
-    instruction: `Bootstrap next bug into freed slot: gh issue list --repo thomfilg/claude-plugin-work --state open --label bug --json number,title | head; bash plugins/maestro/scripts/maestro-bootstrap.sh GH-<pick>`,
+    nextTask: next ? next.taskId : null,
+    nextTopic: next ? next.topic : null,
+    autoBootstrapped: !!autoBootstrapped,
+    instruction,
   });
   return true;
 }

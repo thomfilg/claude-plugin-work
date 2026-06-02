@@ -66,14 +66,15 @@ test('freeCIGateSlot is idempotent on the same SHA', () => {
   assert.equal(actions.freeCIGateSlot(args), false, 'second call same SHA must no-op');
   assert.equal(actions.freeCIGateSlot(args), false);
 
-  // Only one slot-freed alert despite three calls.
+  // Only one slot-freed alert despite three calls (alert is sha-idempotent).
   const lines = fs.readFileSync(alertFile, 'utf8').trim().split('\n').filter(Boolean);
   const slotFreed = lines.map(JSON.parse).filter((a) => a.kind === 'slot-freed');
   assert.equal(slotFreed.length, 1);
 
-  // Only one kill-session pair (2 args entries: work + listen) despite 3 calls.
+  // Tmux kill fires on EVERY call (defensive against zombie sessions
+  // resurrected by autoRestart between ticks). 3 calls × 2 suffixes = 6.
   const killed = tmuxStub.filter((c) => c.args[0] === 'kill-session');
-  assert.equal(killed.length, 2);
+  assert.equal(killed.length, 6);
 });
 
 test('freeCIGateSlot re-fires when SHA changes (operator pushed a new commit)', () => {
