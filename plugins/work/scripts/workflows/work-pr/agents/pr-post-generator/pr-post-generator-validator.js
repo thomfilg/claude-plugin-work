@@ -72,41 +72,15 @@ ${lines.map((l) => `║  ${l.padEnd(66)}║`).join('\n')}
 `);
 
   if (ticketId) {
-    const tasksBase = getConfig('TASKS_BASE');
-    if (tasksBase) {
-      const actionsPath = path.join(tasksBase, ticketId, '.work-actions.json');
-      for (const v of violations) {
-        try {
-          // appendAction normalizes to {step, timestamp, what, meta}, but the
-          // contract here is "row carries top-level type === 'fabrication-block'"
-          // so we append directly. Fail-open: never let logging crash the hook.
-          const dir = path.dirname(actionsPath);
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          let rows = [];
-          try {
-            rows = JSON.parse(fs.readFileSync(actionsPath, 'utf8'));
-            if (!Array.isArray(rows)) rows = [];
-          } catch {
-            rows = [];
-          }
-          rows.push({
-            type: 'fabrication-block',
-            timestamp: new Date().toISOString(),
-            step: 'pr',
-            phrase: v.phrase,
-            reason: v.reason,
-          });
-          fs.writeFileSync(actionsPath, JSON.stringify(rows, null, 2));
-        } catch {
-          // fail-open
-        }
-      }
-      // Also call appendAction for the standard action log (spec R7).
+    // Route audit rows through appendAction so they land in the same file as
+    // every other action log (safeId-sanitized path). One row per violation
+    // — analytics can count by `what === 'fabrication-block'`.
+    for (const v of violations) {
       try {
         appendAction(ticketId, {
           step: 'pr',
           what: 'fabrication-block',
-          meta: { reasons: violations.map((v) => v.reason) },
+          meta: { phrase: v.phrase, reason: v.reason },
         });
       } catch {
         // fail-open

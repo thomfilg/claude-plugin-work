@@ -168,7 +168,7 @@ describe('pr-post-generator-validator: fabrication check', () => {
     );
 
     const actions = loadActions();
-    const fab = actions.filter((a) => a && a.type === 'fabrication-block');
+    const fab = actions.filter((a) => a && a.what === 'fabrication-block');
     assert.ok(
       fab.length >= 1,
       `expected at least one fabrication-block row in .work-actions.json; got ${JSON.stringify(actions)}`
