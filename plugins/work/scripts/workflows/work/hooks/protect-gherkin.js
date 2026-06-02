@@ -13,7 +13,13 @@
  * path. Ambiguous diffs (mixed tag + semantic line) default-block to
  * preserve the security invariant.
  *
- * Allowed steps: spec
+ * GH-487: Tag-only allow-path extended to the `check` step so review-driven
+ * retags don't force a spec rewind. TAG_LINE_RE also accepts `/` and `.` so
+ * path-bearing tags (e.g. `@test:plugins/work/.../foo.test.js`) are
+ * recognised as tag lines.
+ *
+ * Allowed steps for artifact protector: spec (+ spec_gate, tasks, tasks_gate via protector config)
+ * Allowed steps for tag-only edits: implement, check (see TAG_ONLY_ALLOWED_STEPS)
  * All other steps: blocked (exit 2)
  * No workflow active: allowed (exit 0, fail-open)
  */
