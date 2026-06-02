@@ -249,6 +249,10 @@ async function main() {
   } else if (ticketId) {
     const taskDir = path.join(tasksBase, ticketId);
     runFabricationCheck(prBody, taskDir, ticketId);
+  } else {
+    process.stderr.write(
+      'PR-POST-GENERATOR VALIDATOR: could not extract ticket ID from branch name (expected /[A-Z]+-[0-9]+/); skipping fabrication check (fail-open).\n'
+    );
   }
 
   // ========== CHECK IF FRONTEND APPS ARE AFFECTED ==========
