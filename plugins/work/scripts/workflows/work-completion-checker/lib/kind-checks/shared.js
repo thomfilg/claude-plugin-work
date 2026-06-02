@@ -178,6 +178,10 @@ function readReuseAudit(specDir) {
       symbol: m[1],
       line: headingLine + i,
       mustReuse,
+      // Self-evident, per-entry identifier — Reuse Audit entries in spec.md
+      // have no explicit R-ID, so we synthesize one. Used by failure records
+      // in lieu of the previously hard-pinned 'R1'.
+      requirementId: `REUSE-${entries.length + 1}`,
     });
   }
   if (entries.length === 0) {

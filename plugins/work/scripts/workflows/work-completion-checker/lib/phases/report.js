@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
+const { readState } = require('../failure-store');
 
 const REQUIRED_SECTIONS = ['Requirements Verification', 'Deliverables Checklist', 'Final Status'];
 const VERIFICATION_HEADER = '## Reuse / Scope / Test-pass verification';
@@ -25,12 +26,43 @@ function readFile(p) {
   }
 }
 
+function dedupeFailures(records) {
+  const seen = new Set();
+  const out = [];
+  for (const r of records) {
+    if (!r) continue;
+    // Match on the full enforcement contract — two records that report the
+    // same (requirementId, checkType, expected, observed, file, line) are the
+    // same finding regardless of which array they came from (ctx.failures
+    // from the current invocation vs. failure-store from a prior phase).
+    const key = JSON.stringify([
+      r.requirementId,
+      r.checkType,
+      r.expected,
+      r.observed,
+      r.file,
+      r.line,
+    ]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
 function buildVerdictDocument(ctx) {
-  const failures = Array.isArray(ctx.failures) ? ctx.failures : [];
+  // ctx.failures only holds records from THIS phase-runner invocation;
+  // earlier enforcement phases (reuse_audit / suggested_scope / test_pass)
+  // ran in prior invocations with their own ctx (see create-phase-runner.js
+  // ~line 210). failure-store persists their records to disk so we can fold
+  // them in here.
+  const store = readState(ctx.tasksDir);
+  const inMemory = Array.isArray(ctx.failures) ? ctx.failures : [];
+  const failures = dedupeFailures([...store.failures, ...inMemory]);
   const summary = ctx.summaryCounters || {
-    reuseChecked: ctx.reuseAuditChecked ?? 0,
-    scopeChecked: ctx.scopeChecked ?? 0,
-    testsChecked: ctx.testsChecked ?? 0,
+    reuseChecked: ctx.reuseAuditChecked ?? store.summary.reuseChecked ?? 0,
+    scopeChecked: ctx.scopeChecked ?? store.summary.scopeChecked ?? 0,
+    testsChecked: ctx.testsChecked ?? store.summary.testsChecked ?? 0,
   };
   return {
     ticket: ctx.ticket,

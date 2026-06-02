@@ -18,6 +18,7 @@ const path = require('node:path');
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readReuseAudit, readChangedFiles } = require('../kind-checks/shared');
 const { makeFailure } = require('../failure-record');
+const { appendForCheckType } = require('../failure-store');
 const { escapeRegex } = require('../../../lib/parse-completion-status');
 
 const SUFFIX_RE = /([A-Z][a-z0-9]+)$/;
@@ -82,7 +83,10 @@ function buildMissingFailure(entry, joined) {
       ? `found ${candidates[0]} in diff — did you mean to extend ${symbol}?`
       : `${symbol} not found in diff — imported instead by no changed file`;
   return makeFailure({
-    requirementId: entry.requirementId || 'R1',
+    // requirementId is synthesized by readReuseAudit() as `REUSE-<n>` so each
+    // MUST-reuse entry has a stable, self-evident identifier rather than the
+    // misleading 'R1' default that ignored the underlying requirement.
+    requirementId: entry.requirementId,
     checkType: 'reuse_audit',
     expected: `${symbol} imported`,
     observed,
@@ -106,6 +110,7 @@ function checkMustReuseEntries(entries, blobs, joined, failures) {
 
 async function validate(ctx) {
   const failures = ctx.failures || (ctx.failures = []);
+  const startLen = failures.length;
   let entries;
   try {
     entries = readReuseAudit(ctx.tasksDir);
@@ -118,6 +123,7 @@ async function validate(ctx) {
   }
 
   if (entries === null) {
+    appendForCheckType(ctx.tasksDir, 'reuse_audit', [], { reuseChecked: 0 });
     return { ok: true, summary: 'no Reuse Audit section — skipped' };
   }
 
@@ -127,6 +133,12 @@ async function validate(ctx) {
     const joined = blobs.map((b) => b.content).join('\n');
     const { mustChecked, mustMissing } = checkMustReuseEntries(entries, blobs, joined, failures);
     ctx.reuseAuditChecked = mustChecked;
+    appendForCheckType(
+      ctx.tasksDir,
+      'reuse_audit',
+      failures.slice(startLen),
+      { reuseChecked: mustChecked },
+    );
 
     if (mustMissing > 0) {
       return {

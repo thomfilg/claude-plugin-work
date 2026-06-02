@@ -19,6 +19,7 @@
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readRequirementCoverage, readTestReport } = require('../kind-checks/shared');
 const { makeFailure } = require('../failure-record');
+const { appendForCheckType } = require('../failure-store');
 const { hasVerdict, escapeRegex, buildVerdictRegex } = require('../../../lib/parse-completion-status');
 
 const CITATION_RE = /(\S+\.test\.[jt]sx?):(\w+)/;
@@ -132,12 +133,14 @@ function checkCitations(deliveredCitations, reportContent, failures) {
 
 async function validate(ctx) {
   const failures = ctx.failures || (ctx.failures = []);
+  const startLen = failures.length;
   try {
     const coverage = readRequirementCoverage(ctx.tasksDir) || [];
     const deliveredCitations = collectDeliveredCitations(coverage);
 
     if (deliveredCitations.length === 0) {
       ctx.testsChecked = 0;
+      appendForCheckType(ctx.tasksDir, 'test_pass', [], { testsChecked: 0 });
       return { ok: true, summary: 'no DELIVERED row cites a test — skipped' };
     }
 
@@ -145,6 +148,12 @@ async function validate(ctx) {
     if (!report.exists) {
       recordMissingReport(deliveredCitations, failures);
       ctx.testsChecked = 0;
+      appendForCheckType(
+        ctx.tasksDir,
+        'test_pass',
+        failures.slice(startLen),
+        { testsChecked: 0 },
+      );
       return {
         ok: false,
         errors: ['tests.check.md missing'],
@@ -158,6 +167,12 @@ async function validate(ctx) {
       failures,
     );
     ctx.testsChecked = testsChecked;
+    appendForCheckType(
+      ctx.tasksDir,
+      'test_pass',
+      failures.slice(startLen),
+      { testsChecked },
+    );
 
     if (testsFailing > 0) {
       return {

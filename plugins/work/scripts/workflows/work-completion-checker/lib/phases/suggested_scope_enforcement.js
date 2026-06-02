@@ -16,6 +16,7 @@ const childProcess = require('node:child_process');
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readSuggestedScopeFiles, readChangedFiles } = require('../kind-checks/shared');
 const { makeFailure } = require('../failure-record');
+const { appendForCheckType } = require('../failure-store');
 const config = require('../../../lib/config');
 
 /**
@@ -99,6 +100,7 @@ function checkScopedFiles(scopedFiles, changedSet, numstat, failures) {
 
 async function validate(ctx) {
   const failures = ctx.failures || (ctx.failures = []);
+  const startLen = failures.length;
   let scopedFiles;
   try {
     scopedFiles = readSuggestedScopeFiles(ctx.tasksDir);
@@ -111,6 +113,7 @@ async function validate(ctx) {
   }
 
   if (scopedFiles === null) {
+    appendForCheckType(ctx.tasksDir, 'suggested_scope', [], { scopeChecked: 0 });
     return { ok: true, summary: 'no Suggested Scope section — skipped' };
   }
 
@@ -120,6 +123,12 @@ async function validate(ctx) {
     const numstat = runNumstat(ctx);
     const missing = checkScopedFiles(scopedFiles, changedSet, numstat, failures);
     ctx.scopeChecked = scopedFiles.length;
+    appendForCheckType(
+      ctx.tasksDir,
+      'suggested_scope',
+      failures.slice(startLen),
+      { scopeChecked: scopedFiles.length },
+    );
 
     if (missing > 0) {
       return {
