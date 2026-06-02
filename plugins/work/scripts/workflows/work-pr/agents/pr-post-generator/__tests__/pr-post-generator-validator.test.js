@@ -16,12 +16,9 @@ const WORKFLOW_COPY = path.join(
 );
 
 function readResolved(filePath) {
-  // Resolve symlinks (workflow copy may be a symlink to the agent file)
-  const stat = fs.lstatSync(filePath);
-  const target = stat.isSymbolicLink()
-    ? path.resolve(path.dirname(filePath), fs.readlinkSync(filePath))
-    : filePath;
-  return fs.readFileSync(target, 'utf8');
+  // fs.readFileSync follows symlinks atomically — no separate stat/readlink
+  // step (avoids TOCTOU race flagged by CodeQL).
+  return fs.readFileSync(filePath, 'utf8');
 }
 
 describe('agent prompt — FABRICATION GUARD', () => {
