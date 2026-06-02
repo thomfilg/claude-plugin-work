@@ -200,7 +200,7 @@ function mkProjectsFixture() {
 
 test('@task:3 walkTranscripts returns *.jsonl files modified within --since window', () => {
   const { walkTranscripts } = require(REPLAY);
-  const { baseDir, projHash, projDir } = mkProjectsFixture();
+  const { baseDir, projDir } = mkProjectsFixture();
 
   const fresh = path.join(projDir, 'fresh.jsonl');
   const stale = path.join(projDir, 'stale.jsonl');
@@ -832,6 +832,65 @@ test('@task:6 renderJson uses deterministic top-level key order', () => {
   const keyOrderRegex =
     /"memories"[\s\S]*"suggestions"[\s\S]*"events_total"[\s\S]*"events_ups"[\s\S]*"events_ptu"/;
   assert.match(out, keyOrderRegex, 'keys appear in deterministic order');
+});
+
+test('@task:6 renderJson includes extrapolated:true when meta.extrapolated is set', () => {
+  const { renderJson } = require(REPLAY);
+  const out = renderJson({}, [], {
+    events_total: 0,
+    events_ups: 0,
+    events_ptu: 0,
+    extrapolated: true,
+  });
+  const parsed = JSON.parse(out);
+  assert.equal(parsed.extrapolated, true, 'extrapolated flag surfaced in JSON');
+});
+
+test('@task:6 renderJson defaults extrapolated to false when meta omits it', () => {
+  const { renderJson } = require(REPLAY);
+  const out = renderJson({}, [], { events_total: 0, events_ups: 0, events_ptu: 0 });
+  const parsed = JSON.parse(out);
+  assert.equal(parsed.extrapolated, false, 'extrapolated defaults to false');
+});
+
+test('@task:6 renderReport emits a header note when meta.extrapolated is true', () => {
+  const { renderReport } = require(REPLAY);
+  const agg = {
+    'ups-bug': {
+      fires: 5,
+      relevant: 3,
+      irrelevant: 1,
+      judge_failed: 0,
+      fp_rate: 0.25,
+      sample_matches: ['auth bug'],
+    },
+  };
+  const meta = {
+    store: 'local',
+    window: '7d',
+    events_total: 12,
+    events_ups: 7,
+    events_ptu: 5,
+    judgeCalls: 4,
+    extrapolated: true,
+  };
+  const out = renderReport(agg, [], meta);
+  assert.match(out, /extrapolated/i, 'human report mentions extrapolation');
+});
+
+test('@task:6 renderReport omits extrapolation note when meta.extrapolated is false', () => {
+  const { renderReport } = require(REPLAY);
+  const meta = {
+    store: 'local',
+    window: '7d',
+    events_total: 0,
+    events_ups: 0,
+    events_ptu: 0,
+    judgeCalls: 0,
+    extrapolated: false,
+  };
+  const out = renderReport({}, [], meta);
+  assert.ok(!/extrapolated/i.test(out), 'no extrapolation note when full dataset judged');
 });
 
 /**

@@ -66,6 +66,7 @@ function renderJson(agg, suggestions, meta) {
     events_total: meta && typeof meta.events_total === 'number' ? meta.events_total : 0,
     events_ups: meta && typeof meta.events_ups === 'number' ? meta.events_ups : 0,
     events_ptu: meta && typeof meta.events_ptu === 'number' ? meta.events_ptu : 0,
+    extrapolated: !!(meta && meta.extrapolated),
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -129,7 +130,14 @@ function renderCostFooter(itemsJudged, judgeCalls) {
  */
 function renderReport(agg, suggestions, meta) {
   const m = meta || {};
-  const lines = [renderHeaderLine(m), '', renderTableHeader()];
+  const lines = [renderHeaderLine(m)];
+  if (m.extrapolated) {
+    // SKILL.md: report is annotated with `extrapolated` when `--max-judges`
+    // causes sampling. Surface a header note so users know fp_rate numbers
+    // are based on a sample, not the full fired-matches population.
+    lines.push('note: fp_rate values are extrapolated from a sample (--max-judges cap reached).');
+  }
+  lines.push('', renderTableHeader());
   for (const name of sortMemoryNames(agg)) {
     lines.push(renderMemoryRow(name, agg[name]));
   }
