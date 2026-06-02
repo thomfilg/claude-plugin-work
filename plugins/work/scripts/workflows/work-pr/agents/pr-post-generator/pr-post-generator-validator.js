@@ -63,7 +63,7 @@ function runFabricationCheck(prBody, taskDir, ticketId) {
 ║  POST-PR-GENERATOR: FABRICATED TEST EVIDENCE DETECTED                ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                      ║
-${lines.map((l) => `║  ${l.padEnd(66)}║`).join('\n')}
+${lines.map((l) => `║  ${l.padEnd(68)}║`).join('\n')}
 ║  Remove invented PASS/FAIL or stability claims, or attach the        ║
 ║  supporting artifact (tests.check.md / stability*.log) to the task   ║
 ║  folder before re-running the agent.                                 ║
