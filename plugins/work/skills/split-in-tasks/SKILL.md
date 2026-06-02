@@ -458,7 +458,19 @@ Rules:
 
 **Required sections (Gate C):**
 - `### Files in scope` — Glob patterns or paths the task may edit. Must be non-empty. The implement-step hook blocks any file edit outside this set. Each entry must reference a real path; annotate creates with `(NEW)` and deletions with `(DELETE)` (see marker convention below).
-- `### Files explicitly out of scope` — Paths owned by sibling tickets that this task must not touch. May be empty when no siblings exist. Populate from `tasks/<ticket>/related-tickets.json` (`surfaces` array under each sibling).
+- `### Files explicitly out of scope` — Paths owned by sibling **tickets** that this task must not touch. This is a **sibling-ticket-only boundary** — it MUST NOT list files owned by peer tasks within the **same ticket**. May be empty when no siblings exist. Populate from `tasks/<ticket>/related-tickets.json` (`surfaces` array under each sibling).
+
+**Intra-ticket exclusion rule (hard-failed at `tasks-gate`):**
+
+Peer tasks inside the same ticket coordinate via their own `### Files in scope` sections — listing a peer task's owned file under `### Files explicitly out of scope` is a structural error, not a safety net. Before emitting `tasks.md`, compute:
+
+```
+filesOutOfScope = siblingTicketOwnedFiles − ∪(otherTasks[*].filesInScope)
+```
+
+That is: start from the surfaces owned by **other tickets** (sibling-ticket boundary), then subtract every path that any peer task within the **same ticket** lists under `### Files in scope`. The remainder is what may appear under `### Files explicitly out of scope`. The `validateIntraTicketScope` validator in `plugins/work/scripts/workflows/lib/task-scope.js` enforces this and hard-fails `tasks-gate` on any violation.
+
+**Worked example (ECHO-5538 four-task shape):** Task 3 owns `components/X.tsx` under its `### Files in scope`. Tasks 1, 2, and 4 — peers within the same ticket — MUST NOT list `components/X.tsx` under ANY scope section (neither `### Files in scope` nor `### Files explicitly out of scope`). The exclusion list is reserved for files owned by other tickets entirely.
 
 **Marker convention for `### Files in scope` (enforced by the `scope_exists` phase):**
 - `` `path/to/file.ts` `` — file MUST exist at repo root (MODIFY, default)

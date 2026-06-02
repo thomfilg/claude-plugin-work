@@ -536,6 +536,55 @@ function validateCrossTaskDepsOwnership(tasks) {
 }
 
 /**
+ * ECHO-5538 / GH-485: Detect the intra-ticket scope conflict — a file is
+ * simultaneously `### Files in scope` for one task and `### Files explicitly
+ * out of scope` for a peer task in the SAME tasks.md.
+ *
+ * `### Files explicitly out of scope` is a SIBLING-TICKET boundary: it names
+ * paths owned by other tickets / long-merged modules that the current ticket
+ * must not touch. Listing a peer-task-owned path there is incoherent — the
+ * peer task WILL legitimately edit it, and the out-of-scope declarant gains
+ * no protection from doing so. Hard-fail at tasks-gate so the author either
+ * removes the out-of-scope entry or restructures task ownership.
+ *
+ * For each task M and each entry E in M.filesOutOfScope, check whether any
+ * OTHER task N owns E via `filesInScope` (literal-or-glob via
+ * `fileMatchesScope`). If so, emit one error per (E, M, N) conflict naming
+ * the file and BOTH task numbers.
+ *
+ * @param {Array<object>} tasks
+ * @returns {string[]} validation errors
+ */
+function validateIntraTicketScope(tasks) {
+  if (!Array.isArray(tasks) || tasks.length === 0) return [];
+  const errors = [];
+  for (const declarant of tasks) {
+    if (!declarant || !Array.isArray(declarant.filesOutOfScope)) continue;
+    if (declarant.filesOutOfScope.length === 0) continue;
+    for (const entry of declarant.filesOutOfScope) {
+      if (typeof entry !== 'string' || !entry) continue;
+      for (const owner of tasks) {
+        if (!owner || owner.num === declarant.num) continue;
+        const scope = Array.isArray(owner.filesInScope) ? owner.filesInScope : [];
+        if (scope.length === 0) continue;
+        const literalMatch = scope.includes(entry);
+        const globMatch = fileMatchesScope(entry, scope);
+        if (!literalMatch && !globMatch) continue;
+        errors.push(
+          `Task ${declarant.num ?? '?'} lists \`${entry}\` under \`### Files explicitly out of scope\`, ` +
+            `but Task ${owner.num ?? '?'} owns that path via \`### Files in scope\`. ` +
+            'Intra-ticket peer ownership is not a sibling-ticket boundary: `### Files explicitly out of scope` ' +
+            'is reserved for paths owned by OTHER tickets. Remove the entry from Task ' +
+            `${declarant.num ?? '?'} or restructure ownership. ` +
+            'See skills/split-in-tasks/SKILL.md §Files explicitly out of scope (intra-ticket exclusion rule).'
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/**
  * Validate every task and return a flat error list.
  *
  * @param {Array<object>|null|undefined} tasks
@@ -552,6 +601,7 @@ function validateAll(tasks) {
   }
   errors.push(...validateTddCycle(tasks));
   errors.push(...validateCrossTaskDepsOwnership(tasks));
+  errors.push(...validateIntraTicketScope(tasks));
   return { valid: errors.length === 0, errors };
 }
 
@@ -669,6 +719,7 @@ module.exports = {
   validateTaskTestScope,
   validateTddCycle,
   validateCrossTaskDepsOwnership,
+  validateIntraTicketScope,
   validateAll,
   unionFilesInScope,
   findTask,
