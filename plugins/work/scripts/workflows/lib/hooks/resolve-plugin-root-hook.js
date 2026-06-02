@@ -27,7 +27,9 @@ process.on('unhandledRejection', (err) => {
 });
 
 function computePluginRoot() {
-  const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  const rawEnvRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  // Normalize to strip trailing slashes so the boundary check is reliable
+  const envRoot = rawEnvRoot ? path.resolve(rawEnvRoot) : '';
   // Probe env var (handles leaf-dir OR parent plugins-base) and __dirname fallback
   const probed = resolvePluginRoot(__dirname, 3);
   if (probed) {
