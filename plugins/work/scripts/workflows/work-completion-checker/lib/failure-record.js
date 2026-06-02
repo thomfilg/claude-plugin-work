@@ -41,4 +41,16 @@ function makeFailure(input) {
   };
 }
 
-module.exports = { makeFailure };
+/**
+ * Escape regex metacharacters so a string can be safely interpolated into a
+ * `new RegExp(...)` constructor. Shared by phase modules that build regexes
+ * from spec-extracted symbols (Reuse Audit, test-name lookups).
+ *
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+module.exports = { makeFailure, escapeRegExp };

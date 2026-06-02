@@ -18,7 +18,7 @@
 
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readRequirementCoverage, readTestReport } = require('../kind-checks/shared');
-const { makeFailure } = require('../failure-record');
+const { makeFailure, escapeRegExp } = require('../failure-record');
 const { hasVerdict } = require('../../../lib/parse-completion-status');
 
 const CITATION_RE = /(\S+\.test\.[jt]sx?):(\w+)/;
@@ -45,10 +45,6 @@ function parseEvidenceCitation(cell) {
  * @param {string} testName
  * @returns {string | null}
  */
-function escapeRegExp(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function findTestLine(reportContent, testName) {
   if (!reportContent) return null;
   const re = new RegExp(`\\b${escapeRegExp(testName)}\\b`);

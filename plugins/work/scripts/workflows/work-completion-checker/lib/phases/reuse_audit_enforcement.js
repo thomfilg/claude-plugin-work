@@ -17,7 +17,7 @@ const path = require('node:path');
 
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readReuseAudit, readChangedFiles } = require('../kind-checks/shared');
-const { makeFailure } = require('../failure-record');
+const { makeFailure, escapeRegExp } = require('../failure-record');
 
 const SUFFIX_RE = /([A-Z][a-z0-9]+)$/;
 
@@ -62,20 +62,6 @@ function loadChangedContents(ctx, changed) {
     out.push({ rel, content: readFileSafe(abs) });
   }
   return out;
-}
-
-/**
- * Escape RegExp metacharacters so `symbol` is matched literally. Without
- * this, audit entries containing `.`, `[`, `(`, etc. would either match
- * wildcards (false positives, e.g. `Object.create` matching `ObjectXcreate`)
- * or throw `SyntaxError` mid-regex (e.g. `foo[bar]`), which the phase's
- * fail-closed `catch` would swallow and silently bypass enforcement.
- *
- * @param {string} str
- * @returns {string}
- */
-function escapeRegExp(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function symbolPresentIn(symbol, fileBlobs) {
@@ -176,4 +162,3 @@ module.exports = function register(registerPhase) {
 module.exports.validate = validate;
 module.exports.instructions = instructions;
 module.exports.extractSuffixCandidates = extractSuffixCandidates;
-module.exports.escapeRegExp = escapeRegExp;
