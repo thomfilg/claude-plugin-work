@@ -51,30 +51,45 @@ function sortMemoryNames(agg) {
   return Object.keys(agg).sort((a, b) => compareMemories(agg, a, b));
 }
 
+function memoryToJson(name, m) {
+  return {
+    name,
+    fires: m.fires,
+    relevant: m.relevant,
+    irrelevant: m.irrelevant,
+    judge_failed: m.judge_failed,
+    fp_rate: m.fp_rate,
+    sample_matches: m.sample_matches,
+  };
+}
+
+function pickString(meta, key) {
+  return meta && typeof meta[key] === 'string' ? meta[key] : '';
+}
+
+function pickNumber(meta, key) {
+  return meta && typeof meta[key] === 'number' ? meta[key] : 0;
+}
+
+function buildJsonMeta(meta) {
+  return {
+    store: pickString(meta, 'store'),
+    window: pickString(meta, 'window'),
+    events_total: pickNumber(meta, 'events_total'),
+    events_ups: pickNumber(meta, 'events_ups'),
+    events_ptu: pickNumber(meta, 'events_ptu'),
+    judge_calls: pickNumber(meta, 'judgeCalls'),
+    items_judged: pickNumber(meta, 'itemsJudged'),
+    extrapolated: !!(meta && meta.extrapolated),
+  };
+}
+
 function renderJson(agg, suggestions, meta) {
-  const memories = sortMemoryNames(agg).map((name) => {
-    const m = agg[name];
-    return {
-      name,
-      fires: m.fires,
-      relevant: m.relevant,
-      irrelevant: m.irrelevant,
-      judge_failed: m.judge_failed,
-      fp_rate: m.fp_rate,
-      sample_matches: m.sample_matches,
-    };
-  });
+  const memories = sortMemoryNames(agg).map((name) => memoryToJson(name, agg[name]));
   const payload = {
     memories,
     suggestions: Array.isArray(suggestions) ? suggestions : [],
-    store: meta && typeof meta.store === 'string' ? meta.store : '',
-    window: meta && typeof meta.window === 'string' ? meta.window : '',
-    events_total: meta && typeof meta.events_total === 'number' ? meta.events_total : 0,
-    events_ups: meta && typeof meta.events_ups === 'number' ? meta.events_ups : 0,
-    events_ptu: meta && typeof meta.events_ptu === 'number' ? meta.events_ptu : 0,
-    judge_calls: meta && typeof meta.judgeCalls === 'number' ? meta.judgeCalls : 0,
-    items_judged: meta && typeof meta.itemsJudged === 'number' ? meta.itemsJudged : 0,
-    extrapolated: !!(meta && meta.extrapolated),
+    ...buildJsonMeta(meta),
   };
   return JSON.stringify(payload, null, 2);
 }
