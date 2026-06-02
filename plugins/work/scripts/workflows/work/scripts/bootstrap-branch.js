@@ -118,7 +118,7 @@ function buildPrefixSuggestion({ name, userRegex, regex, prefix }) {
   return '';
 }
 
-function validate(name, { regex, prefix }) {
+function validate(name, { regex, prefix, isLinearVerbatim }) {
   // 1. Unconditional safety regex (shell metachars / `..` / whitespace).
   if (!SAFETY_REGEX.test(name) || name.includes('..')) {
     fail(`resolved name '${name}' contains disallowed characters (shell metacharacters or '..')`);
@@ -140,7 +140,13 @@ function validate(name, { regex, prefix }) {
       return;
     }
     if (!matches) {
-      const suggestion = buildPrefixSuggestion({ name, userRegex, regex, prefix });
+      // Skip the BRANCH_PREFIX suggestion when the name is Linear's verbatim
+      // `gitBranchName` — changing BRANCH_PREFIX has no effect on that path,
+      // so the hint would mislead operators per the regex-vs-Linear conflict
+      // documented in SKILL.md.
+      const suggestion = isLinearVerbatim
+        ? ''
+        : buildPrefixSuggestion({ name, userRegex, regex, prefix });
       fail(`resolved name '${name}' does not match BRANCH_NAME_REGEX ${regex}${suggestion}`);
     }
   }
@@ -162,7 +168,8 @@ function main() {
   const name = resolveBranchName(args);
   const regex = getConfig('BRANCH_NAME_REGEX') || '';
   const prefix = getConfig('BRANCH_PREFIX') || '';
-  validate(name, { regex, prefix });
+  const isLinearVerbatim = Boolean(args.gitBranchName) && providerIsLinear;
+  validate(name, { regex, prefix, isLinearVerbatim });
   process.stdout.write(`${name}\n`);
   process.exit(0);
 }
