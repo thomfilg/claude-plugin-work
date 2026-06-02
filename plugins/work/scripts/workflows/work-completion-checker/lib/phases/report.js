@@ -1,7 +1,10 @@
 /**
  * Phase: report — confirm completion.check.md was actually produced and
  * matches the canonical structure (Original Request, Deliverables Checklist,
- * Final Status). Agent writes the file; this phase only gates the artifact.
+ * Final Status). Also persists `completion-verdict.json` and upserts a
+ * `## Reuse / Scope / Test-pass verification` block into completion.check.md
+ * so downstream gates can consume structured failure records without
+ * re-parsing markdown (R7).
  */
 
 'use strict';
@@ -12,6 +15,7 @@ const path = require('node:path');
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 
 const REQUIRED_SECTIONS = ['Requirements Verification', 'Deliverables Checklist', 'Final Status'];
+const VERIFICATION_HEADER = '## Reuse / Scope / Test-pass verification';
 
 function readFile(p) {
   try {
@@ -21,7 +25,77 @@ function readFile(p) {
   }
 }
 
+function buildVerdictDocument(ctx) {
+  const failures = Array.isArray(ctx.failures) ? ctx.failures : [];
+  const summary = ctx.summaryCounters || {
+    reuseChecked: ctx.reuseAuditChecked ?? 0,
+    scopeChecked: ctx.scopeChecked ?? 0,
+    testsChecked: ctx.testsChecked ?? 0,
+  };
+  return {
+    ticket: ctx.ticket,
+    ok: failures.length === 0,
+    verdictAt: new Date().toISOString(),
+    failures,
+    summary,
+  };
+}
+
+function renderVerificationBlock(verdict) {
+  const lines = [VERIFICATION_HEADER, ''];
+  lines.push(`- ok: ${verdict.ok}`);
+  lines.push(`- verdictAt: ${verdict.verdictAt}`);
+  lines.push(
+    `- summary: reuseChecked=${verdict.summary.reuseChecked || 0}, scopeChecked=${verdict.summary.scopeChecked || 0}, testsChecked=${verdict.summary.testsChecked || 0}`,
+  );
+  if (verdict.failures.length === 0) {
+    lines.push('- failures: none');
+  } else {
+    lines.push('- failures:');
+    for (const f of verdict.failures) {
+      lines.push(
+        `  - ${f.requirementId} [${f.checkType}] expected: ${f.expected}; observed: ${f.observed}`,
+      );
+    }
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function upsertVerificationSection(text, block) {
+  if (!text) return block;
+  const idx = text.indexOf(VERIFICATION_HEADER);
+  if (idx === -1) return `${text.replace(/\s+$/, '')}\n\n${block}`;
+  const after = text.slice(idx + VERIFICATION_HEADER.length);
+  const nextHdr = after.match(/^##\s/m);
+  const end = nextHdr ? idx + VERIFICATION_HEADER.length + nextHdr.index : text.length;
+  return text.slice(0, idx) + block + text.slice(end);
+}
+
+function persistVerdict(ctx) {
+  const verdict = buildVerdictDocument(ctx);
+  try {
+    fs.writeFileSync(
+      path.join(ctx.tasksDir, 'completion-verdict.json'),
+      `${JSON.stringify(verdict, null, 2)}\n`,
+    );
+  } catch {
+    /* hook-gated */
+  }
+  const completionPath = path.join(ctx.tasksDir, 'completion.check.md');
+  const text = readFile(completionPath);
+  const next = upsertVerificationSection(text, renderVerificationBlock(verdict));
+  if (next !== text) {
+    try {
+      fs.writeFileSync(completionPath, next);
+    } catch {
+      /* hook-gated */
+    }
+  }
+}
+
 function validate(ctx) {
+  persistVerdict(ctx);
   const p = path.join(ctx.tasksDir, 'completion.check.md');
   const text = readFile(p);
   if (!text) {
@@ -86,3 +160,6 @@ module.exports = function register(registerPhase) {
 module.exports.validate = validate;
 module.exports.instructions = instructions;
 module.exports.REQUIRED_SECTIONS = REQUIRED_SECTIONS;
+module.exports.VERIFICATION_HEADER = VERIFICATION_HEADER;
+module.exports.buildVerdictDocument = buildVerdictDocument;
+module.exports.upsertVerificationSection = upsertVerificationSection;

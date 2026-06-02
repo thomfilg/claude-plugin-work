@@ -73,7 +73,7 @@ function instructions(ctx) {
 
 module.exports = function register(registerPhase) {
   registerPhase(COMPLETION_PHASES.coverage_check, {
-    next: COMPLETION_PHASES.kind_checks,
+    next: COMPLETION_PHASES.reuse_audit_enforcement,
     validate,
     instructions,
   });

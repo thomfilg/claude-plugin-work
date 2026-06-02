@@ -1,0 +1,160 @@
+/**
+ * Phase: suggested_scope_enforcement.
+ *
+ * GH-282 Task 5. Reads `### Files in scope` / `### Suggested Scope` entries
+ * from tasks.md (via Task 2's `readSuggestedScopeFiles`) and verifies each
+ * declared file appears in the changed-file set AND has non-empty diff hunks
+ * (`git diff --numstat`).
+ *
+ * Fail-closed: any thrown parser/IO error becomes `{ ok: false, errors: [...] }`.
+ */
+
+'use strict';
+
+const childProcess = require('node:child_process');
+
+const { COMPLETION_PHASES } = require('../../completion-phase-registry');
+const { readSuggestedScopeFiles, readChangedFiles } = require('../kind-checks/shared');
+const { makeFailure } = require('../failure-record');
+const config = require('../../../lib/config');
+
+/**
+ * Parse `git diff --numstat` output and decide whether `file` has any
+ * non-empty hunks (added or deleted lines > 0). Each numstat line has the
+ * shape `<adds>\t<dels>\t<path>` where `adds`/`dels` may be `-` for binary
+ * files (treated as a hunk).
+ *
+ * @param {string} file
+ * @param {string} numstatOutput
+ * @returns {boolean}
+ */
+function numstatRowHasHunk(adds, dels) {
+  if (adds === '-' || dels === '-') return true;
+  const a = Number(adds);
+  const d = Number(dels);
+  const aPos = Number.isFinite(a) && a > 0;
+  const dPos = Number.isFinite(d) && d > 0;
+  return aPos || dPos;
+}
+
+function hasNonEmptyHunk(file, numstatOutput) {
+  if (!file || !numstatOutput) return false;
+  for (const line of numstatOutput.split('\n')) {
+    const parts = line.split('\t');
+    if (parts.length < 3) continue;
+    const [adds, dels, p] = parts;
+    if (p.trim() !== file) continue;
+    return numstatRowHasHunk(adds, dels);
+  }
+  return false;
+}
+
+function runNumstat(ctx) {
+  const root = ctx.worktreeRoot || process.cwd();
+  for (const base of config.getDiffBaseCandidates({ cwd: root })) {
+    const r = childProcess.spawnSync('git', ['diff', '--numstat', `${base}...HEAD`], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    if (r && r.status === 0) return r.stdout || '';
+  }
+  return '';
+}
+
+function errMessage(err) {
+  return err && err.message ? err.message : String(err);
+}
+
+function scopeFailure(file, observed) {
+  return makeFailure({
+    requirementId: 'R2',
+    checkType: 'suggested_scope',
+    expected: `${file} in diff`,
+    observed,
+    file,
+  });
+}
+
+function evaluateScopedFile(file, changedSet, numstat) {
+  if (!changedSet.has(file)) {
+    return scopeFailure(file, 'missing from git diff --name-only');
+  }
+  if (!hasNonEmptyHunk(file, numstat)) {
+    return scopeFailure(file, 'in diff but unchanged content');
+  }
+  return null;
+}
+
+function checkScopedFiles(scopedFiles, changedSet, numstat, failures) {
+  let missing = 0;
+  for (const file of scopedFiles) {
+    const fail = evaluateScopedFile(file, changedSet, numstat);
+    if (fail) {
+      missing += 1;
+      failures.push(fail);
+    }
+  }
+  return missing;
+}
+
+async function validate(ctx) {
+  const failures = ctx.failures || (ctx.failures = []);
+  let scopedFiles;
+  try {
+    scopedFiles = readSuggestedScopeFiles(ctx.tasksDir);
+  } catch (err) {
+    return {
+      ok: false,
+      errors: [`parser threw: ${errMessage(err)}`],
+      summary: 'suggested scope parser error (fail-closed)',
+    };
+  }
+
+  if (scopedFiles === null) {
+    return { ok: true, summary: 'no Suggested Scope section — skipped' };
+  }
+
+  try {
+    const changed = readChangedFiles(ctx) || [];
+    const changedSet = new Set(changed);
+    const numstat = runNumstat(ctx);
+    const missing = checkScopedFiles(scopedFiles, changedSet, numstat, failures);
+    ctx.scopeChecked = scopedFiles.length;
+
+    if (missing > 0) {
+      return {
+        ok: false,
+        errors: [`${missing} Suggested Scope file(s) missing from diff`],
+        summary: `suggested scope: ${scopedFiles.length} checked, ${missing} missing`,
+        scopeChecked: scopedFiles.length,
+      };
+    }
+    return {
+      ok: true,
+      summary: `suggested scope: ${scopedFiles.length} checked, 0 missing`,
+      scopeChecked: scopedFiles.length,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      errors: [`parser threw: ${errMessage(err)}`],
+      summary: 'suggested scope phase error (fail-closed)',
+    };
+  }
+}
+
+function instructions() {
+  return '';
+}
+
+module.exports = function register(registerPhase) {
+  registerPhase(COMPLETION_PHASES.suggested_scope_enforcement, {
+    next: COMPLETION_PHASES.test_pass_crossref,
+    validate,
+    instructions,
+  });
+};
+
+module.exports.validate = validate;
+module.exports.instructions = instructions;
+module.exports.hasNonEmptyHunk = hasNonEmptyHunk;
