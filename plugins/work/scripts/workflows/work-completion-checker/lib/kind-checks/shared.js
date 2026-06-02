@@ -163,7 +163,6 @@ function readReuseAudit(specDir) {
   const headingMatch = text.match(headingRe);
   if (!headingMatch) return null;
   const block = specShared.sliceSection(text, headingRe);
-  const lines = text.split('\n');
   // Map heading position to a line index so per-entry line numbers are
   // absolute within spec.md (useful for downstream error messages).
   const headingOffset = headingMatch.index;
@@ -186,8 +185,6 @@ function readReuseAudit(specDir) {
       `readReuseAudit: '## Reuse Audit' section in ${path.join(specDir, 'spec.md')} contains no parseable entries`,
     );
   }
-  // Avoid unused-var warning for `lines`; intentional for future extension.
-  void lines;
   return entries;
 }
 
@@ -236,6 +233,9 @@ function extractBulletPaths(block, headingRe) {
     const m = line.match(/^\s*[-*]\s+`([^`]+)`/);
     if (m) out.push(m[1]);
   }
+  // Treat empty section as absent so the `### Suggested Scope` fallback fires
+  // when `### Files in scope` exists but has zero bullets.
+  if (out.length === 0) return null;
   return out;
 }
 

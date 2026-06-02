@@ -99,6 +99,30 @@ test('verdict ok:true with empty failures when no records were pushed', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('persistVerdict does not create completion.check.md when absent (Bug 5)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'completion-report-absent-'));
+  const tasksDir = path.join(root, 'GH-282');
+  fs.mkdirSync(tasksDir, { recursive: true });
+  const ctx = {
+    ticket: 'GH-282',
+    tasksDir,
+    failures: [],
+    summaryCounters: { reuseChecked: 0, scopeChecked: 0, testsChecked: 0 },
+  };
+  // Call validate (which invokes persistVerdict) — we don't care about its return.
+  report.validate(ctx);
+  assert.ok(
+    fs.existsSync(path.join(tasksDir, 'completion-verdict.json')),
+    'completion-verdict.json must still be written',
+  );
+  assert.equal(
+    fs.existsSync(path.join(tasksDir, 'completion.check.md')),
+    false,
+    'completion.check.md must NOT be conjured into existence',
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('report upserts Reuse/Scope/Test-pass verification section idempotently', () => {
   const { root, tasksDir } = makeTasksDir();
   const ctx = {

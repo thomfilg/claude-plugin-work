@@ -141,6 +141,31 @@ test.describe('readSuggestedScopeFiles(tasksDir)', () => {
     }
   });
 
+  test('falls back to `### Suggested Scope` when `### Files in scope` is present but empty (Bug 3)', () => {
+    const dir = mkTmp();
+    try {
+      writeTasks(
+        dir,
+        [
+          '# Tasks',
+          '',
+          '## Task 1 — alpha',
+          '',
+          '### Files in scope',
+          '',
+          '### Suggested Scope',
+          '- `path/to/fallback.js`',
+          '',
+        ].join('\n'),
+      );
+      const result = shared.readSuggestedScopeFiles(dir);
+      assert.ok(Array.isArray(result));
+      assert.deepEqual(result, ['path/to/fallback.js']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('returns null when no Suggested Scope / Files in scope subsection exists in any task', () => {
     const dir = mkTmp();
     try {

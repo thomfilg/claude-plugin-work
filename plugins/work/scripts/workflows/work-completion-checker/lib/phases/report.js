@@ -63,7 +63,10 @@ function renderVerificationBlock(verdict) {
 }
 
 function upsertVerificationSection(text, block) {
-  if (!text) return block;
+  // Don't conjure completion.check.md from nothing — when the report file is
+  // absent, the verification block has no host. Returning null keeps the
+  // "Missing completion.check.md" diagnostic intact downstream.
+  if (!text) return null;
   const idx = text.indexOf(VERIFICATION_HEADER);
   if (idx === -1) return `${text.replace(/\s+$/, '')}\n\n${block}`;
   const after = text.slice(idx + VERIFICATION_HEADER.length);
@@ -85,7 +88,7 @@ function persistVerdict(ctx) {
   const completionPath = path.join(ctx.tasksDir, 'completion.check.md');
   const text = readFile(completionPath);
   const next = upsertVerificationSection(text, renderVerificationBlock(verdict));
-  if (next !== text) {
+  if (next !== null && next !== text) {
     try {
       fs.writeFileSync(completionPath, next);
     } catch {
