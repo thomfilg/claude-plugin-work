@@ -29,7 +29,31 @@ const DETECTORS = {
   phaseStall: require('./lib/maestro-conduct/detectors/phase-stall'),
   commitStall: require('./lib/maestro-conduct/detectors/commit-stall'),
   prComments: require('./lib/maestro-conduct/detectors/pr-comments'),
+  prStatus: require('./lib/maestro-conduct/detectors/pr-status'),
 };
+
+// Heartbeat: every HEARTBEAT_MIN emit a positive summary so silence on the
+// daemon side can't be mistaken for "nothing happening." See detectors/commit-stall.js
+// for the threshold dedup contract used to keep commit-stall noise bounded.
+const HEARTBEAT_MIN = parseInt(process.env.HEARTBEAT_MIN || '30', 10);
+let lastHeartbeatAt = 0;
+
+// Re-emit escalation: when the same (session, kind, sha/phase) alert fires
+// this many times in a row, the daemon auto-rotates the slot (kills the
+// session via freeDeadEndSlot). Operator no longer needs to make a judgment
+// call on whether a stuck agent is recoverable.
+const DEAD_END_REEMITS = parseInt(process.env.DEAD_END_REEMITS || '3', 10);
+
+function maybeEscalateToDeadEnd(ctx, kind, repeatCount, sha) {
+  if (repeatCount < DEAD_END_REEMITS) return;
+  actions.freeDeadEndSlot({
+    session: ctx.session,
+    ticket: ctx.ticket,
+    kind,
+    repeatCount,
+    sha,
+  });
+}
 
 // Only -work sessions are restart-eligible (matches maestro-conduct.sh
 // gating). Helpers like -dev / -listen are surfaced informationally but
@@ -68,7 +92,7 @@ function handleQuestion(ctx, qHit) {
   }
   const mins = state.minutesSince(prev.startedAt);
   if (mins >= Q_WAIT_MIN && !prev.alerted) {
-    actions.alert({
+    const r = actions.alert({
       session: ctx.session,
       ticket: ctx.ticket,
       kind: 'question-pending',
@@ -76,8 +100,10 @@ function handleQuestion(ctx, qHit) {
       elapsedMin: mins,
       options: qHit.options,
       promptKind: qHit.promptKind,
+      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — read full menu, pick the option that does NOT bypass any workflow gate (avoid: state-file edits, set-step CLI, completion-checker skip, --no-verify). If all options bypass, send a directive via "Type something".`,
     });
     state.write(ctx.session, 'question', { startedAt: prev.startedAt, alerted: true });
+    maybeEscalateToDeadEnd(ctx, 'question-pending', r.count, null);
   }
 }
 
@@ -133,7 +159,7 @@ function handlePhaseStall(ctx, stallHit) {
   const reason = `phase=${ctx.phase} stuck ${stallHit.elapsedMin}m budget=${stallHit.budgetMin}m nudge ${marker.nudges + 1}/${stallHit.maxNudges}`;
 
   if (escalation === 'alert') {
-    actions.alert({
+    const r = actions.alert({
       session: ctx.session,
       ticket: ctx.ticket,
       kind: 'nudges-exhausted',
@@ -141,7 +167,9 @@ function handlePhaseStall(ctx, stallHit) {
       elapsedMin: stallHit.elapsedMin,
       budgetMin: stallHit.budgetMin,
       nudges: marker.nudges,
+      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — agent exceeded phase=${ctx.phase} budget (${stallHit.elapsedMin}m vs ${stallHit.budgetMin}m). Diagnose or send directive via "Type something".`,
     });
+    maybeEscalateToDeadEnd(ctx, 'nudges-exhausted', r.count, ctx.phase);
   } else if (escalation === 'interrupt') {
     actions.interrupt(ctx.session, reason);
   } else {
@@ -223,13 +251,62 @@ function runPhaseStallDetector(ctx) {
 }
 
 function runCommitStallDetector(ctx) {
+  // detector handles its own dedup + marker — only "hits" on threshold crossings.
   const cHit = DETECTORS.commitStall.detect(ctx);
-  if (cHit.hit) alerts.log(`${ctx.session} commit-stall ${cHit.mins}m in phase=${ctx.phase}`);
+  if (!cHit.hit) return;
+  alerts.log(
+    `${ctx.session} commit-stall ${cHit.mins}m in phase=${ctx.phase} (threshold=${cHit.threshold}m)`
+  );
 }
 
 function runPrCommentsDetector(ctx) {
   const cHit = DETECTORS.prComments.detect(ctx);
   if (cHit.hit) handlePrComments(ctx, cHit);
+}
+
+function runPrStatusDetector(ctx) {
+  const sHit = DETECTORS.prStatus.detect(ctx);
+  if (!sHit.hit) return;
+  // pr-pending is informational only — log but never escalate to alert sink.
+  if (sHit.kind === 'pr-pending') {
+    alerts.log(
+      `${ctx.session} pr-pending PR #${sHit.prNumber} sha=${(sHit.sha || '').slice(0, 7)} checks running`
+    );
+    return;
+  }
+  // pr-ready / pr-broken go to the structured alert sink so a downstream
+  // grep can match them distinctly from nudges.
+  const failingList = (sHit.failingChecks || [])
+    .map((c) => `${c.name}(${c.conclusion})`)
+    .join(', ');
+  const instruction =
+    sHit.kind === 'pr-ready'
+      ? `Run bypass-checker on PR #${sHit.prNumber} sha=${(sHit.sha || '').slice(0, 7)} (Agent tool, work-workflow:code-checker). On APPROVED → surface PR URL to operator. Slot will be auto-freed if phase=ci/wait_merge.`
+      : `tmux capture-pane -t ${ctx.session} -p | tail -40 — drive agent to fix failing checks IN-PR (no skip, no follow-up issue). Failing: ${failingList || 'see PR'}.`;
+  actions.alert({
+    session: ctx.session,
+    ticket: ctx.ticket,
+    kind: sHit.kind,
+    phase: ctx.phase,
+    prNumber: sHit.prNumber,
+    sha: sHit.sha,
+    checksState: sHit.checksState,
+    mergeable: sHit.mergeable,
+    failingChecks: sHit.failingChecks,
+    instruction,
+  });
+  // CI-gate slot rotation: when PR is CLEAN/SUCCESS and the agent is sitting
+  // in a wait-for-merge phase, free the pool slot automatically so the
+  // orchestrator can bootstrap the next ticket. Operator merges separately.
+  // Disable with AUTO_FREE_CI_SLOT=0.
+  if (sHit.kind === 'pr-ready' && ['ci', 'wait_merge'].includes(ctx.phase)) {
+    actions.freeCIGateSlot({
+      session: ctx.session,
+      ticket: ctx.ticket,
+      prNumber: sHit.prNumber,
+      sha: sHit.sha,
+    });
+  }
 }
 
 /** Run the per-session pipeline. Returns when the session has been fully processed. */
@@ -253,6 +330,58 @@ function tickSession(session) {
   if (detectorsToRun.includes('phaseStall')) runPhaseStallDetector(ctx);
   if (detectorsToRun.includes('commitStall')) runCommitStallDetector(ctx);
   if (detectorsToRun.includes('prComments')) runPrCommentsDetector(ctx);
+  if (detectorsToRun.includes('prStatus')) runPrStatusDetector(ctx);
+}
+
+/**
+ * Build the heartbeat summary line. Lists every -work session and its terse
+ * state derived from on-disk markers + phase. The HEARTBEAT keyword is the
+ * grep handle for downstream tooling.
+ */
+function buildHeartbeat(sessions) {
+  const workSessions = sessions.filter(restartEligible);
+  const parts = [];
+  let prReady = 0;
+  let prBroken = 0;
+  let prPending = 0;
+  let wedged = 0;
+  for (const s of workSessions) {
+    const tid = tmux.ticketIdFor(s);
+    const ws = workstate.snapshot(tid);
+    const prMarker = state.read(tid, 'pr-status');
+    const wedgedMarker = state.read(s, 'restart-loop');
+    const commitMarker = state.read(tid, 'commit-stall');
+    const flags = [];
+    if (prMarker && prMarker.lastState === 'pr-ready') {
+      flags.push('pr-ready');
+      prReady++;
+    } else if (prMarker && prMarker.lastState === 'pr-broken') {
+      flags.push('pr-broken');
+      prBroken++;
+    } else if (prMarker && prMarker.lastState === 'pr-pending') {
+      flags.push('pr-pending');
+      prPending++;
+    }
+    if (wedgedMarker && wedgedMarker.wedgedUntil && wedgedMarker.wedgedUntil > state.now()) {
+      flags.push('WEDGED');
+      wedged++;
+    }
+    if (commitMarker && commitMarker.lastThreshold >= 240) {
+      flags.push(`stall=${commitMarker.lastThreshold}m`);
+    }
+    parts.push(`${tid}(${ws.phase || '?'}${flags.length ? ',' + flags.join(',') : ''})`);
+  }
+  return (
+    `HEARTBEAT ${workSessions.length} active, ${prReady} pr-ready, ${prBroken} pr-broken, ${prPending} pr-pending, ${wedged} wedged` +
+    (parts.length ? ` | ${parts.join(' ')}` : '')
+  );
+}
+
+function maybeEmitHeartbeat(sessions) {
+  const now = state.now();
+  if (lastHeartbeatAt && now - lastHeartbeatAt < HEARTBEAT_MIN * 60) return;
+  lastHeartbeatAt = now;
+  alerts.log(buildHeartbeat(sessions));
 }
 
 function tick() {
@@ -262,6 +391,7 @@ function tick() {
     return;
   }
   for (const session of sessions) tickSession(session);
+  maybeEmitHeartbeat(sessions);
 }
 
 function handlePrComments(ctx, cHit) {
@@ -285,7 +415,7 @@ function handlePrComments(ctx, cHit) {
   const escalation = escalationFor(ctx.phase, nudges);
 
   if (escalation === 'alert') {
-    actions.alert({
+    const r = actions.alert({
       session: ctx.session,
       ticket: ctx.ticket,
       kind: 'pr-comments-stuck',
@@ -294,7 +424,9 @@ function handlePrComments(ctx, cHit) {
       count: cHit.count,
       elapsedMin: cHit.minsStuck,
       summary: cHit.summary,
+      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — agent left ${cHit.count} bot comment(s) on PR #${cHit.prNumber} unaddressed for ${cHit.minsStuck}m, HEAD unchanged. Send directive: "Address each bot comment in the PR; never dismiss as stale."`,
     });
+    maybeEscalateToDeadEnd(ctx, 'pr-comments-stuck', r.count, null);
   } else if (escalation === 'interrupt') {
     actions.interrupt(ctx.session, reason);
   } else {

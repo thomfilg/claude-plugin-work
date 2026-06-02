@@ -15,9 +15,17 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const tmux = require('./tmux');
 const alerts = require('./alerts');
+const state = require('./state');
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const SKILL_NAME = process.env.SKILL_NAME || 'work';
+
+// Restart-loop guard: how many auto-restarts within RESTART_WINDOW_MIN before
+// we declare the session WEDGED and stop restarting. Caller is freed of state
+// management — autoRestart() owns the marker.
+const RESTART_LOOP_THRESHOLD = parseInt(process.env.RESTART_LOOP_THRESHOLD || '3', 10);
+const RESTART_WINDOW_MIN = parseInt(process.env.RESTART_WINDOW_MIN || '30', 10);
+const WEDGED_QUIET_MIN = parseInt(process.env.WEDGED_QUIET_MIN || '60', 10);
 
 function msgFor(reason, mode) {
   const base = `MAESTRO (${mode}): ${reason}. Audit uncommitted files via git status. If any are present, dispatch the commit agent with 'autonomous' to land them, then push. Re-run task-next.js to advance the gate.`;
@@ -59,6 +67,49 @@ function autoRestart({ session, ticket, worktree, silenceSec }) {
     alerts.log(`${session} AUTO-RESTART skipped: worktree ${worktree} not found`);
     return false;
   }
+
+  // Restart-loop guard. Read the per-session marker once and decide whether
+  // we're still in the "WEDGED quiet" window from a prior loop. The marker
+  // shape:
+  //   { restarts: [unix_ts, ...], wedgedUntil?: unix_ts }
+  // restarts[] is pruned to the last RESTART_WINDOW_MIN.
+  const now = state.now();
+  const marker = state.read(session, 'restart-loop') || { restarts: [] };
+
+  if (marker.wedgedUntil && marker.wedgedUntil > now) {
+    // Already declared wedged — don't restart, don't re-alert. We logged on
+    // entry; further silence triggers can re-read this marker silently.
+    return false;
+  }
+
+  // Prune older entries outside the rolling window.
+  const cutoff = now - RESTART_WINDOW_MIN * 60;
+  const restarts = (marker.restarts || []).filter((t) => t >= cutoff);
+
+  // If we'd be at-or-over the threshold AFTER this restart, declare wedged
+  // INSTEAD of restarting. The operator must intervene.
+  if (restarts.length + 1 >= RESTART_LOOP_THRESHOLD) {
+    const wedgedUntil = now + WEDGED_QUIET_MIN * 60;
+    state.write(session, 'restart-loop', { restarts: [...restarts, now], wedgedUntil });
+    alerts.log(
+      `${session} WEDGED — ${restarts.length + 1} auto-restarts in ${RESTART_WINDOW_MIN}m; suppressing restarts for ${WEDGED_QUIET_MIN}m`
+    );
+    alerts.alert({
+      session,
+      ticket,
+      kind: 'wedged',
+      restartsInWindow: restarts.length + 1,
+      windowMin: RESTART_WINDOW_MIN,
+      quietMin: WEDGED_QUIET_MIN,
+      silenceSec,
+      instruction: `tmux capture-pane -t ${session} -p | tail -50 — agent restarted ${restarts.length + 1}x in ${RESTART_WINDOW_MIN}m. Daemon won't restart for ${WEDGED_QUIET_MIN}m. Diagnose root cause; if dead-end, kill session and bootstrap next bug.`,
+    });
+    return false;
+  }
+
+  // Record this restart and proceed.
+  state.write(session, 'restart-loop', { restarts: [...restarts, now] });
+
   alerts.log(
     `${session} AUTO-RESTART after ${silenceSec}s silence — relaunching /${SKILL_NAME} ${ticket}`
   );
@@ -82,4 +133,67 @@ function autoRestart({ session, ticket, worktree, silenceSec }) {
   return true;
 }
 
-module.exports = { soft, interrupt, alert, autoRestart };
+/**
+ * freeCIGateSlot — kill the -work and -listen panes of a ticket whose PR has
+ * reached CI gate (CLEAN/SUCCESS, awaiting operator merge). Emits a
+ * structured alert kind=slot-freed so the orchestrator can bootstrap the next
+ * ticket. Idempotent: writes a per-ticket marker so repeated pr-ready emits
+ * on the same SHA don't try to kill an already-killed session.
+ *
+ * No-op if AUTO_FREE_CI_SLOT=0.
+ */
+function freeCIGateSlot({ session, ticket, prNumber, sha }) {
+  if (process.env.AUTO_FREE_CI_SLOT === '0') return false;
+  const marker = state.read(session, 'slot-freed') || {};
+  if (marker.sha === sha) return false; // already freed for this SHA
+  // Kill -work and -listen panes. Tmux kill-session is idempotent; ignore errors.
+  for (const suffix of ['work', 'listen']) {
+    spawnSync('tmux', ['kill-session', '-t', `${ticket}-${suffix}`], { stdio: 'ignore' });
+  }
+  state.write(session, 'slot-freed', { sha, prNumber, freedAt: state.now() });
+  alerts.log(
+    `${session} SLOT-FREED at CI gate — PR #${prNumber} sha=${(sha || '').slice(0, 7)} awaiting operator merge; tmux -work + -listen killed`
+  );
+  alert({
+    session,
+    ticket,
+    kind: 'slot-freed',
+    prNumber,
+    sha,
+    instruction: `Pool slot free. Pick next bug: gh issue list --repo thomfilg/claude-plugin-work --state open --label bug --json number,title | head; then: bash plugins/maestro/scripts/maestro-bootstrap.sh GH-<pick>. Skip tickets whose diff overlaps PR #${prNumber}.`,
+  });
+  return true;
+}
+
+/**
+ * freeDeadEndSlot — same kill mechanics as freeCIGateSlot but for an agent
+ * stuck in a non-recoverable state (e.g. every menu option is a workflow
+ * bypass; PR has no path forward without manual intervention). Triggered by
+ * the re-emit escalation: when the same alert kind fires ≥ DEAD_END_REEMITS
+ * times on the same session+sha+phase, the caller invokes this.
+ *
+ * Emits a kind=dead-end alert with a crystal-clear instruction so the
+ * operator knows to bootstrap the next ticket. Idempotent per ticket.
+ */
+function freeDeadEndSlot({ session, ticket, kind, repeatCount, sha }) {
+  if (process.env.AUTO_FREE_DEAD_END === '0') return false;
+  const marker = state.read(ticket, 'dead-end') || {};
+  if (marker.killed) return false; // already freed
+  for (const suffix of ['work', 'listen']) {
+    spawnSync('tmux', ['kill-session', '-t', `${ticket}-${suffix}`], { stdio: 'ignore' });
+  }
+  state.write(ticket, 'dead-end', { killed: true, freedAt: state.now(), trigger: kind });
+  alerts.log(`${session} DEAD-END ${kind} re-fired ${repeatCount}x — tmux killed, slot freed`);
+  alert({
+    session,
+    ticket,
+    kind: 'dead-end',
+    trigger: kind,
+    repeatCount,
+    sha,
+    instruction: `Bootstrap next bug into freed slot: gh issue list --repo thomfilg/claude-plugin-work --state open --label bug --json number,title | head; bash plugins/maestro/scripts/maestro-bootstrap.sh GH-<pick>`,
+  });
+  return true;
+}
+
+module.exports = { soft, interrupt, alert, autoRestart, freeCIGateSlot, freeDeadEndSlot };
