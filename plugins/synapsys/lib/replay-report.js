@@ -67,9 +67,13 @@ function renderJson(agg, suggestions, meta) {
   const payload = {
     memories,
     suggestions: Array.isArray(suggestions) ? suggestions : [],
+    store: meta && typeof meta.store === 'string' ? meta.store : '',
+    window: meta && typeof meta.window === 'string' ? meta.window : '',
     events_total: meta && typeof meta.events_total === 'number' ? meta.events_total : 0,
     events_ups: meta && typeof meta.events_ups === 'number' ? meta.events_ups : 0,
     events_ptu: meta && typeof meta.events_ptu === 'number' ? meta.events_ptu : 0,
+    judge_calls: meta && typeof meta.judgeCalls === 'number' ? meta.judgeCalls : 0,
+    items_judged: meta && typeof meta.itemsJudged === 'number' ? meta.itemsJudged : 0,
     extrapolated: !!(meta && meta.extrapolated),
   };
   return JSON.stringify(payload, null, 2);

@@ -1245,6 +1245,26 @@ test('@task:8 no-transcripts window exits 0 with a friendly message (P0 #12)', (
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+test('@task:6 renderJson includes store/window/judge_calls/items_judged from meta for machine consumers', () => {
+  const { renderJson } = require(REPLAY);
+  const out = renderJson({}, [], {
+    store: 'worktree',
+    window: '7d',
+    events_total: 42,
+    events_ups: 30,
+    events_ptu: 12,
+    judgeCalls: 4,
+    itemsJudged: 35,
+    extrapolated: true,
+  });
+  const parsed = JSON.parse(out);
+  assert.equal(parsed.store, 'worktree', 'store name surfaced');
+  assert.equal(parsed.window, '7d', 'window surfaced');
+  assert.equal(parsed.judge_calls, 4, 'judge call count surfaced');
+  assert.equal(parsed.items_judged, 35, 'items judged surfaced');
+  assert.equal(parsed.extrapolated, true);
+});
+
 test('@task:7 judgeBatch includes memory body (first 200 chars) in the user content per spec', async () => {
   const { judgeBatch } = require(REPLAY);
   const calls = [];
