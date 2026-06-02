@@ -14,6 +14,7 @@
 
 const path = require('path');
 const { logHookError } = require(path.join(__dirname, '..', 'hook-error-log'));
+const { resolvePluginRoot } = require('../../work/lib/resolve-plugin-root');
 
 // Fail-open: unexpected errors should never block unrelated commands
 process.on('uncaughtException', (err) => {
@@ -25,7 +26,23 @@ process.on('unhandledRejection', (err) => {
   process.exit(0);
 });
 
-const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..', '..');
+function computePluginRoot() {
+  const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  // Probe env var (handles leaf-dir OR parent plugins-base) and __dirname fallback
+  const probed = resolvePluginRoot(__dirname, 3);
+  if (probed) {
+    // If env var is set, prefer probed result only when it derives from the env var.
+    // When env var is set but doesn't probe (e.g., points to a non-existent dir),
+    // honour it verbatim for backwards compatibility.
+    if (envRoot && !probed.startsWith(envRoot)) {
+      return envRoot;
+    }
+    return probed;
+  }
+  if (envRoot) return envRoot;
+  return path.resolve(__dirname, '..', '..', '..');
+}
+const PLUGIN_ROOT = computePluginRoot();
 
 async function main() {
   let input = ''; // read hook JSON from stdin
