@@ -68,22 +68,35 @@ function hasStabilityArtifact(taskDir, claimText) {
 }
 
 function checkStabilityClaims(prBody, taskDir) {
-  const violations = [];
-  const seen = new Set();
+  // Collect all matches across the overlapping STABILITY_REGEXES, then dedup
+  // by character range: if a new match's [start, end) overlaps any already-
+  // accepted range, drop it. Prefer longer matches when ranges overlap so a
+  // phrase like "10/10 stability run" yields one violation, not three.
+  const candidates = [];
   for (const re of STABILITY_REGEXES) {
-    for (const match of prBody.matchAll(re)) {
-      const phrase = match[0];
-      const key = `${match.index}:${phrase}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (hasStabilityArtifact(taskDir, phrase)) continue;
-      violations.push({
-        phrase,
-        reason: 'stability-claim',
-        suggestion:
-          'Remove the stability claim or attach a stability*.log/stability*.md artifact in the task folder.',
-      });
+    for (const m of prBody.matchAll(re)) {
+      candidates.push({ start: m.index, end: m.index + m[0].length, phrase: m[0] });
     }
+  }
+  candidates.sort((a, b) => b.end - b.start - (a.end - a.start));
+
+  const accepted = [];
+  const overlaps = (a, b) => a.start < b.end && b.start < a.end;
+  for (const c of candidates) {
+    if (accepted.some((a) => overlaps(a, c))) continue;
+    accepted.push(c);
+  }
+  accepted.sort((a, b) => a.start - b.start);
+
+  const violations = [];
+  for (const c of accepted) {
+    if (hasStabilityArtifact(taskDir, c.phrase)) continue;
+    violations.push({
+      phrase: c.phrase,
+      reason: 'stability-claim',
+      suggestion:
+        'Remove the stability claim or attach a stability*.log/stability*.md artifact in the task folder.',
+    });
   }
   return violations;
 }
