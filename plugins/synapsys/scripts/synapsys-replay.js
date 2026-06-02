@@ -44,6 +44,7 @@ const { renderJson, renderReport } = report;
  *   --only=<csv>        comma-separated memory-name filter
  *   --store=<name|path> store selector (auto-detect like synapsys-explain)
  *   --max-judges=<N>    hard cap on judge API calls (default 200)
+ *   --all-projects      scan every ~/.claude/projects/* dir (default: only the cwd-hashed project)
  */
 function parseFlags(argv) {
   const flag = makeFlag(argv);
@@ -57,6 +58,7 @@ function parseFlags(argv) {
     only: typeof flag('only') === 'string' ? flag('only') : undefined,
     store: typeof flag('store') === 'string' ? flag('store') : undefined,
     maxJudges: maxJudgesRaw === undefined || maxJudgesRaw === true ? 200 : Number(maxJudgesRaw),
+    allProjects: flag('all-projects') === true,
     transcriptsBase:
       typeof flag('transcripts-base') === 'string' ? flag('transcripts-base') : undefined,
   };
@@ -264,6 +266,10 @@ async function main(argv) {
     since: flags.since,
     project: flags.project,
     baseDir: flags.transcriptsBase,
+    cwd: process.cwd(),
+    // --transcripts-base is a test escape hatch with synthetic project layouts,
+    // so treat it like --all-projects to keep test fixtures cwd-independent.
+    allProjects: flags.allProjects || !!flags.transcriptsBase,
   });
   if (files.length === 0) {
     if (flags.json) {

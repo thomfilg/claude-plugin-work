@@ -129,7 +129,7 @@ node plugins/synapsys/scripts/synapsys-replay.js --since=14d
 node plugins/synapsys/scripts/synapsys-replay.js --since=7d --no-judge --json
 ```
 
-Defaults: `--since=7d`, `--max-judges=200` (hard cap with even sampling + extrapolation note), `claude-haiku-4-5` as the judge model, all `~/.claude/projects/*` directories scanned. Use `--project=<hash>` to restrict to one project, `--only=<csv>` to restrict to specific memories, `--store=<name|path>` to override store auto-detection.
+Defaults: `--since=7d`, `--max-judges=200` (hard cap with even sampling + extrapolation note), `claude-haiku-4-5` as the judge model. Scope is the **current project only** — the cwd path with `/` replaced by `-` (matching Claude Code's `~/.claude/projects/<hash>` layout). Use `--project=<hash>` to target a different project, `--all-projects` to scan every project under `~/.claude/projects/`, `--only=<csv>` to restrict to specific memories, `--store=<name|path>` to override store auto-detection.
 
 `--no-judge` makes zero outbound HTTP calls and requires no `ANTHROPIC_API_KEY` — `relevant` and `fp_rate` are `null`, but `fires` and `sample_matches` are still populated. With the judge enabled, expected cost is well under **$0.05** per default run (~500 input + ~5 output tokens × ≤200 calls). See `skills/replay/SKILL.md` for the full cost model, security note, and the PTU-not-judged decision.
 

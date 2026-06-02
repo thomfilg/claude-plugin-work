@@ -81,6 +81,37 @@ test('CLI exits 2 on non-numeric --max-judges', () => {
   assert.match(result.stderr, /max-judges/i);
 });
 
+test('walkTranscripts defaults to the cwd-derived project (not every project)', () => {
+  const { walkTranscripts } = require(REPLAY);
+  const os5 = require('node:os');
+  const fs5 = require('node:fs');
+  const path5 = require('node:path');
+  const root = fs5.mkdtempSync(path5.join(os5.tmpdir(), 'syn-projects-'));
+  // Two project dirs: one matching cwd hash, one not.
+  const cwd = '/fake/cwd/path';
+  const matching = cwd.split(path5.sep).join('-'); // -fake-cwd-path
+  const other = '-some-other-project';
+  fs5.mkdirSync(path5.join(root, matching));
+  fs5.mkdirSync(path5.join(root, other));
+  fs5.writeFileSync(
+    path5.join(root, matching, 'a.jsonl'),
+    '{"type":"user","message":{"content":"x"}}\n'
+  );
+  fs5.writeFileSync(
+    path5.join(root, other, 'b.jsonl'),
+    '{"type":"user","message":{"content":"y"}}\n'
+  );
+
+  const onlyCwd = walkTranscripts({ since: '7d', baseDir: root, cwd });
+  assert.equal(onlyCwd.length, 1, 'default scans ONLY the cwd-hashed project');
+  assert.ok(onlyCwd[0].includes(matching), 'walked the matching project dir');
+
+  const all = walkTranscripts({ since: '7d', baseDir: root, cwd, allProjects: true });
+  assert.equal(all.length, 2, '--all-projects scans every project dir');
+
+  fs5.rmSync(root, { recursive: true, force: true });
+});
+
 test('suggestTightening fires for realistic \\b(...)\\b wrapped triggers', () => {
   const { suggestTightening } = require(REPLAY);
   const memory = { name: 'noisy', triggerPrompt: '\\b(push|fetch|run)\\b' };

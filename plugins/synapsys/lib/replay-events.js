@@ -100,9 +100,21 @@ function parseSince(spec) {
   return days * 24 * 60 * 60 * 1000;
 }
 
-function resolveProjectDirs(root, project) {
+/**
+ * Claude Code stores per-project transcripts under `~/.claude/projects/<hash>`
+ * where `<hash>` is the project's absolute path with `/` replaced by `-`.
+ */
+function cwdToProjectHash(cwd) {
+  return cwd.split(path.sep).join('-');
+}
+
+function resolveProjectDirs(root, project, { cwd, allProjects } = {}) {
   if (project) {
     const dir = path.join(root, project);
+    return fs.existsSync(dir) ? [dir] : [];
+  }
+  if (!allProjects && cwd) {
+    const dir = path.join(root, cwdToProjectHash(cwd));
     return fs.existsSync(dir) ? [dir] : [];
   }
   return fs
@@ -144,11 +156,11 @@ function collectRecentJsonl(projDir, cutoff) {
  * Walk `*.jsonl` transcripts under `baseDir` (default `~/.claude/projects/`)
  * whose mtime falls within the `--since` window.
  */
-function walkTranscripts({ since, project, baseDir } = {}) {
+function walkTranscripts({ since, project, baseDir, cwd, allProjects } = {}) {
   const root = baseDir || path.join(os.homedir(), '.claude/projects');
   if (!fs.existsSync(root)) return [];
   const cutoff = Date.now() - parseSince(since || '7d');
-  const projectDirs = resolveProjectDirs(root, project);
+  const projectDirs = resolveProjectDirs(root, project, { cwd, allProjects });
   const out = [];
   for (const projDir of projectDirs) {
     out.push(...collectRecentJsonl(projDir, cutoff));
