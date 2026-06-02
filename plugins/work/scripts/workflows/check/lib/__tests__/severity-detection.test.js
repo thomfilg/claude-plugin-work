@@ -231,6 +231,106 @@ describe('severity-detection', () => {
       assert.equal(result.important.length, 0);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // GH-279 regression scenarios — literal ticket sentence + variants
+  // Each scenario title below maps verbatim to tasks.md Task 1 scenarios.
+  // -------------------------------------------------------------------------
+  describe('GH-279 regression — literal ticket sentence + variants', () => {
+    // Scenario: Negation-only summary line is not a finding
+    it('Negation-only summary line is not a finding', () => {
+      // Literal ticket sentence with trailing period.
+      // Matches Verification Checklist regex:
+      //   /No remaining .* CRITICAL or .* IMPORTANT issues\./
+      const report = 'No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues.';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0, 'literal ticket sentence must yield zero CRITICAL');
+      assert.equal(result.important.length, 0, 'literal ticket sentence must yield zero IMPORTANT');
+    });
+
+    it('Negation-only summary line — casing variant', () => {
+      const report = 'No Remaining 🔴 CRITICAL or 🟡 IMPORTANT Issues.';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0);
+      assert.equal(result.important.length, 0);
+    });
+
+    it('Negation-only summary line — no trailing punctuation', () => {
+      const report = 'No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0);
+      assert.equal(result.important.length, 0);
+    });
+
+    it('Negation-only summary line — exclamation point trailing punctuation', () => {
+      const report = 'No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues!';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0);
+      assert.equal(result.important.length, 0);
+    });
+
+    // Scenario: Bullet-list negation with leading "-" is not a finding
+    it('Bullet-list negation with leading "-" is not a finding', () => {
+      const report = '- No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues.';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0, 'leading "-" list-marker negation must be suppressed');
+      assert.equal(result.important.length, 0);
+    });
+
+    it('Bullet-list negation with leading "*" is not a finding', () => {
+      const report = '* No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues.';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0, 'leading "*" list-marker negation must be suppressed');
+      assert.equal(result.important.length, 0);
+    });
+
+    // Scenario: Blockquote negation with leading ">" is not a finding
+    it('Blockquote negation with leading ">" is not a finding', () => {
+      const report = '> No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues.';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0, 'blockquote negation must be suppressed');
+      assert.equal(result.important.length, 0);
+    });
+
+    // Scenario: Section heading label without finding body is not counted
+    it('Section heading label without finding body is not counted', () => {
+      const report = '### 🔴 CRITICAL ISSUES';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0, 'heading label alone must not count as a finding');
+      assert.equal(result.important.length, 0);
+    });
+
+    // Scenario: Inline-code-spanned marker inside a backtick code span is ignored
+    it('Inline-code-spanned marker inside a backtick code span is ignored', () => {
+      const report = 'See helper `🔴 CRITICAL: leftover from older docs` in legacy notes.';
+      const result = detectSeverityMarkers(report);
+      assert.equal(result.critical.length, 0, 'marker inside backticks must be ignored');
+    });
+
+    // Scenario: Mid-line "no...issues" phrase does not suppress a real co-occurring CRITICAL finding
+    it('Mid-line "no...issues" phrase does not suppress a real co-occurring CRITICAL finding', () => {
+      const report = 'there are no blocking issues with 🔴 CRITICAL: the session token expiry';
+      const result = detectSeverityMarkers(report);
+      assert.equal(
+        result.critical.length,
+        1,
+        'mid-line negation phrase must not suppress a genuine co-occurring finding'
+      );
+    });
+
+    // Scenario: Severity justification metadata line is not counted as a finding
+    it('Severity justification metadata line is not counted as a finding', () => {
+      const report =
+        '- Severity justification: 🟡 Important because the emoji convention is the enforced standard';
+      const result = detectSeverityMarkers(report);
+      assert.equal(
+        result.important.length,
+        0,
+        'severity justification metadata must not count as a finding'
+      );
+      assert.equal(result.critical.length, 0);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
