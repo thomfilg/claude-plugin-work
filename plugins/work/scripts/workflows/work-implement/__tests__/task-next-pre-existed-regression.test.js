@@ -92,9 +92,15 @@ test('isPreExistedRegressionTask: case-insensitive on both markers', () => {
 // (one test per branch; no subprocess machinery required)
 // ────────────────────────────────────────────────────────────────────────
 
-const TMP_ROOT = path.join(os.tmpdir(), `pre-existed-regression-test-${process.pid}`);
+// Use fs.mkdtempSync for a securely-randomized unique directory under tmpdir,
+// rather than a predictable name. This avoids CodeQL's "insecure temporary
+// file" alert (js/insecure-temporary-file) for symlink/race attacks on shared
+// temp dirs.
+let TMP_ROOT;
 
-test.before(() => fs.mkdirSync(TMP_ROOT, { recursive: true }));
+test.before(() => {
+  TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-existed-regression-test-'));
+});
 test.after(() => fs.rmSync(TMP_ROOT, { recursive: true, force: true }));
 
 function writeTestFile(name, body) {
