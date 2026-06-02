@@ -39,7 +39,11 @@ function parseEvidenceCitation(cell) {
 }
 
 /**
- * Find the first line in `reportContent` that mentions `testName`.
+ * Find the line in `reportContent` that carries the verdict for `testName`.
+ * Prefers a line that BOTH mentions the test name AND has a verdict marker
+ * (PASS/FAIL/etc); falls back to the first mention only if no verdict line
+ * exists. This avoids spurious failures when the test name appears in a
+ * heading or summary line above the actual `Status: PASS` line.
  *
  * @param {string} reportContent
  * @param {string} testName
@@ -48,10 +52,14 @@ function parseEvidenceCitation(cell) {
 function findTestLine(reportContent, testName) {
   if (!reportContent) return null;
   const re = new RegExp(`\\b${escapeRegex(testName)}\\b`);
+  const ALL_VERDICTS = ['PASS', 'FAIL', 'COMPLETE', 'APPROVED', 'BLOCKED', 'NOT_DELIVERED'];
+  let firstMention = null;
   for (const line of reportContent.split('\n')) {
-    if (re.test(line)) return line;
+    if (!re.test(line)) continue;
+    if (firstMention === null) firstMention = line;
+    if (hasVerdict(line, ALL_VERDICTS)) return line;
   }
-  return null;
+  return firstMention;
 }
 
 function collectDeliveredCitations(coverage) {

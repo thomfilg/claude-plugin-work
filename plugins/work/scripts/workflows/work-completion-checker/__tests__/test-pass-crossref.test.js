@@ -186,3 +186,25 @@ test('word-boundary match: test_R1 must NOT match test_R10 substring (no false-p
     cleanup();
   }
 });
+
+test('findTestLine prefers verdict line over heading mention of same testName', async () => {
+  const tasks = coverageTasks([
+    { id: 'R4', status: 'DELIVERED', evidence: '`tests/foo.test.js:test_R4`' },
+  ]);
+  // Heading mentions test_R4 (no verdict), real verdict line is below.
+  const report = [
+    '# Test Results Report',
+    '',
+    '## Tests covering test_R4',
+    '',
+    '- test_R4 — Status: PASS',
+    '',
+  ].join('\n');
+  const { ctx, cleanup } = buildCtx({ tasks, testReport: report });
+  try {
+    const result = await phase.validate(ctx);
+    assert.equal(result.ok, true, 'must find the PASS line, not the heading');
+  } finally {
+    cleanup();
+  }
+});
