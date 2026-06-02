@@ -83,29 +83,32 @@ function checkStabilityClaims(prBody, taskDir) {
   return violations;
 }
 
+function parseTableRow(line) {
+  const m = line.match(TABLE_ROW);
+  if (!m) return null;
+  const cells = m[1].split('|').map((c) => c.trim());
+  if (cells.length < 2) return null;
+  if (cells.every((c) => /^[-:\s]*$/.test(c))) return null;
+  if (cells[0].toLowerCase() === 'test') return null;
+  return { test: cells[0], status: cells[1], notes: cells[2] || '' };
+}
+
 function parseTestResultsRows(prBody) {
   const lines = prBody.split(/\r?\n/);
   const rows = [];
   let inSection = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines) {
     if (TEST_RESULTS_HEADING.test(line)) {
       inSection = true;
       continue;
     }
-    if (inSection && ANY_H2.test(line) && !TEST_RESULTS_HEADING.test(line)) {
+    if (inSection && ANY_H2.test(line)) {
       inSection = false;
       continue;
     }
     if (!inSection) continue;
-    const m = line.match(TABLE_ROW);
-    if (!m) continue;
-    const cells = m[1].split('|').map((c) => c.trim());
-    if (cells.length < 2) continue;
-    // Skip header/separator rows: header is non-status text; separator has only dashes.
-    if (cells.every((c) => /^[-:\s]*$/.test(c))) continue;
-    if (cells[0].toLowerCase() === 'test') continue;
-    rows.push({ test: cells[0], status: cells[1], notes: cells[2] || '' });
+    const row = parseTableRow(line);
+    if (row) rows.push(row);
   }
   return rows;
 }
