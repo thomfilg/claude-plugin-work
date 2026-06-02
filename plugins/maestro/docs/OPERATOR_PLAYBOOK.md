@@ -39,8 +39,12 @@ canonical Monitor regex.
 
 When `MAESTRO-ALERT kind=pr-ready` lands:
 
-1. Spawn the bypass-checker against the diff. The check must answer ONE question: is this PR trying to bypass any /work workflow gate (TDD evidence, completion check, set-step CLI, fake state files, commit-hook skipping, transition-through bypass)?
-2. Watch the checker's verdict (`APPROVED` / `NEEDS-WORK`).
+1. Spawn `work-workflow:code-checker` against the PR diff inside a tmux session and keep it alive until verdict. The check must answer FOUR questions:
+   1. **Completion** — did the agent finish every requirement / AC declared in the ticket?
+   2. **Bugs** — did it introduce any logic error, regression, or broken edge case?
+   3. **Vulnerabilities** — did it add any security issue (injection, secret leak, unsafe shell, path traversal, unbounded input)?
+   4. **Bypass** — did it dodge any /work workflow gate (state-file edits, set-step CLI, completion-checker skip, fake TDD evidence, commit-hook skipping with `--no-verify`, transition-through bypass, deferral annotations added to mask a check)?
+2. Verdict is `APPROVED` only when ALL FOUR are clean. Otherwise `NEEDS-WORK`.
 3. **APPROVED:** surface the PR URL to the human operator. **Never call `gh pr merge`** — the operator merges.
 4. **NEEDS-WORK:** capture the checker's verbatim findings and forward them to the originating `/work` agent via `tmux send-keys -t <TICKET>-work`. Re-run the checker after the agent pushes again.
 
