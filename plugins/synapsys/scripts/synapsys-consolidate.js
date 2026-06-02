@@ -26,8 +26,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { setupCli } = require('../lib/script-bootstrap');
+const { hashFile } = require('../lib/staleness');
 
-const PROFILES_DIR = path.join(__dirname, 'consolidate-profiles');
+const PROFILES_DIR =
+  process.env.SYNAPSYS_CONSOLIDATE_PROFILES_DIR_FOR_TEST ||
+  path.join(__dirname, 'consolidate-profiles');
 
 function parseProfiles(argv) {
   const out = [];
@@ -199,7 +202,15 @@ function collectProfileMemories(profile, name, repo) {
   const memories = [];
   for (const { item, source } of items) {
     const memory = profile.toMemory(item, { source, repo, peers });
-    if (memory) memories.push(memory);
+    if (!memory) continue;
+    // GH-446 stamping hook (spec §P0#1): stamp every memory with its
+    // repo-relative `source` and `source_hash` so the staleness checker can
+    // compare stored hashes against current files. Object.assign keeps any
+    // pre-existing meta and lets stamping fields win on collision.
+    const sourceRel = path.relative(repo, source);
+    const source_hash = hashFile(source);
+    memory.meta = Object.assign({}, memory.meta, { source: sourceRel, source_hash });
+    memories.push(memory);
   }
   process.stderr.write(
     `profile=${name} sources=${(profile.sources || []).length} items=${items.length} memories=${memories.length}\n`
