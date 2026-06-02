@@ -273,14 +273,22 @@ describe('severity-detection', () => {
     it('Bullet-list negation with leading "-" is not a finding', () => {
       const report = '- No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues.';
       const result = detectSeverityMarkers(report);
-      assert.equal(result.critical.length, 0, 'leading "-" list-marker negation must be suppressed');
+      assert.equal(
+        result.critical.length,
+        0,
+        'leading "-" list-marker negation must be suppressed'
+      );
       assert.equal(result.important.length, 0);
     });
 
     it('Bullet-list negation with leading "*" is not a finding', () => {
       const report = '* No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues.';
       const result = detectSeverityMarkers(report);
-      assert.equal(result.critical.length, 0, 'leading "*" list-marker negation must be suppressed');
+      assert.equal(
+        result.critical.length,
+        0,
+        'leading "*" list-marker negation must be suppressed'
+      );
       assert.equal(result.important.length, 0);
     });
 
@@ -425,5 +433,57 @@ describe('validateCodeReview integration', () => {
   it('is exported via module.exports', () => {
     const mod = require('../../hooks/check-validate-reports');
     assert.equal(typeof mod.validateCodeReview, 'function');
+  });
+
+  // -------------------------------------------------------------------------
+  // GH-279 Task 2 — ticket-sentence fixture scenarios (verbatim titles).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Build a code-review fixture body with the required Changes Hash header.
+   * @param {string} body
+   */
+  function fixtureWithHash(body) {
+    return ['**Changes Hash:** abc123', '', body].join('\n');
+  }
+
+  it('validateCodeReview returns valid=true for negation-only report', () => {
+    const content = fixtureWithHash('No remaining 🔴 CRITICAL or 🟡 IMPORTANT issues.');
+
+    const result = runValidation(content);
+
+    assert.equal(result.exists, true, 'fixture file must be discovered');
+    assert.equal(result.hasCritical, false, 'negation-only must not flag critical');
+    assert.equal(result.hasImportant, false, 'negation-only must not flag important');
+    assert.equal(result.valid, true, 'negation-only report must be valid');
+    assert.equal(
+      result.requiresAction,
+      false,
+      'negation-only report must not require action (R5 return shape)'
+    );
+  });
+
+  it('validateCodeReview returns hasCritical=true for a genuine CRITICAL finding', () => {
+    const content = fixtureWithHash('🔴 CRITICAL: SQL injection vulnerability in query builder');
+
+    const result = runValidation(content);
+
+    assert.equal(result.exists, true);
+    assert.equal(result.hasCritical, true, 'genuine CRITICAL must flag hasCritical');
+    assert.equal(result.valid, false, 'a genuine CRITICAL must make report invalid');
+  });
+
+  it('Genuine bold-bracket CRITICAL finding is detected', () => {
+    const content = fixtureWithHash('**[🔴 CRITICAL] Missing input validation in auth handler**');
+
+    const result = runValidation(content);
+
+    assert.equal(result.exists, true);
+    assert.equal(
+      result.hasCritical,
+      true,
+      'bold-bracket CRITICAL format must be detected as a finding'
+    );
+    assert.equal(result.valid, false, 'bold-bracket CRITICAL must make report invalid');
   });
 });
