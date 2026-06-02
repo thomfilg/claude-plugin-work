@@ -19,7 +19,7 @@
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readRequirementCoverage, readTestReport } = require('../kind-checks/shared');
 const { makeFailure } = require('../failure-record');
-const { hasVerdict, escapeRegex } = require('../../../lib/parse-completion-status');
+const { hasVerdict, escapeRegex, buildVerdictRegex } = require('../../../lib/parse-completion-status');
 
 const CITATION_RE = /(\S+\.test\.[jt]sx?):(\w+)/;
 const PASS_VERDICTS = ['PASS', 'COMPLETE', 'APPROVED'];
@@ -87,11 +87,17 @@ function recordMissingReport(deliveredCitations, failures) {
 }
 
 const VERDICT_WORDS = ['PASS', 'FAIL', 'COMPLETE', 'APPROVED', 'BLOCKED', 'NOT_DELIVERED'];
-const VERDICT_EXTRACT_RE = new RegExp(`\\b(${VERDICT_WORDS.join('|')})\\b`, 'i');
 
+/**
+ * Extract the verdict word from a line using the SAME prefix-bound matcher
+ * (`buildVerdictRegex`) that `hasVerdict` uses, so the extracted word always
+ * corresponds to a verdict that `hasVerdict` would also recognize. Returns
+ * null when the line has no recognized verdict (e.g. bare `test_R4 — PASS`
+ * without a `Status:` / `Verdict:` label).
+ */
 function extractVerdictWord(line) {
   if (!line) return null;
-  const m = VERDICT_EXTRACT_RE.exec(line);
+  const m = buildVerdictRegex(VERDICT_WORDS).exec(line);
   return m ? m[1].toUpperCase() : null;
 }
 
