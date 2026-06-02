@@ -1,0 +1,79 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const { detectFabrication } = require('../fabrication-detector');
+
+function makeTaskDir(files = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fabdet-'));
+  for (const [name, content] of Object.entries(files)) {
+    fs.writeFileSync(path.join(dir, name), content, 'utf8');
+  }
+  return dir;
+}
+
+test('case A: stability claim with no artifact yields stability-claim violation', () => {
+  const dir = makeTaskDir();
+  const prBody = 'This change is verified with 10/10 stability run across CI.';
+  const { violations } = detectFabrication(prBody, dir);
+  assert.ok(violations.length >= 1, 'expected at least one violation');
+  const stab = violations.find((v) => v.reason === 'stability-claim');
+  assert.ok(stab, 'expected a stability-claim violation');
+  assert.match(stab.phrase, /10\/10|stability/i);
+});
+
+test('case B: only-pending Test Results table yields zero violations', () => {
+  const dir = makeTaskDir();
+  const prBody = [
+    '## Test Results',
+    '',
+    '| Test | Status | Notes |',
+    '| --- | --- | --- |',
+    '| modal opens on click | pending | awaiting |',
+    '| login flow | not run | — |',
+    '| signup flow | skipped | n/a |',
+    '| dashboard render | n/a | — |',
+    '| nav link | — | — |',
+    '',
+  ].join('\n');
+  const { violations } = detectFabrication(prBody, dir);
+  assert.equal(violations.length, 0);
+});
+
+test('case C: PASS row supported by tests.check.md substring yields zero violations', () => {
+  const dir = makeTaskDir({
+    'tests.check.md': 'Verified: modal opens on click — passed in CI.\n',
+  });
+  const prBody = [
+    '## Test Results',
+    '',
+    '| Test | Status | Notes |',
+    '| --- | --- | --- |',
+    '| modal opens on click | PASS | covered by E2E |',
+    '',
+  ].join('\n');
+  const { violations } = detectFabrication(prBody, dir);
+  assert.equal(violations.length, 0);
+});
+
+test('Unsourced PASS row under Test Results', () => {
+  const dir = makeTaskDir({
+    'tests.check.md': 'No matching content here.\n',
+  });
+  const prBody = [
+    '## Test Results',
+    '',
+    '| Test | Status | Notes |',
+    '| --- | --- | --- |',
+    '| user can log in | PASS | smoke verified |',
+    '',
+  ].join('\n');
+  const { violations } = detectFabrication(prBody, dir);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].reason, 'unsourced-test-row');
+  assert.match(violations[0].suggestion, /pending/i);
+});

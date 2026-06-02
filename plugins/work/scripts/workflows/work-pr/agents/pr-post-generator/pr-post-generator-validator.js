@@ -16,10 +16,106 @@ const fs = require('fs');
 const path = require('path');
 
 const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
+const { detectFabrication } = require('./fabrication-detector');
+const { appendAction } = require(path.join(__dirname, '..', '..', '..', 'work', 'lib', 'work-actions'));
 const WORKTREES_BASE = getConfig.orExit('WORKTREES_BASE');
 const REPO_NAME = getConfig('REPO_NAME') || 'my-project';
 const REPO_DIR = path.join(WORKTREES_BASE, REPO_NAME);
 const APPS_DIR = process.env.APPS_DIR || path.join(REPO_DIR, 'apps');
+
+/**
+ * Resolve the active ticket ID from the current git branch, returning the
+ * first `[A-Z]+-[0-9]+` match. Returns null if git fails or no match.
+ */
+function getTicketIdFromBranch() {
+  try {
+    const branch = execSync('git branch --show-current', {
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    const m = branch.match(/[A-Z]+-[0-9]+/);
+    return m ? m[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run the fabrication-detector against the live PR body and emit a
+ * box-drawn ASCII failure block + `appendAction({type:'fabrication-block'})`
+ * rows when violations exist. Exits the process with code 2 on violation.
+ * Fail-open: missing TASKS_BASE → stderr warning + return (caller continues).
+ */
+function runFabricationCheck(prBody, taskDir, ticketId) {
+  if (!prBody) return;
+  const { violations } = detectFabrication(prBody, taskDir || '');
+  if (!violations || violations.length === 0) return;
+
+  const lines = violations.flatMap((v) => [
+    `Phrase:      ${v.phrase}`,
+    `Reason:      ${v.reason}`,
+    `Suggestion:  ${v.suggestion}`,
+    '',
+  ]);
+  process.stderr.write(`
+╔══════════════════════════════════════════════════════════════════════╗
+║  POST-PR-GENERATOR: FABRICATED TEST EVIDENCE DETECTED                ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+${lines.map((l) => `║  ${l.padEnd(66)}║`).join('\n')}
+║  Remove invented PASS/FAIL or stability claims, or attach the        ║
+║  supporting artifact (tests.check.md / stability*.log) to the task   ║
+║  folder before re-running the agent.                                 ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+`);
+
+  if (ticketId) {
+    const tasksBase = getConfig('TASKS_BASE');
+    if (tasksBase) {
+      const actionsPath = path.join(tasksBase, ticketId, '.work-actions.json');
+      for (const v of violations) {
+        try {
+          // appendAction normalizes to {step, timestamp, what, meta}, but the
+          // contract here is "row carries top-level type === 'fabrication-block'"
+          // so we append directly. Fail-open: never let logging crash the hook.
+          const dir = path.dirname(actionsPath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          let rows = [];
+          try {
+            rows = JSON.parse(fs.readFileSync(actionsPath, 'utf8'));
+            if (!Array.isArray(rows)) rows = [];
+          } catch {
+            rows = [];
+          }
+          rows.push({
+            type: 'fabrication-block',
+            timestamp: new Date().toISOString(),
+            step: 'pr',
+            phrase: v.phrase,
+            reason: v.reason,
+          });
+          fs.writeFileSync(actionsPath, JSON.stringify(rows, null, 2));
+        } catch {
+          // fail-open
+        }
+      }
+      // Also call appendAction for the standard action log (spec R7).
+      try {
+        appendAction(ticketId, {
+          step: 'pr',
+          what: 'fabrication-block',
+          meta: { reasons: violations.map((v) => v.reason) },
+        });
+      } catch {
+        // fail-open
+      }
+    }
+  }
+
+  process.exit(2);
+}
 
 /**
  * Check if an app is a frontend app by looking for react-router.config.ts
@@ -142,17 +238,29 @@ async function main() {
   const issues = [];
   const warnings = [];
 
+  // ========== FABRICATION CHECK (runs FIRST, regardless of frontend status) ==========
+  const prBody = getPRBody();
+  const ticketId = getTicketIdFromBranch();
+  const tasksBase = getConfig('TASKS_BASE');
+  if (!tasksBase) {
+    process.stderr.write(
+      'PR-POST-GENERATOR VALIDATOR: TASKS_BASE not configured; skipping fabrication check (fail-open).\n'
+    );
+  } else if (ticketId) {
+    const taskDir = path.join(tasksBase, ticketId);
+    runFabricationCheck(prBody, taskDir, ticketId);
+  }
+
   // ========== CHECK IF FRONTEND APPS ARE AFFECTED ==========
   const affectedApps = getAffectedApps();
   const affectedFrontendApps = getAffectedFrontendApps(affectedApps || []);
 
   if (affectedFrontendApps.length === 0) {
-    // Backend-only changes - images not required
+    // Backend-only changes - images not required (visual-doc checks only)
     process.exit(0);
   }
 
-  // ========== FETCH ACTUAL PR BODY AND VERIFY VISUAL DOCUMENTATION ==========
-  const prBody = getPRBody();
+  // ========== VERIFY VISUAL DOCUMENTATION (frontend only) ==========
   if (prBody) {
     const hasLink = hasWikiLink(prBody);
 
