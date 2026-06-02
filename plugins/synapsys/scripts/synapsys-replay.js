@@ -124,8 +124,8 @@ function validateFlags(flags) {
       die(`invalid --project=${flags.project}`);
     }
   }
-  if (!Number.isFinite(flags.maxJudges) || flags.maxJudges < 0) {
-    die(`invalid --max-judges=${flags.maxJudges} (expected non-negative integer)`);
+  if (!Number.isInteger(flags.maxJudges) || flags.maxJudges < 1) {
+    die(`invalid --max-judges=${flags.maxJudges} (expected positive integer)`);
   }
 }
 
@@ -271,9 +271,14 @@ async function main(argv) {
         `${JSON.stringify({
           memories: [],
           suggestions: [],
+          store: stores.map((s) => s.dir).join(','),
+          window: flags.since,
           events_total: 0,
           events_ups: 0,
           events_ptu: 0,
+          judge_calls: 0,
+          items_judged: 0,
+          extrapolated: false,
           message: 'no transcripts in window',
         })}\n`
       );

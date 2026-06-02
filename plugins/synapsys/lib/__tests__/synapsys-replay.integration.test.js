@@ -81,6 +81,40 @@ test('CLI exits 2 on non-numeric --max-judges', () => {
   assert.match(result.stderr, /max-judges/i);
 });
 
+test('suggestTightening fires for realistic \\b(...)\\b wrapped triggers', () => {
+  const { suggestTightening } = require(REPLAY);
+  const memory = { name: 'noisy', triggerPrompt: '\\b(push|fetch|run)\\b' };
+  const agg = { fp_rate: 0.8 };
+  const result = suggestTightening(memory, agg);
+  assert.ok(result, 'wrapped trigger should produce a suggestion');
+  assert.deepEqual(result.candidates.sort(), ['fetch', 'push', 'run']);
+});
+
+test('extractEvents skips synthetic user messages (slash commands, system reminders, tool results)', () => {
+  const { extractEvents } = require(REPLAY);
+  const cases = [
+    { type: 'user', message: { content: '<command-name>foo</command-name>' } },
+    { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } },
+    { type: 'user', message: { content: '<local-command-stdout>out</local-command-stdout>' } },
+    {
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'x', content: 'r' }] },
+    },
+    { type: 'user', isMeta: true, message: { content: 'real user prompt' } },
+  ];
+  for (const c of cases) {
+    assert.deepEqual(
+      extractEvents(c),
+      [],
+      `should skip synthetic case: ${JSON.stringify(c).slice(0, 60)}`
+    );
+  }
+  // Real prompt still fires
+  const real = extractEvents({ type: 'user', message: { content: 'fix the login bug' } });
+  assert.equal(real.length, 1);
+  assert.equal(real[0].event, 'UserPromptSubmit');
+});
+
 test('CLI exits 2 when --only references only unknown memory names (misconfig contract)', () => {
   const os3 = require('node:os');
   const fs3 = require('node:fs');

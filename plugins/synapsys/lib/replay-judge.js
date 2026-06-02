@@ -18,7 +18,17 @@ const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const JUDGE_BATCH_SIZE = 10; // R18
 const DEFAULT_JUDGE_MODEL = 'claude-haiku-4-5';
 const MEMORY_BODY_PREVIEW_CHARS = 200;
+const PROMPT_PREVIEW_CHARS = 600;
+const MATCHED_PREVIEW_CHARS = 200;
 const REPLY_LINE_REGEX = /^\s*(\d+)\s*:\s*(yes|no)\b/i;
+
+function clipText(s, max) {
+  if (typeof s !== 'string') return s;
+  if (s.length <= max) return s;
+  const head = Math.floor(max / 2);
+  const tail = max - head;
+  return `${s.slice(0, head)}…${s.slice(s.length - tail)}`;
+}
 
 const JUDGE_SYSTEM_PROMPT =
   'You are a relevance judge for synapsys memories. For each numbered item, decide whether the memory was ACTUALLY RELEVANT to the user prompt shown. Each item gives you the memory name, the first part of its content body, the user prompt, and the substring that matched. Reply with one line per item in the exact form "N: yes" or "N: no" (lowercase, no extra text). Answer "yes" only when the memory content would have been useful context for that prompt; otherwise "no". Do not add explanations or any other output.';
@@ -27,7 +37,9 @@ function buildJudgeBody(items, model) {
   const numbered = items
     .map((it, i) => {
       const body = (it.body || '').slice(0, MEMORY_BODY_PREVIEW_CHARS);
-      return `${i + 1}) memory titled ${it.memory} with content ${JSON.stringify(body)} prompt=${JSON.stringify(it.prompt)} matched=${JSON.stringify(it.matched)}`;
+      const prompt = clipText(it.prompt || '', PROMPT_PREVIEW_CHARS);
+      const matched = clipText(it.matched || '', MATCHED_PREVIEW_CHARS);
+      return `${i + 1}) memory titled ${it.memory} with content ${JSON.stringify(body)} prompt=${JSON.stringify(prompt)} matched=${JSON.stringify(matched)}`;
     })
     .join('\n');
   return JSON.stringify({

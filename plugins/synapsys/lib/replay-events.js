@@ -17,18 +17,50 @@ const os = require('node:os');
 const path = require('node:path');
 const matcher = require('./matcher');
 
-function extractUserEvents(message) {
-  if (!message || message.content === undefined || message.content === null) return [];
-  const content = message.content;
-  if (typeof content === 'string') {
-    return [{ event: 'UserPromptSubmit', prompt: content }];
-  }
-  if (!Array.isArray(content)) return [];
-  const prompt = content
+// Synthetic user entries emitted by Claude Code (slash-command stdouts,
+// system-reminder wrappers, hook output, agent inbox notifications) should not
+// be treated as real UserPromptSubmit events — they pollute fire counts and
+// FP rates with text the user never typed.
+const SYNTHETIC_USER_PREFIXES = [
+  '<command-name>',
+  '<command-message>',
+  '<command-args>',
+  '<local-command-stdout>',
+  '<system-reminder>',
+  '<task-notification>',
+  '<bash-stdout>',
+  '<bash-stderr>',
+];
+
+function isSyntheticUserText(text) {
+  if (typeof text !== 'string') return false;
+  const head = text.trimStart();
+  return SYNTHETIC_USER_PREFIXES.some((p) => head.startsWith(p));
+}
+
+function isSyntheticParsedLine(parsedLine) {
+  return !!(parsedLine && (parsedLine.isMeta === true || parsedLine.toolUseResult));
+}
+
+function joinTextBlocks(content) {
+  return content
     .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
     .map((b) => b.text)
     .join('');
-  return prompt.length === 0 ? [] : [{ event: 'UserPromptSubmit', prompt }];
+}
+
+function extractUserEvents(message, parsedLine) {
+  if (isSyntheticParsedLine(parsedLine)) return [];
+  const content = message ? message.content : undefined;
+  if (content == null) return [];
+  if (typeof content === 'string') {
+    return isSyntheticUserText(content) ? [] : [{ event: 'UserPromptSubmit', prompt: content }];
+  }
+  if (!Array.isArray(content)) return [];
+  if (content.some((b) => b && b.type === 'tool_result')) return [];
+  const prompt = joinTextBlocks(content);
+  if (prompt.length === 0 || isSyntheticUserText(prompt)) return [];
+  return [{ event: 'UserPromptSubmit', prompt }];
 }
 
 function extractAssistantEvents(message) {
@@ -51,7 +83,7 @@ function extractAssistantEvents(message) {
 function extractEvents(parsedLine) {
   if (!parsedLine || typeof parsedLine !== 'object') return [];
   const { type, message } = parsedLine;
-  if (type === 'user') return extractUserEvents(message);
+  if (type === 'user') return extractUserEvents(message, parsedLine);
   if (type === 'assistant') return extractAssistantEvents(message);
   return [];
 }

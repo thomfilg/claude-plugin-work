@@ -97,14 +97,41 @@ function aggregateReport(tuples, judgments) {
 }
 
 /**
+ * Peel a single outermost `\b?(...)\b?` wrapper so heuristic-detection works on
+ * realistic triggers like `\b(push|fetch|deploy)\b`. The matcher itself does
+ * NOT need this peeling — its `splitTopLevelAlternation` runs against the raw
+ * regex — but the tightening heuristic only sees short bare words.
+ */
+function peelGroupWrapper(source) {
+  const m = /^\\b?\((.*)\)\\b?$/s.exec(source);
+  if (!m) return source;
+  const inner = m[1];
+  let depth = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === '\\') {
+      i++;
+      continue;
+    }
+    if (ch === '(') depth++;
+    else if (ch === ')') {
+      depth--;
+      if (depth < 0) return source;
+    }
+  }
+  return depth === 0 ? inner : source;
+}
+
+/**
  * Heuristic R8 — emit advisory when `fp_rate > 0.70` AND `trigger_prompt`
- * contains short (<=5 chars) single-word alternation arms.
+ * contains short (<=5 chars) single-word alternation arms. Peels a single
+ * `\b(...)\b` wrapper before splitting so wrapped triggers are inspected.
  */
 function suggestTightening(memory, agg) {
   if (!memory || !agg) return null;
   if (agg.fp_rate === null || agg.fp_rate === undefined) return null;
   if (!(agg.fp_rate > 0.7)) return null;
-  const arms = splitTopLevelAlternation(memory.triggerPrompt || '');
+  const arms = splitTopLevelAlternation(peelGroupWrapper(memory.triggerPrompt || ''));
   const candidates = arms.filter((a) => {
     const trimmed = a.trim();
     return trimmed.length > 0 && trimmed.length <= 5 && /^[A-Za-z0-9_-]+$/.test(trimmed);
