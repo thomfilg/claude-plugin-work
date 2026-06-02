@@ -102,6 +102,7 @@ function autoRestart({ session, ticket, worktree, silenceSec }) {
       windowMin: RESTART_WINDOW_MIN,
       quietMin: WEDGED_QUIET_MIN,
       silenceSec,
+      instruction: `tmux capture-pane -t ${session} -p | tail -50 — agent restarted ${restarts.length + 1}x in ${RESTART_WINDOW_MIN}m. Daemon won't restart for ${WEDGED_QUIET_MIN}m. Diagnose root cause; if dead-end, kill session and bootstrap next bug.`,
     });
     return false;
   }
@@ -159,9 +160,40 @@ function freeCIGateSlot({ session, ticket, prNumber, sha }) {
     kind: 'slot-freed',
     prNumber,
     sha,
-    reason: 'pr-ready at CI gate — auto-killed to free pool slot',
+    instruction: `Pool slot free. Pick next bug: gh issue list --repo thomfilg/claude-plugin-work --state open --label bug --json number,title | head; then: bash plugins/maestro/scripts/maestro-bootstrap.sh GH-<pick>. Skip tickets whose diff overlaps PR #${prNumber}.`,
   });
   return true;
 }
 
-module.exports = { soft, interrupt, alert, autoRestart, freeCIGateSlot };
+/**
+ * freeDeadEndSlot — same kill mechanics as freeCIGateSlot but for an agent
+ * stuck in a non-recoverable state (e.g. every menu option is a workflow
+ * bypass; PR has no path forward without manual intervention). Triggered by
+ * the re-emit escalation: when the same alert kind fires ≥ DEAD_END_REEMITS
+ * times on the same session+sha+phase, the caller invokes this.
+ *
+ * Emits a kind=dead-end alert with a crystal-clear instruction so the
+ * operator knows to bootstrap the next ticket. Idempotent per ticket.
+ */
+function freeDeadEndSlot({ session, ticket, kind, repeatCount, sha }) {
+  if (process.env.AUTO_FREE_DEAD_END === '0') return false;
+  const marker = state.read(ticket, 'dead-end') || {};
+  if (marker.killed) return false; // already freed
+  for (const suffix of ['work', 'listen']) {
+    spawnSync('tmux', ['kill-session', '-t', `${ticket}-${suffix}`], { stdio: 'ignore' });
+  }
+  state.write(ticket, 'dead-end', { killed: true, freedAt: state.now(), trigger: kind });
+  alerts.log(`${session} DEAD-END ${kind} re-fired ${repeatCount}x — tmux killed, slot freed`);
+  alert({
+    session,
+    ticket,
+    kind: 'dead-end',
+    trigger: kind,
+    repeatCount,
+    sha,
+    instruction: `Bootstrap next bug into freed slot: gh issue list --repo thomfilg/claude-plugin-work --state open --label bug --json number,title | head; bash plugins/maestro/scripts/maestro-bootstrap.sh GH-<pick>`,
+  });
+  return true;
+}
+
+module.exports = { soft, interrupt, alert, autoRestart, freeCIGateSlot, freeDeadEndSlot };

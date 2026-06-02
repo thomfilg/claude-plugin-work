@@ -38,6 +38,23 @@ const DETECTORS = {
 const HEARTBEAT_MIN = parseInt(process.env.HEARTBEAT_MIN || '30', 10);
 let lastHeartbeatAt = 0;
 
+// Re-emit escalation: when the same (session, kind, sha/phase) alert fires
+// this many times in a row, the daemon auto-rotates the slot (kills the
+// session via freeDeadEndSlot). Operator no longer needs to make a judgment
+// call on whether a stuck agent is recoverable.
+const DEAD_END_REEMITS = parseInt(process.env.DEAD_END_REEMITS || '3', 10);
+
+function maybeEscalateToDeadEnd(ctx, kind, repeatCount, sha) {
+  if (repeatCount < DEAD_END_REEMITS) return;
+  actions.freeDeadEndSlot({
+    session: ctx.session,
+    ticket: ctx.ticket,
+    kind,
+    repeatCount,
+    sha,
+  });
+}
+
 // Only -work sessions are restart-eligible (matches maestro-conduct.sh
 // gating). Helpers like -dev / -listen are surfaced informationally but
 // would re-launch wrong if relaunched as /work <tid>.
@@ -75,7 +92,7 @@ function handleQuestion(ctx, qHit) {
   }
   const mins = state.minutesSince(prev.startedAt);
   if (mins >= Q_WAIT_MIN && !prev.alerted) {
-    actions.alert({
+    const r = actions.alert({
       session: ctx.session,
       ticket: ctx.ticket,
       kind: 'question-pending',
@@ -83,8 +100,10 @@ function handleQuestion(ctx, qHit) {
       elapsedMin: mins,
       options: qHit.options,
       promptKind: qHit.promptKind,
+      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — read full menu, pick the option that does NOT bypass any workflow gate (avoid: state-file edits, set-step CLI, completion-checker skip, --no-verify). If all options bypass, send a directive via "Type something".`,
     });
     state.write(ctx.session, 'question', { startedAt: prev.startedAt, alerted: true });
+    maybeEscalateToDeadEnd(ctx, 'question-pending', r.count, null);
   }
 }
 
@@ -140,7 +159,7 @@ function handlePhaseStall(ctx, stallHit) {
   const reason = `phase=${ctx.phase} stuck ${stallHit.elapsedMin}m budget=${stallHit.budgetMin}m nudge ${marker.nudges + 1}/${stallHit.maxNudges}`;
 
   if (escalation === 'alert') {
-    actions.alert({
+    const r = actions.alert({
       session: ctx.session,
       ticket: ctx.ticket,
       kind: 'nudges-exhausted',
@@ -148,7 +167,9 @@ function handlePhaseStall(ctx, stallHit) {
       elapsedMin: stallHit.elapsedMin,
       budgetMin: stallHit.budgetMin,
       nudges: marker.nudges,
+      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — agent exceeded phase=${ctx.phase} budget (${stallHit.elapsedMin}m vs ${stallHit.budgetMin}m). Diagnose or send directive via "Type something".`,
     });
+    maybeEscalateToDeadEnd(ctx, 'nudges-exhausted', r.count, ctx.phase);
   } else if (escalation === 'interrupt') {
     actions.interrupt(ctx.session, reason);
   } else {
@@ -255,6 +276,13 @@ function runPrStatusDetector(ctx) {
   }
   // pr-ready / pr-broken go to the structured alert sink so a downstream
   // grep can match them distinctly from nudges.
+  const failingList = (sHit.failingChecks || [])
+    .map((c) => `${c.name}(${c.conclusion})`)
+    .join(', ');
+  const instruction =
+    sHit.kind === 'pr-ready'
+      ? `Run bypass-checker on PR #${sHit.prNumber} sha=${(sHit.sha || '').slice(0, 7)} (Agent tool, work-workflow:code-checker). On APPROVED → surface PR URL to operator. Slot will be auto-freed if phase=ci/wait_merge.`
+      : `tmux capture-pane -t ${ctx.session} -p | tail -40 — drive agent to fix failing checks IN-PR (no skip, no follow-up issue). Failing: ${failingList || 'see PR'}.`;
   actions.alert({
     session: ctx.session,
     ticket: ctx.ticket,
@@ -265,6 +293,7 @@ function runPrStatusDetector(ctx) {
     checksState: sHit.checksState,
     mergeable: sHit.mergeable,
     failingChecks: sHit.failingChecks,
+    instruction,
   });
   // CI-gate slot rotation: when PR is CLEAN/SUCCESS and the agent is sitting
   // in a wait-for-merge phase, free the pool slot automatically so the
@@ -386,7 +415,7 @@ function handlePrComments(ctx, cHit) {
   const escalation = escalationFor(ctx.phase, nudges);
 
   if (escalation === 'alert') {
-    actions.alert({
+    const r = actions.alert({
       session: ctx.session,
       ticket: ctx.ticket,
       kind: 'pr-comments-stuck',
@@ -395,7 +424,9 @@ function handlePrComments(ctx, cHit) {
       count: cHit.count,
       elapsedMin: cHit.minsStuck,
       summary: cHit.summary,
+      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — agent left ${cHit.count} bot comment(s) on PR #${cHit.prNumber} unaddressed for ${cHit.minsStuck}m, HEAD unchanged. Send directive: "Address each bot comment in the PR; never dismiss as stale."`,
     });
+    maybeEscalateToDeadEnd(ctx, 'pr-comments-stuck', r.count, null);
   } else if (escalation === 'interrupt') {
     actions.interrupt(ctx.session, reason);
   } else {
