@@ -70,10 +70,16 @@ function listMarkers() {
   }
 }
 
+// Escape regex metacharacters in user-supplied input so a ticket like
+// "GH-1.*" can't widen the marker-match pattern (CodeQL js/regex-injection).
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function markersForTicket(ticket) {
   if (!fs.existsSync(STATE_DIR)) return [];
   const prefix = `${ticket}`;
-  const tickRe = new RegExp(`^${ticket}(-(work|listen|dev))?\\.[^/]+\\.json$`);
+  const tickRe = new RegExp(`^${escapeRegex(ticket)}(-(work|listen|dev))?\\.[^/]+\\.json$`);
   return fs
     .readdirSync(STATE_DIR)
     .filter((name) => name.startsWith(prefix) && tickRe.test(name))
