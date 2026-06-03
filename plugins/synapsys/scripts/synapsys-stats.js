@@ -68,27 +68,31 @@ function readJsonlInWindow(file, cutoffMs) {
   return out;
 }
 
-function aggregate(cwd, { windowMs }) {
-  const cutoff = Date.now() - windowMs;
-  const stores = discoverStores(cwd);
-  const counts = new Map(); // name → { fired, cited }
+function collectKnownMemoryNames(stores) {
   const known = new Set();
-
   for (const store of stores) {
     for (const mem of listMemoriesFromStore(store)) {
       if (mem && mem.name) known.add(mem.name);
     }
   }
+  return known;
+}
+
+function tallyEvent(counts, ev) {
+  if (!ev || !ev.memory || !ev.event) return;
+  const c = counts.get(ev.memory) || { fired: 0, cited: 0 };
+  if (ev.event === 'fired') c.fired += 1;
+  else if (ev.event === 'cited') c.cited += 1;
+  counts.set(ev.memory, c);
+}
+
+function aggregate(cwd, { windowMs }) {
+  const cutoff = Date.now() - windowMs;
+  const known = collectKnownMemoryNames(discoverStores(cwd));
+  const counts = new Map(); // name → { fired, cited }
 
   for (const file of listJsonlFiles(telemetryDir())) {
-    const events = readJsonlInWindow(file, cutoff);
-    for (const ev of events) {
-      if (!ev || !ev.memory || !ev.event) continue;
-      const c = counts.get(ev.memory) || { fired: 0, cited: 0 };
-      if (ev.event === 'fired') c.fired += 1;
-      else if (ev.event === 'cited') c.cited += 1;
-      counts.set(ev.memory, c);
-    }
+    for (const ev of readJsonlInWindow(file, cutoff)) tallyEvent(counts, ev);
   }
 
   // Include zero-fire known memories so Never-fired can list them.

@@ -116,70 +116,95 @@ function readFiredMemoryNames(sessionId) {
   return out;
 }
 
-function extractResponseText(payload) {
-  if (payload && typeof payload.response === 'string') return payload.response;
-  if (payload && typeof payload.transcript_path === 'string') {
-    try {
-      const raw = fs.readFileSync(payload.transcript_path, 'utf8');
-      // Take last assistant block — best-effort, JSONL format common in Claude.
-      const lines = raw.split('\n').filter((l) => l.length > 0);
-      for (let i = lines.length - 1; i >= 0; i--) {
-        try {
-          const obj = JSON.parse(lines[i]);
-          if (obj && obj.role === 'assistant' && typeof obj.content === 'string') {
-            return obj.content;
-          }
-        } catch {
-          // skip
-        }
-      }
-    } catch {
-      // fail-open
-    }
+// Coerce one transcript JSONL row into assistant text. Supports both:
+//   - Claude Code: `{type: 'assistant', message: {content: [{type: 'text', text}]}}`
+//   - Legacy:     `{role: 'assistant', content: '<string>'}`
+// Returns '' for any other shape so the caller can keep scanning.
+function transcriptRowToText(obj) {
+  if (!obj) return '';
+  if (obj.role === 'assistant' && typeof obj.content === 'string') return obj.content;
+  const isAssistantMsg = obj.type === 'assistant' || obj.role === 'assistant';
+  if (!isAssistantMsg) return '';
+  const content = obj.message && obj.message.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
+      .map((b) => b.text)
+      .join('\n');
   }
   return '';
 }
 
+function extractFromTranscript(transcriptPath) {
+  try {
+    const raw = fs.readFileSync(transcriptPath, 'utf8');
+    const lines = raw.split('\n').filter((l) => l.length > 0);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const text = transcriptRowToText(JSON.parse(lines[i]));
+        if (text) return text;
+      } catch {
+        // skip malformed line
+      }
+    }
+  } catch {
+    // fail-open
+  }
+  return '';
+}
+
+function extractResponseText(payload) {
+  if (!payload) return '';
+  if (typeof payload.response === 'string') return payload.response;
+  if (typeof payload.transcript_path === 'string') return extractFromTranscript(payload.transcript_path);
+  return '';
+}
+
+// Parse a YAML block-list under `cite_signals:` from raw frontmatter text.
+// Returns [] when no list is present.
+function parseCiteSignalsList(frontmatterText) {
+  const lines = frontmatterText.split(/\r?\n/);
+  const found = [];
+  let inList = false;
+  for (const line of lines) {
+    if (/^cite_signals\s*:\s*$/.test(line)) {
+      inList = true;
+      continue;
+    }
+    if (!inList) continue;
+    const item = line.match(/^\s+-\s+(.+?)\s*$/);
+    if (item) {
+      found.push(item[1].replace(/^["']|["']$/g, ''));
+      continue;
+    }
+    // End of list on next top-level key or blank line.
+    if (line.trim() === '' || /^[a-zA-Z_][\w]*\s*:/.test(line)) inList = false;
+  }
+  return found;
+}
+
 // Re-parse `cite_signals` from a memory's raw file to recover YAML-list
 // frontmatter the simple memory-store parser drops (it only handles
-// inline `key: value` lines). Fail-open: returns the memory unchanged on
-// any error or when nothing extra is found.
+// inline `key: value` lines). Fail-open.
 function recoverCiteSignals(memory) {
   try {
     if (!memory || !memory.file) return memory;
+    const meta = memory.meta;
     const existing =
-      memory.meta && Array.isArray(memory.meta.cite_signals)
-        ? memory.meta.cite_signals.filter((s) => typeof s === 'string' && s.length > 0)
+      meta && Array.isArray(meta.cite_signals)
+        ? meta.cite_signals.filter((s) => typeof s === 'string' && s.length > 0)
         : [];
     if (existing.length > 0) return memory;
     const raw = fs.readFileSync(memory.file, 'utf8');
     const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!fm) return memory;
-    const lines = fm[1].split(/\r?\n/);
-    const found = [];
-    let inList = false;
-    for (const line of lines) {
-      if (/^cite_signals\s*:\s*$/.test(line)) {
-        inList = true;
-        continue;
-      }
-      if (inList) {
-        const item = line.match(/^\s+-\s+(.+?)\s*$/);
-        if (item) {
-          found.push(item[1].replace(/^["']|["']$/g, ''));
-          continue;
-        }
-        // End of list when we hit any other key or blank
-        if (line.trim() === '' || /^[a-zA-Z_][\w]*\s*:/.test(line)) {
-          inList = false;
-        }
-      }
-    }
+    const found = parseCiteSignalsList(fm[1]);
     if (!found.length) return memory;
     return {
       ...memory,
       citeSignals: found.slice(),
-      meta: { ...(memory.meta || {}), cite_signals: found.slice() },
+      meta: { ...(meta || {}), cite_signals: found.slice() },
     };
   } catch {
     return memory;
@@ -221,6 +246,18 @@ function formatMatchedOutput(matched) {
   return `${out.slice(0, MAX_INJECT_CHARS)}\n\n[synapsys: output truncated at ${MAX_INJECT_CHARS} chars]`;
 }
 
+function emitMatched(matched, payload, event) {
+  if (!matched.length) return;
+  for (const m of matched) {
+    try {
+      recordFired(m, payload, event);
+    } catch {
+      // fail-open
+    }
+  }
+  process.stdout.write(formatMatchedOutput(matched));
+}
+
 (async () => {
   try {
     const event = process.argv[2];
@@ -237,23 +274,8 @@ function formatMatchedOutput(matched) {
       process.exit(0);
     }
 
-    if (!memories.length) {
-      if (event === 'Stop') runCiteScan(payload, memories);
-      process.exit(0);
-    }
-    const matched = selectForEvent(memories, event, payload);
-
-    if (matched.length) {
-      for (const m of matched) {
-        try {
-          recordFired(m, payload, event);
-        } catch {
-          // fail-open
-        }
-      }
-      process.stdout.write(formatMatchedOutput(matched));
-    }
-
+    const matched = memories.length ? selectForEvent(memories, event, payload) : [];
+    emitMatched(matched, payload, event);
     if (event === 'Stop') runCiteScan(payload, memories);
 
     process.exit(0);

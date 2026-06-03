@@ -174,6 +174,14 @@ function extractSignals(memory) {
   return extractAuto(memory);
 }
 
+function findFirstSignal(signals, responseText) {
+  for (const sig of signals) {
+    if (typeof sig !== 'string' || sig.length === 0) continue;
+    if (responseText.includes(sig)) return sig;
+  }
+  return undefined;
+}
+
 function scanForCitations(memories, responseText) {
   const results = [];
   if (typeof responseText !== 'string' || responseText.length === 0) return results;
@@ -181,15 +189,7 @@ function scanForCitations(memories, responseText) {
 
   for (const memory of memories) {
     if (!memory || isDisabled(memory)) continue;
-    const signals = extractSignals(memory);
-    let matched;
-    for (const sig of signals) {
-      if (typeof sig !== 'string' || sig.length === 0) continue;
-      if (responseText.includes(sig)) {
-        matched = sig;
-        break;
-      }
-    }
+    const matched = findFirstSignal(extractSignals(memory), responseText);
     if (matched !== undefined) {
       const capped = matched.length > MATCH_CAP ? matched.slice(0, MATCH_CAP) : matched;
       results.push({ memory, match: capped });

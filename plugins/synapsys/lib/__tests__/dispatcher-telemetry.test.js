@@ -440,3 +440,47 @@ test('Missing session_id falls back to _unknown-session.jsonl', (t) => {
   const firedRows = rows.filter((r) => r.event === 'fired' && r.memory === 'mem-unknown');
   assert.ok(firedRows.length >= 1, 'fired row must be recorded in _unknown-session.jsonl');
 });
+
+// PR #524 cursor[bot] High — extractResponseText must read Claude Code transcript format
+// (type: 'assistant', message.content as text blocks), not just the legacy
+// role: 'assistant' with string content.
+test('Cited event fires when Stop reads from transcript_path with Claude Code format', (t) => {
+  const home = mktemp('synapsys-disp-tel-home-');
+  const fx = makeFixture({ home });
+  t.after(fx.cleanup);
+
+  writeMemory(fx.storeDir, 'tx-memory', {
+    description: 'x',
+    events: '[UserPromptSubmit, Stop]',
+    triggerPrompt: 'tx-trigger',
+    body: 'tx-memory body',
+  });
+
+  const sessionId = 'tx-session-1';
+  const firedRes = runDispatcher(
+    'UserPromptSubmit',
+    { cwd: fx.cwd, session_id: sessionId, prompt: 'mentions tx-trigger here' },
+    { home }
+  );
+  assert.equal(firedRes.status, 0, `fired exit: ${firedRes.stderr}`);
+
+  // Build a Claude Code transcript: each row is `{type: 'assistant', message: {content: [...]}}`
+  const transcript = path.join(home, 'transcript.jsonl');
+  const blocks = [
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'Some prelude.' }] } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'I will use tx-memory next.' }] } },
+  ];
+  fs.writeFileSync(transcript, blocks.map((b) => JSON.stringify(b)).join('\n') + '\n');
+
+  const stopRes = runDispatcher(
+    'Stop',
+    { cwd: fx.cwd, session_id: sessionId, transcript_path: transcript },
+    { home }
+  );
+  assert.equal(stopRes.status, 0, `stop exit: ${stopRes.stderr}`);
+
+  const jsonl = path.join(telemetryDirFor(home), `${sessionId}.jsonl`);
+  const rows = readJsonl(jsonl);
+  const cited = rows.filter((r) => r.event === 'cited' && r.memory === 'tx-memory');
+  assert.equal(cited.length, 1, `expected 1 cited row for tx-memory, got ${cited.length}. rows: ${JSON.stringify(rows)}`);
+});
