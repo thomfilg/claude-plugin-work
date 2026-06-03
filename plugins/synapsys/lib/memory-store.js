@@ -158,6 +158,7 @@ function readMemoryFile(store, name) {
     triggerPretoolContent: toList(meta.trigger_pretool_content),
     triggerPretoolContentNot: toList(meta.trigger_pretool_content_not),
     triggerSession: meta.trigger_session === true || meta.trigger_session === 'true',
+    domain: toList(meta.domain),
     inject: meta.inject === 'full' ? 'full' : 'summary',
     disabled: meta.disabled === true || meta.disabled === 'true',
     expired: parseExpired(meta.expires),
