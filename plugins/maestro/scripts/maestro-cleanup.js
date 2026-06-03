@@ -161,9 +161,15 @@ function purgeAlertCountsForTicket(ticket, dryRun) {
   } catch {
     return 0;
   }
+  // Alert keys are `${session}|${kind}|${sha-or-phase}` where session is
+  // typically `${ticket}` or `${ticket}-work` / `${ticket}-listen` etc.
+  // A substring match would purge counts for GH-10/GH-11 when cleaning GH-1,
+  // so anchor on the ticket boundary: ticket followed by `|` (session==ticket)
+  // or `-...|` (session==`${ticket}-suffix`).
+  const tickRe = new RegExp(`^${escapeRegex(ticket)}(-[^|]*)?\\|`);
   let removed = 0;
   for (const key of Object.keys(counts)) {
-    if (key.includes(ticket)) {
+    if (tickRe.test(key)) {
       if (!dryRun) delete counts[key];
       removed += 1;
     }
@@ -239,4 +245,8 @@ function main() {
   runTicketMode({ ticket: positional[0], ...flags });
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { purgeAlertCountsForTicket };
