@@ -22,9 +22,13 @@ const { makeFailure } = require('../failure-record');
 const { appendForCheckType } = require('../failure-store');
 const { hasVerdict, escapeRegex, buildVerdictRegex } = require('../../../lib/parse-completion-status');
 
-const CITATION_RE = /(\S+\.test\.[jt]sx?):(\w+)/;
-const CITATION_RE_G = /(\S+\.test\.[jt]sx?):(\w+)/g;
+// B4/B5 fix: tighten the test-file char class so a leading `(` is not captured
+// (`\S+` would grab `(foo.test.js`), and allow `-` and `.` in test names so
+// kebab-case (`should-handle-x`) and dotted (`case.1`) descriptors match.
+const CITATION_RE = /([\w./@-]+\.test\.[jt]sx?):([\w.-]+)/;
+const CITATION_RE_G = /([\w./@-]+\.test\.[jt]sx?):([\w.-]+)/g;
 const PASS_VERDICTS = ['PASS', 'COMPLETE', 'APPROVED'];
+const FAIL_VERDICTS = ['FAIL', 'BLOCKED', 'NOT_DELIVERED', 'NEEDS_WORK'];
 
 /**
  * Extract the first `{ testFile, testName }` citation from an Evidence cell,
@@ -62,8 +66,8 @@ function parseEvidenceCitations(cell) {
 
 /**
  * Find the line in `reportContent` that carries the verdict for `testName`.
- * Prefers a line that BOTH mentions the test name AND has a verdict marker
- * (PASS/FAIL/etc); falls back to the first mention only if no verdict line
+ * Prefers a line that BOTH mentions the test name AND has a `Status:` /
+ * `Verdict:` marker; falls back to the first mention only if no such line
  * exists. This avoids spurious failures when the test name appears in a
  * heading or summary line above the actual `Status: PASS` line.
  *
@@ -82,6 +86,28 @@ function findTestLine(reportContent, testName) {
     if (hasVerdict(line, ALL_VERDICTS)) return line;
   }
   return firstMention;
+}
+
+/**
+ * Decide whether `reportContent` (whole tests.check.md) carries a top-level
+ * passing verdict.
+ *
+ * Why this exists: the canonical writer (`write-tests-report.js`) emits a
+ * single `Status: APPROVED` or `Status: NEEDS_WORK` header at the top of the
+ * file. Per-test rows are formatted as `- Status: ✅ PASS` lines *without*
+ * a `Status:` prefix per row in many real outputs (markdown tables, plain
+ * suite summaries). The per-line `hasVerdict` matcher would miss the row and
+ * spuriously block completion. The correct signal is the file-level verdict;
+ * per-test verification then only needs to confirm the test name *appears*
+ * in the report (proving it was executed).
+ *
+ * Returns one of: 'PASS' | 'FAIL' | 'UNKNOWN'.
+ */
+function classifyOverallVerdict(reportContent) {
+  if (!reportContent) return 'UNKNOWN';
+  if (hasVerdict(reportContent, FAIL_VERDICTS)) return 'FAIL';
+  if (hasVerdict(reportContent, PASS_VERDICTS)) return 'PASS';
+  return 'UNKNOWN';
 }
 
 function collectDeliveredCitations(coverage) {
@@ -129,33 +155,78 @@ function extractVerdictWord(line) {
   return m ? m[1].toUpperCase() : null;
 }
 
+function evaluateCitation(reportContent, overall, cite) {
+  const nameRe = new RegExp(`\\b${escapeRegex(cite.testName)}\\b`);
+  const named = nameRe.test(reportContent);
+  const line = findTestLine(reportContent, cite.testName);
+  const lineSaysPass = line !== null && hasVerdict(line, PASS_VERDICTS);
+  const lineSaysFail = line !== null && hasVerdict(line, FAIL_VERDICTS);
+  if (lineSaysPass) return { passed: true };
+  if (overall === 'PASS' && named && !lineSaysFail) return { passed: true };
+  return { passed: false, named, line, lineSaysFail };
+}
+
+function describeCitationFailure(cite, overall, evalResult) {
+  if (!evalResult.named) {
+    return `${cite.testName} not found in tests.check.md — not executed or not recorded`;
+  }
+  if (evalResult.lineSaysFail) {
+    const v = extractVerdictWord(evalResult.line) || 'FAIL';
+    return `${cite.testName} ${v} in tests.check.md`;
+  }
+  if (overall === 'FAIL') {
+    return `${cite.testName} present in tests.check.md but report verdict is NEEDS_WORK/FAIL`;
+  }
+  return `${cite.testName} mentioned in tests.check.md but no PASS verdict found (file-level verdict ${overall})`;
+}
+
 function checkCitations(deliveredCitations, reportContent, failures) {
+  // B1 fix: evaluate against the file-level verdict produced by the canonical
+  // tests-report writer, not per-line markers. Per-test rows in tests.check.md
+  // typically lack a `Status:` prefix, so the previous per-line `hasVerdict`
+  // call false-flagged passing tests.
+  const overall = classifyOverallVerdict(reportContent);
   let testsChecked = 0;
   let testsFailing = 0;
   for (const { row, cite } of deliveredCitations) {
     testsChecked += 1;
-    const line = findTestLine(reportContent, cite.testName);
-    if (line !== null && hasVerdict(line, PASS_VERDICTS)) continue;
+    const result = evaluateCitation(reportContent, overall, cite);
+    if (result.passed) continue;
     testsFailing += 1;
-    let observed;
-    if (line === null) {
-      observed = `${cite.testName} not found in tests.check.md — not executed or not recorded`;
-    } else {
-      const verdict = extractVerdictWord(line);
-      observed = verdict
-        ? `${cite.testName} ${verdict} in tests.check.md`
-        : `${cite.testName} mentioned in tests.check.md but no verdict marker found on that line`;
-    }
     failures.push(
       makeFailure({
         requirementId: row.id,
         checkType: 'test_pass',
         expected: `${cite.testName} PASS`,
-        observed,
+        observed: describeCitationFailure(cite, overall, result),
       }),
     );
   }
   return { testsChecked, testsFailing };
+}
+
+/**
+ * B2 fix: when the coverage table has DELIVERED rows but ZERO of them cite a
+ * test in their Evidence cell, the previous implementation silently skipped
+ * test verification — which is the exact failure mode ticket #282 calls out
+ * ("checked 'does code exist' but never verified tests pass"). Surface a
+ * single advisory failure so the gate has teeth without exploding noise per
+ * row (kind_checks already covers the per-row behavioral classification).
+ */
+function recordZeroCitationsFailure(coverage, failures) {
+  const delivered = coverage.filter(
+    (r) => r && String(r.status).toUpperCase() === 'DELIVERED',
+  );
+  if (delivered.length === 0) return false;
+  failures.push(
+    makeFailure({
+      requirementId: delivered[0].id || 'R?',
+      checkType: 'test_pass',
+      expected: 'at least one DELIVERED row cites a test (foo.test.js:test_name)',
+      observed: `${delivered.length} DELIVERED row(s), 0 cite a test — cannot verify pass`,
+    }),
+  );
+  return true;
 }
 
 async function validate(ctx) {
@@ -166,9 +237,25 @@ async function validate(ctx) {
     const deliveredCitations = collectDeliveredCitations(coverage);
 
     if (deliveredCitations.length === 0) {
+      // B2: if there are DELIVERED rows but none cite a test, fail closed
+      // instead of silently skipping. An empty coverage table (no DELIVERED
+      // rows at all) still skips — coverage_check is responsible for that.
+      const hadFailure = recordZeroCitationsFailure(coverage, failures);
       ctx.testsChecked = 0;
-      appendForCheckType(ctx.tasksDir, 'test_pass', [], { testsChecked: 0 });
-      return { ok: true, summary: 'no DELIVERED row cites a test — skipped' };
+      appendForCheckType(
+        ctx.tasksDir,
+        'test_pass',
+        failures.slice(startLen),
+        { testsChecked: 0 },
+      );
+      if (hadFailure) {
+        return {
+          ok: false,
+          errors: ['DELIVERED rows have no test citations'],
+          summary: 'test_pass_crossref: 0 citations across DELIVERED rows',
+        };
+      }
+      return { ok: true, summary: 'no DELIVERED rows to verify — skipped' };
     }
 
     const report = readTestReport(ctx.tasksDir);
@@ -237,3 +324,4 @@ module.exports.validate = validate;
 module.exports.instructions = instructions;
 module.exports.parseEvidenceCitation = parseEvidenceCitation;
 module.exports.parseEvidenceCitations = parseEvidenceCitations;
+module.exports.classifyOverallVerdict = classifyOverallVerdict;

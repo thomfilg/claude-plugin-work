@@ -144,19 +144,20 @@ test.describe('test_pass_crossref phase', () => {
     }
   });
 
-  test('(d) DELIVERED rows but none cite a test ⇒ ok:true (backward compat)', async () => {
+  test('(d) DELIVERED rows but none cite a test ⇒ ok:false (B2: gate has teeth)', async () => {
     const tasks = coverageTasks([
       { id: 'R4', status: 'DELIVERED', evidence: 'tasks.md:Task 4' },
     ]);
     const { ctx, cleanup } = buildCtx({ tasks });
     try {
       const result = await phase.validate(ctx);
-      assert.equal(result.ok, true, 'phase must pass when no DELIVERED row cites a test');
-      assert.equal(
-        ctx.failures.filter((f) => f.checkType === 'test_pass').length,
-        0,
-        'no failure record should be pushed',
-      );
+      // B2: an agent that omits test citations from Evidence cells used to
+      // silently bypass the test-pass gate. The phase now fails closed with a
+      // single advisory failure record so the requirement is undeniable.
+      assert.equal(result.ok, false, 'phase must fail when DELIVERED rows have zero citations');
+      const recs = ctx.failures.filter((f) => f.checkType === 'test_pass');
+      assert.equal(recs.length, 1, 'one advisory failure record expected');
+      assert.match(recs[0].observed, /0 cite a test/);
     } finally {
       cleanup();
     }
@@ -226,17 +227,21 @@ test('observed reports actual verdict word (BLOCKED) not hardcoded FAIL', async 
   }
 });
 
-test('observed reports "no verdict marker" when mention exists but no verdict word', async () => {
+test('observed reports "no PASS verdict found" when mention exists but file-level verdict is unknown', async () => {
   const tasks = coverageTasks([
     { id: 'R4', status: 'DELIVERED', evidence: '`tests/foo.test.js:test_R4`' },
   ]);
+  // No Status/Verdict label anywhere — file-level verdict classifies as UNKNOWN.
   const report = '- test_R4 mentioned in summary line with no verdict\n';
   const { ctx, cleanup } = buildCtx({ tasks, testReport: report });
   try {
     const result = await phase.validate(ctx);
     assert.equal(result.ok, false);
     const f = ctx.failures.find((x) => x.checkType === 'test_pass');
-    assert.match(f.observed, /no verdict marker found/);
+    // B1: observed now reports the file-level verdict context instead of a
+    // per-line "no verdict marker" message that misled authors into thinking
+    // they needed to add per-row markers (canonical writer doesn't).
+    assert.match(f.observed, /no PASS verdict found .*UNKNOWN/);
   } finally {
     cleanup();
   }

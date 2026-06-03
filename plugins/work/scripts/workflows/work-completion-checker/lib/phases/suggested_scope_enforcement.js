@@ -56,16 +56,28 @@ function hasNonEmptyHunk(file, numstatOutput) {
   return false;
 }
 
+/**
+ * Run `git diff --numstat` against each candidate base. Returns
+ * `{ ok: true, output }` on the first successful invocation, or
+ * `{ ok: false, error }` when every candidate failed. Distinguishing the two
+ * (B6) keeps the failure message accurate: "git failed" vs "in diff but
+ * unchanged content".
+ */
 function runNumstat(ctx) {
   const root = ctx.worktreeRoot || process.cwd();
+  let lastErr = 'no diff base candidates available';
   for (const base of config.getDiffBaseCandidates({ cwd: root })) {
     const r = childProcess.spawnSync('git', ['diff', '--numstat', `${base}...HEAD`], {
       cwd: root,
       encoding: 'utf8',
     });
-    if (r && r.status === 0) return r.stdout || '';
+    if (r && r.status === 0) return { ok: true, output: r.stdout || '' };
+    if (r) {
+      const stderr = (r.stderr || '').trim();
+      lastErr = stderr || `git diff exited ${r.status} against base ${base}`;
+    }
   }
-  return '';
+  return { ok: false, error: lastErr };
 }
 
 function errMessage(err) {
@@ -126,7 +138,17 @@ async function validate(ctx) {
   try {
     const changed = readChangedFiles(ctx) || [];
     const changedSet = new Set(changed);
-    const numstat = runNumstat(ctx);
+    const numstatResult = runNumstat(ctx);
+    if (!numstatResult.ok) {
+      // B6: surface git failure explicitly instead of masquerading as "every
+      // scoped file has unchanged content".
+      return {
+        ok: false,
+        errors: [`git diff --numstat failed: ${numstatResult.error}`],
+        summary: 'suggested scope: git numstat failed (fail-closed)',
+      };
+    }
+    const numstat = numstatResult.output;
     const missing = checkScopedFiles(scopedFiles, changedSet, numstat, failures);
     ctx.scopeChecked = scopedFiles.length;
     appendForCheckType(

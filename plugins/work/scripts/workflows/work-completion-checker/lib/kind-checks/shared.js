@@ -195,9 +195,16 @@ function readReuseAudit(specDir) {
 /**
  * Collect the union of file paths declared under per-task scope subsections
  * in tasks.md. For each `## Task N` block:
- *   - If `### Files in scope` is present, its bullet list wins (Open Q #3).
+ *   - If `### Files in scope` is present (even with zero bullets), its bullet
+ *     list wins (Open Q #3: Files-in-scope is canonical when authored).
  *   - Otherwise, fall back to `### Suggested Scope` bullets.
  * Returns `null` when neither subsection appears in any task.
+ *
+ * B7 fix: `extractBulletPaths` now returns `[]` for present-but-empty
+ * sections and `null` only when the heading is absent. An author who
+ * explicitly authors `### Files in scope` with zero bullets ("no files
+ * required") is honored instead of silently falling through to the legacy
+ * Suggested Scope, which may enforce different files.
  */
 function readSuggestedScopeFiles(tasksDir) {
   const text = specShared.readTasks(tasksDir);
@@ -211,13 +218,13 @@ function readSuggestedScopeFiles(tasksDir) {
     const nextTop = after.match(/^##\s/m);
     const block = nextTop ? after.slice(0, nextTop.index) : after;
     const filesInScope = extractBulletPaths(block, /^###\s+Files in scope\b/im);
-    if (filesInScope) {
+    if (filesInScope !== null) {
       sawAny = true;
       for (const p of filesInScope) files.add(p);
       continue;
     }
     const suggested = extractBulletPaths(block, /^###\s+Suggested Scope\b/im);
-    if (suggested) {
+    if (suggested !== null) {
       sawAny = true;
       for (const p of suggested) files.add(p);
     }
@@ -237,9 +244,9 @@ function extractBulletPaths(block, headingRe) {
     const m = line.match(/^\s*[-*]\s+`([^`]+)`/);
     if (m) out.push(m[1]);
   }
-  // Treat empty section as absent so the `### Suggested Scope` fallback fires
-  // when `### Files in scope` exists but has zero bullets.
-  if (out.length === 0) return null;
+  // Present-but-empty: return [] so the caller distinguishes it from absent
+  // (null). Honors authored intent: empty Files-in-scope means "no files",
+  // not "fall back to Suggested Scope".
   return out;
 }
 

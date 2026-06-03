@@ -141,7 +141,7 @@ test.describe('readSuggestedScopeFiles(tasksDir)', () => {
     }
   });
 
-  test('falls back to `### Suggested Scope` when `### Files in scope` is present but empty (Bug 3)', () => {
+  test('present-but-empty `### Files in scope` wins over Suggested Scope (B7: honors authored intent)', () => {
     const dir = mkTmp();
     try {
       writeTasks(
@@ -160,7 +160,10 @@ test.describe('readSuggestedScopeFiles(tasksDir)', () => {
       );
       const result = shared.readSuggestedScopeFiles(dir);
       assert.ok(Array.isArray(result));
-      assert.deepEqual(result, ['path/to/fallback.js']);
+      // B7: an explicitly empty Files-in-scope means "no files required" and
+      // must NOT silently fall back to the legacy Suggested Scope, which may
+      // enforce different files.
+      assert.deepEqual(result, []);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -14,12 +14,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const childProcess = require('node:child_process');
 
 const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readReuseAudit, readChangedFiles } = require('../kind-checks/shared');
 const { makeFailure } = require('../failure-record');
 const { appendForCheckType } = require('../failure-store');
 const { escapeRegex } = require('../../../lib/parse-completion-status');
+const config = require('../../../lib/config');
 
 const SUFFIX_RE = /([A-Z][a-z0-9]+)$/;
 
@@ -66,14 +68,43 @@ function loadChangedContents(ctx, changed) {
   return out;
 }
 
-// Proxy check: returns true when the symbol appears anywhere in the full
-// content of a changed file — not strictly in the added hunks. A file that
-// already contained the symbol in untouched code passes even if the change
-// added an alternative implementation alongside it. The suffix-candidate
-// hint in `buildMissingFailure` catches the most common drift case
-// (e.g. `ContentPageToolbar` declared MUST-reuse, but the diff introduces
-// `ExploreBulkToolbar` while the original is unreferenced).
-function symbolPresentIn(symbol, fileBlobs) {
+// B3 fix: extract just the added-line text from `git diff -U0` output so
+// reuse checks only count lines this PR actually added. Comments, unchanged
+// imports, and incidental mentions in untouched code no longer pass the gate.
+// Returns '' if git fails — callers treat empty addedLines as "no signal" and
+// fall back to whole-file content (keeping behavior fail-closed-but-soft when
+// git is unavailable; the soft fallback is logged on the failure record).
+function readAddedLines(ctx) {
+  const root = ctx.worktreeRoot || process.cwd();
+  for (const base of config.getDiffBaseCandidates({ cwd: root })) {
+    const r = childProcess.spawnSync('git', ['diff', '-U0', `${base}...HEAD`], {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (r && r.status === 0) {
+      // Keep only lines starting with `+` but not `+++` (file header).
+      const adds = [];
+      for (const line of (r.stdout || '').split('\n')) {
+        if (line.startsWith('+++')) continue;
+        if (line.startsWith('+')) adds.push(line.slice(1));
+      }
+      return adds.join('\n');
+    }
+  }
+  return '';
+}
+
+// Strict check (B3): the symbol must appear in lines the PR added — not in
+// pre-existing code. When `addedLines` is empty (git unavailable), fall back
+// to the full-content proxy and let the caller note the degradation.
+function symbolPresentInAdded(symbol, addedLines) {
+  if (!addedLines) return null; // signal: caller should fall back
+  const re = new RegExp(`\\b${escapeRegex(symbol)}\\b`);
+  return re.test(addedLines);
+}
+
+function symbolPresentInBlobs(symbol, fileBlobs) {
   const re = new RegExp(`\\b${escapeRegex(symbol)}\\b`);
   return fileBlobs.some((f) => re.test(f.content));
 }
@@ -102,13 +133,18 @@ function buildMissingFailure(entry, joined) {
   });
 }
 
-function checkMustReuseEntries(entries, blobs, joined, failures) {
+function checkMustReuseEntries(entries, blobs, joined, addedLines, failures) {
   let mustChecked = 0;
   let mustMissing = 0;
   for (const entry of entries) {
     if (!entry || entry.mustReuse !== true) continue;
     mustChecked += 1;
-    if (symbolPresentIn(entry.symbol, blobs)) continue;
+    // Prefer added-line match (B3). If git was unavailable, fall back to the
+    // legacy full-content proxy so we don't fail-closed on missing tooling.
+    const addedHit = symbolPresentInAdded(entry.symbol, addedLines);
+    const present =
+      addedHit === null ? symbolPresentInBlobs(entry.symbol, blobs) : addedHit;
+    if (present) continue;
     mustMissing += 1;
     failures.push(buildMissingFailure(entry, joined));
   }
@@ -157,7 +193,14 @@ async function validate(ctx) {
     const changed = readChangedFiles(ctx) || [];
     const blobs = loadChangedContents(ctx, changed);
     const joined = blobs.map((b) => b.content).join('\n');
-    const { mustChecked, mustMissing } = checkMustReuseEntries(entries, blobs, joined, failures);
+    const addedLines = readAddedLines(ctx);
+    const { mustChecked, mustMissing } = checkMustReuseEntries(
+      entries,
+      blobs,
+      joined,
+      addedLines,
+      failures,
+    );
     ctx.reuseAuditChecked = mustChecked;
     appendForCheckType(
       ctx.tasksDir,
@@ -201,3 +244,5 @@ module.exports = function register(registerPhase) {
 module.exports.validate = validate;
 module.exports.instructions = instructions;
 module.exports.extractSuffixCandidates = extractSuffixCandidates;
+module.exports.symbolPresentInAdded = symbolPresentInAdded;
+module.exports.symbolPresentInBlobs = symbolPresentInBlobs;
