@@ -112,7 +112,6 @@ function resolvePrContext({ ticket, worktree }) {
   const status = fetchPrStatus(prNumber, worktree);
   if (!status) return null;
   const kind = classify(status.checksState, status.mergeable);
-  if (!kind) return null;
   return { prNumber, status, kind };
 }
 
@@ -123,10 +122,23 @@ function detect({ ticket, worktree }) {
 
   const prev = state.read(ticket, 'pr-status');
   const now = state.now();
+
+  // Unclassified state (UNSTABLE/BLOCKED/etc.): refresh marker so heartbeat
+  // doesn't keep reporting a stale lastState (e.g. lingering 'pr-ready'),
+  // but don't emit. Marker write is unconditional so downstream readers
+  // always see the current PR snapshot.
+  if (!kind) {
+    state.write(ticket, 'pr-status', {
+      prNumber,
+      sha: status.sha,
+      lastState: null,
+      lastEmittedAt: (prev && prev.lastEmittedAt) || 0,
+    });
+    return { hit: false };
+  }
+
   const shouldEmit = computeEmitDecision(prev, status, kind);
 
-  // Always write the marker so subsequent reads see the latest state, even
-  // if we don't emit this tick.
   state.write(ticket, 'pr-status', {
     prNumber,
     sha: status.sha,
