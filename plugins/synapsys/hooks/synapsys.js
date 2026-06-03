@@ -215,6 +215,20 @@ function recoverCiteSignals(memory) {
   }
 }
 
+// Dedupe scanForCitations hits per memory and emit recordCited; fail-open.
+function emitCitations(hits, payload) {
+  const seen = new Set();
+  for (const hit of hits) {
+    if (!hit || !hit.memory || seen.has(hit.memory.name)) continue;
+    seen.add(hit.memory.name);
+    try {
+      recordCited(hit.memory, payload, hit.match);
+    } catch {
+      // fail-open
+    }
+  }
+}
+
 // Stop-only: scan response text for citations of any previously-fired memory.
 // Dedupes via Set so each memory is recorded at most once per Stop.
 function runCiteScan(payload, memories) {
@@ -235,17 +249,7 @@ function runCiteScan(payload, memories) {
       .filter((m) => m && firedNames.has(m.name))
       .map(recoverCiteSignals);
     if (!candidates.length) return;
-    const hits = scanForCitations(candidates, responseText);
-    const seen = new Set();
-    for (const hit of hits) {
-      if (!hit || !hit.memory || seen.has(hit.memory.name)) continue;
-      seen.add(hit.memory.name);
-      try {
-        recordCited(hit.memory, payload, hit.match);
-      } catch {
-        // fail-open
-      }
-    }
+    emitCitations(scanForCitations(candidates, responseText), payload);
   } catch {
     // fail-open
   }
