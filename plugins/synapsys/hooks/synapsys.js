@@ -156,7 +156,11 @@ function extractFromTranscript(transcriptPath) {
 
 function extractResponseText(payload) {
   if (!payload) return '';
-  if (typeof payload.response === 'string') return payload.response;
+  // Prefer payload.response only when it's non-empty; an empty string here
+  // would otherwise mask a transcript_path with the real assistant output.
+  if (typeof payload.response === 'string' && payload.response.length > 0) {
+    return payload.response;
+  }
   if (typeof payload.transcript_path === 'string') return extractFromTranscript(payload.transcript_path);
   return '';
 }

@@ -484,3 +484,45 @@ test('Cited event fires when Stop reads from transcript_path with Claude Code fo
   const cited = rows.filter((r) => r.event === 'cited' && r.memory === 'tx-memory');
   assert.equal(cited.length, 1, `expected 1 cited row for tx-memory, got ${cited.length}. rows: ${JSON.stringify(rows)}`);
 });
+
+// PR #524 cursor[bot] Medium — empty payload.response must not short-circuit transcript_path
+test('Empty payload.response falls through to transcript_path scan', (t) => {
+  const home = mktemp('synapsys-disp-tel-home-');
+  const fx = makeFixture({ home });
+  t.after(fx.cleanup);
+
+  writeMemory(fx.storeDir, 'fallback-memory', {
+    description: 'x',
+    events: '[UserPromptSubmit, Stop]',
+    triggerPrompt: 'fallback-trigger',
+    body: 'fallback-memory body',
+  });
+
+  const sessionId = 'fallback-session-1';
+  const firedRes = runDispatcher(
+    'UserPromptSubmit',
+    { cwd: fx.cwd, session_id: sessionId, prompt: 'mentions fallback-trigger here' },
+    { home }
+  );
+  assert.equal(firedRes.status, 0);
+
+  const transcript = path.join(home, 'transcript.jsonl');
+  fs.writeFileSync(
+    transcript,
+    JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'I use fallback-memory now.' }] },
+    }) + '\n'
+  );
+
+  const stopRes = runDispatcher(
+    'Stop',
+    { cwd: fx.cwd, session_id: sessionId, response: '', transcript_path: transcript },
+    { home }
+  );
+  assert.equal(stopRes.status, 0);
+
+  const jsonl = path.join(telemetryDirFor(home), `${sessionId}.jsonl`);
+  const cited = readJsonl(jsonl).filter((r) => r.event === 'cited' && r.memory === 'fallback-memory');
+  assert.equal(cited.length, 1, `expected 1 cited row when response='' and transcript_path is set`);
+});
