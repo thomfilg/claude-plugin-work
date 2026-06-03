@@ -34,15 +34,12 @@ const DETECTORS = {
 };
 
 // Heartbeat: every HEARTBEAT_MIN emit a positive summary so silence on the
-// daemon side can't be mistaken for "nothing happening." See detectors/commit-stall.js
-// for the threshold dedup contract used to keep commit-stall noise bounded.
+// daemon side can't be mistaken for "nothing happening."
 const HEARTBEAT_MIN = parseInt(process.env.HEARTBEAT_MIN || '30', 10);
 let lastHeartbeatAt = 0;
 
 // Re-emit escalation: when the same (session, kind, sha/phase) alert fires
-// this many times in a row, the daemon auto-rotates the slot (kills the
-// session via freeDeadEndSlot). Operator no longer needs to make a judgment
-// call on whether a stuck agent is recoverable.
+// this many times, auto-rotate the slot via freeDeadEndSlot.
 const DEAD_END_REEMITS = parseInt(process.env.DEAD_END_REEMITS || '3', 10);
 
 function maybeEscalateToDeadEnd(ctx, kind, repeatCount, sha) {
@@ -314,6 +311,9 @@ function tickSession(session) {
     return;
   }
   state.clear(ctx.session, 'question');
+  // Reset persisted question-pending count so a later prompt in the same
+  // phase doesn't inherit [REPEAT N] and fire freeDeadEndSlot prematurely.
+  alerts.resetCount(alerts.alertKey({ session: ctx.session, kind: 'question-pending', phase: ctx.phase }));
 
   const detectorsToRun = phaseFor(ctx.phase).detectors.filter((k) => k !== 'question');
 
