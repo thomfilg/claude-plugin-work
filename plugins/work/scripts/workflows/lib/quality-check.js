@@ -21,7 +21,7 @@
  *   const { command, strategy } = resolveQualityCommand('/path/to/repo');
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { resolvePluginRootHonouringEnv } = require('../work/lib/resolve-plugin-root');
@@ -146,14 +146,17 @@ function runQualityCheck(options = {}) {
     };
   }
 
-  // For standard-scripts, run each individually to get per-script failure info
+  // For standard-scripts, run each individually to get per-script failure info.
+  // Use execFileSync so the script name and pnpm path are passed as argv tokens
+  // — no shell interpolation, no command-injection surface from env-derived
+  // paths or unusual script names.
   if (strategy === 'standard-scripts') {
     const failures = [];
     let allOutput = '';
 
     for (const script of scripts) {
       try {
-        const output = execSync(`pnpm run ${script} 2>&1`, {
+        const output = execFileSync('pnpm', ['run', script], {
           encoding: 'utf8',
           timeout,
           cwd: repoRoot,
@@ -180,9 +183,16 @@ function runQualityCheck(options = {}) {
     return { success: true, output: allOutput, strategy, command };
   }
 
-  // For Tier 1 and Tier 2: run the single command
+  // For Tier 1 and Tier 2: run via execFileSync with a strategy-derived argv.
+  // The `command` string is preserved for the return value (so callers see what
+  // ran), but execution uses an explicit file+args pair so env-derived paths
+  // like BUNDLED_DEV_CHECK are never re-parsed by a shell.
+  const spec =
+    strategy === 'project-dev-check'
+      ? { file: 'pnpm', args: ['dev:check'] }
+      : { file: BUNDLED_DEV_CHECK, args: [] };
   try {
-    const output = execSync(command, {
+    const output = execFileSync(spec.file, spec.args, {
       encoding: 'utf8',
       timeout,
       cwd: repoRoot,
