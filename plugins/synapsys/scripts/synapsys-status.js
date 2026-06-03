@@ -27,7 +27,7 @@ const os = require('node:os');
 const { makeFlag } = require('../lib/cli-args');
 const { loadDomainRegistry } = require('../lib/domains');
 const { loadStickyState } = require('../lib/sticky-state');
-const { classifyWithSticky, iterateLeafSignals } = require('../lib/classifier');
+const { classifyActiveDomains, iterateLeafSignals } = require('../lib/classifier');
 const { makePalette } = require('../lib/ansi-palette');
 
 function parseArgs(argv) {
@@ -120,10 +120,15 @@ function safeLoadSticky(stickyPath) {
   }
 }
 
+// Read-only: mirror the hook's non-prompt path so the CLI never advances streaks.
 function safeClassify({ prompt, recentToolCalls, registry, stickyState, sessionId }) {
   try {
-    return classifyWithSticky({ prompt, recentToolCalls, registry, stickyState, sessionId })
-      .activeDomains;
+    const active = classifyActiveDomains({ prompt, recentToolCalls, registry });
+    const session = (stickyState && stickyState[sessionId]) || {};
+    for (const domain of Object.keys(session)) {
+      if (session[domain] && session[domain].sticky === true) active.add(domain);
+    }
+    return active;
   } catch (_) {
     return new Set();
   }

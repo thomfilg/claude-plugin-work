@@ -117,14 +117,48 @@ test('synapsys-status --json emits structured active set with attribution', () =
     ['root: git', '  leaf: commit', '    signal_prompt: \\bgit commit\\b', ''].join('\n')
   );
 
-  const res = runStatus(home, [
-    '--json',
-    '--session-id=sess-json',
-    '--prompt=git commit now',
-  ]);
+  const res = runStatus(home, ['--json', '--session-id=sess-json', '--prompt=git commit now']);
   assert.equal(res.status, 0, `exit 0, stderr=${res.stderr}`);
   const parsed = JSON.parse(res.stdout);
   assert.ok(Array.isArray(parsed.active), 'active is array');
   assert.ok(parsed.active.includes('git'));
   assert.ok(parsed.active.includes('git:commit'));
+});
+
+test('synapsys-status: read-only — does not advance sticky streaks across repeated calls', () => {
+  const home = makeHome();
+  writeRegistry(
+    home,
+    ['root: git', '  leaf: commit', '    signal_prompt: \\bgit commit\\b', ''].join('\n')
+  );
+  const initialState = {
+    'sess-ro': {
+      git: { activeStreak: 1, quietStreak: 0, sticky: false, lastSeenTs: Date.now() },
+      'git:commit': { activeStreak: 1, quietStreak: 0, sticky: false, lastSeenTs: Date.now() },
+    },
+  };
+  writeStickyState(home, initialState);
+  const stickyPath = path.join(home, '.claude', 'synapsys', '.state', 'sticky-domains.json');
+
+  for (let i = 0; i < 2; i += 1) {
+    const res = runStatus(home, ['--session-id=sess-ro', '--prompt=git commit -m wip']);
+    assert.equal(res.status, 0, `exit 0, stderr=${res.stderr}`);
+  }
+
+  const after = JSON.parse(fs.readFileSync(stickyPath, 'utf8'));
+  assert.deepEqual(after, initialState, 'status CLI must not mutate persisted sticky state');
+
+  // Sharper: a domain at the edge of being dropped must still appear active in
+  // status output until the HOOK (source of truth) advances the streak. Status
+  // calling classifyWithSticky would have stepped quietStreak to threshold and
+  // dropped the entry, making status disagree with the hook.
+  writeStickyState(home, {
+    'sess-edge': {
+      git: { activeStreak: 0, quietStreak: 2, sticky: true, lastSeenTs: Date.now() },
+    },
+  });
+  const res = runStatus(home, ['--json', '--session-id=sess-edge', '--prompt=hello world']);
+  assert.equal(res.status, 0);
+  const parsed = JSON.parse(res.stdout);
+  assert.ok(parsed.active.includes('git'), 'sticky domain still active per persisted state');
 });
