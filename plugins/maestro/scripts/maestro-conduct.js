@@ -283,7 +283,7 @@ function runPrStatusDetector(ctx) {
     .join(', ');
   const instruction =
     sHit.kind === 'pr-ready'
-      ? `Spawn work-workflow:code-checker (Agent tool, keep alive in tmux until verdict) on PR #${sHit.prNumber} sha=${(sHit.sha || '').slice(0, 7)} for ${ctx.ticket}. Reviewer must answer FOUR questions: (1) Did the agent complete every requirement/AC in the ticket? (2) Did it introduce any bug (logic errors, regressions, broken edge cases)? (3) Did it add any security vulnerability (injection, secrets, unsafe shell, path traversal)? (4) Did it bypass any /work workflow gate (state edits, set-step CLI, completion-checker skip, fake TDD evidence, --no-verify, deferral annotations)? Verdict must be APPROVED only if ALL four are clean. On NEEDS-WORK → forward verbatim findings to ${ctx.session} via tmux send-keys; re-run after agent pushes. On APPROVED → surface PR URL to operator. Slot will be auto-freed if phase=ci/wait_merge.`
+      ? `Spawn work-workflow:code-checker (Agent tool, keep alive in tmux until verdict) on PR #${sHit.prNumber} sha=${(sHit.sha || '').slice(0, 7)} for ${ctx.ticket}. Reviewer must answer FOUR questions: (1) Did the agent complete every requirement/AC in the ticket? (2) Did it introduce any bug (logic errors, regressions, broken edge cases)? (3) Did it add any security vulnerability (injection, secrets, unsafe shell, path traversal)? (4) Did it bypass any /work workflow gate (state edits, set-step CLI, completion-checker skip, fake TDD evidence, --no-verify, deferral annotations)? Verdict must be APPROVED only if ALL four are clean. On NEEDS-WORK → forward verbatim findings to ${ctx.session} via tmux send-keys; re-run after agent pushes. On APPROVED → surface PR URL to operator; operator merges PR and kills tmux sessions ${ctx.ticket}-work + ${ctx.ticket}-listen to free the pool slot.`
       : `tmux capture-pane -t ${ctx.session} -p | tail -40 — drive agent to fix failing checks IN-PR (no skip, no follow-up issue). Failing: ${failingList || 'see PR'}.`;
   actions.alert({
     session: ctx.session,
@@ -297,18 +297,14 @@ function runPrStatusDetector(ctx) {
     failingChecks: sHit.failingChecks,
     instruction,
   });
-  // CI-gate slot rotation: when PR is CLEAN/SUCCESS and the agent is sitting
-  // in a wait-for-merge phase, free the pool slot automatically so the
-  // orchestrator can bootstrap the next ticket. Operator merges separately.
-  // Disable with AUTO_FREE_CI_SLOT=0.
-  if (sHit.kind === 'pr-ready' && ['ci', 'wait_merge'].includes(ctx.phase)) {
-    actions.freeCIGateSlot({
-      session: ctx.session,
-      ticket: ctx.ticket,
-      prNumber: sHit.prNumber,
-      sha: sHit.sha,
-    });
-  }
+  // CI-gate slot rotation removed: previously this called freeCIGateSlot
+  // unconditionally on pr-ready in ci/wait_merge, which killed the -work
+  // tmux session the alert instruction had just told the operator to forward
+  // code-checker NEEDS-WORK findings to. The race destroyed the remediation
+  // path inside the same alert. Slot freeing is now operator-driven (see
+  // maestro-free-slot.sh) and must happen only AFTER the code-checker
+  // verdict is APPROVED. AUTO_FREE_CI_SLOT env var is preserved by
+  // freeCIGateSlot itself for callers that re-enable this path explicitly.
 }
 
 /** Run the per-session pipeline. Returns when the session has been fully processed. */
