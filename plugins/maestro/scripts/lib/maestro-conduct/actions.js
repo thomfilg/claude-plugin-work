@@ -118,7 +118,7 @@ function interrupt(session, reason) {
 }
 
 function alert(reasonObj) {
-  alerts.alert(reasonObj);
+  return alerts.alert(reasonObj);
 }
 
 /**
