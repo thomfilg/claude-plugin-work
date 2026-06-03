@@ -17,6 +17,7 @@ const { spawnSync } = require('child_process');
 const tmux = require('./tmux');
 const alerts = require('./alerts');
 const state = require('./state');
+const { headSha } = require('./detectors/gh-shared');
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const SKILL_NAME = process.env.SKILL_NAME || 'work';
@@ -161,10 +162,24 @@ function checkRestartGuards({ session, ticket, worktree }) {
   // CI-gate slot-freed guard. If freeCIGateSlot already killed this ticket's
   // tmux because its PR hit pr-ready, do NOT resurrect it — the agent's job
   // is done until operator merges. Marker is per-ticket, written by
-  // freeCIGateSlot / freeDeadEndSlot. Cleared automatically on SHA change
-  // (next pr-ready emit with a new sha overwrites the marker).
+  // freeCIGateSlot / freeDeadEndSlot.
+  //
+  // SHA-gated clear: if the worktree HEAD has moved past the stored SHA (new
+  // commit pushed, e.g. CI broke again and the agent — or operator — pushed
+  // a fix), the freeze is stale. Clear the marker and let autoRestart proceed
+  // so the agent can resume monitoring the new CI run. Without this clear,
+  // `killed: true` would block restarts forever even after the underlying
+  // PR state has changed.
   const ciFreed = state.read(ticket, 'ci-gate-freed');
   if (ciFreed && ciFreed.killed) {
+    const currentSha = headSha(worktree);
+    if (currentSha && ciFreed.sha && currentSha !== ciFreed.sha) {
+      alerts.log(
+        `${session} AUTO-RESTART ci-gate-freed marker cleared: HEAD moved ${(ciFreed.sha || '').slice(0, 7)} -> ${currentSha.slice(0, 7)}`
+      );
+      state.clear(ticket, 'ci-gate-freed');
+      return { skip: false };
+    }
     alerts.log(
       `${session} AUTO-RESTART skipped: ticket ${ticket} CI-gate-freed at sha=${(ciFreed.sha || '').slice(0, 7)}; awaiting operator merge`
     );
