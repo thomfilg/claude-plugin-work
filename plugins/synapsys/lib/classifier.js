@@ -86,4 +86,56 @@ function matchesAnyTool(patterns, tools) {
   return false;
 }
 
-module.exports = { classifyActiveDomains, iterateLeafSignals };
+/**
+ * Compose pure-regex classification with sticky-domain hysteresis (GH-513 Task 6).
+ *
+ * Returns `{ activeDomains, nextStickyState }` where:
+ *   - `activeDomains` = raw classifier output ∪ sticky-active domains for `sessionId`.
+ *   - `nextStickyState` is the updated sticky-state object (caller persists it).
+ *
+ * AC5: after 3 consecutive raw-active prompts a domain becomes sticky and
+ * survives 1 subsequent quiet prompt.
+ * AC6: after 3 consecutive quiet prompts the sticky entry is dropped.
+ *
+ * Pure: relies only on caller-supplied `now`. Does not touch `classifyActiveDomains`.
+ *
+ * @param {object} args
+ * @param {string|null|undefined} args.prompt
+ * @param {string[]|null|undefined} args.recentToolCalls
+ * @param {object} args.registry
+ * @param {object} args.stickyState
+ * @param {string} args.sessionId
+ * @param {number} [args.now]
+ * @returns {{ activeDomains: Set<string>, nextStickyState: object }}
+ */
+function classifyWithSticky({
+  prompt,
+  recentToolCalls,
+  registry,
+  stickyState,
+  sessionId,
+  now = Date.now(),
+} = {}) {
+  const { updateStickyState } = require('./sticky-state');
+
+  const rawActive = classifyActiveDomains({ prompt, recentToolCalls, registry });
+  const nextStickyState = updateStickyState({
+    state: stickyState,
+    sessionId,
+    rawActiveSet: rawActive,
+    now,
+  });
+
+  const activeDomains = new Set(rawActive);
+  const session = (nextStickyState && nextStickyState[sessionId]) || {};
+  for (const domain of Object.keys(session)) {
+    const entry = session[domain];
+    if (entry && entry.sticky === true) {
+      activeDomains.add(domain);
+    }
+  }
+
+  return { activeDomains, nextStickyState };
+}
+
+module.exports = { classifyActiveDomains, classifyWithSticky, iterateLeafSignals };

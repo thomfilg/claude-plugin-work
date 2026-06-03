@@ -20,6 +20,11 @@ const { discoverStores, listMemoriesFromStore } = require(
   path.join(__dirname, '..', 'lib', 'memory-store')
 );
 const { selectForEvent } = require(path.join(__dirname, '..', 'lib', 'matcher'));
+const { loadDomainRegistry } = require(path.join(__dirname, '..', 'lib', 'domains'));
+const { classifyWithSticky } = require(path.join(__dirname, '..', 'lib', 'classifier'));
+const { loadStickyState, saveStickyState } = require(
+  path.join(__dirname, '..', 'lib', 'sticky-state')
+);
 
 const VALID_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop']);
 const MAX_INJECT_CHARS = 8000;
@@ -83,6 +88,44 @@ function getSessionStartHint(event, stores, memories) {
   return null;
 }
 
+// Classify the payload's prompt + recentToolCalls into a set of active
+// domain tags, persist the next sticky-state, and return an opts object
+// suitable for `selectForEvent(..., opts)`. Fail-open: any error → returns
+// `undefined` so the caller falls back to pre-classifier behavior (R3/R4/R7).
+function buildActiveDomainsForPayload(event, payload) {
+  try {
+    const registry = loadDomainRegistry();
+    if (!registry || !registry.roots || registry.roots.size === 0) return undefined;
+
+    const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
+    const recentToolCalls = Array.isArray(payload.recentToolCalls)
+      ? payload.recentToolCalls
+      : Array.isArray(payload.recent_tool_calls)
+        ? payload.recent_tool_calls
+        : [];
+    const sessionId = payload.session_id || payload.sessionId || 'default';
+
+    const stickyState = loadStickyState();
+    const { activeDomains, nextStickyState } = classifyWithSticky({
+      prompt,
+      recentToolCalls,
+      registry,
+      stickyState,
+      sessionId,
+    });
+
+    try {
+      saveStickyState({ state: nextStickyState });
+    } catch {
+      // fail-open: persistence failures must not block injection
+    }
+
+    return { activeDomains };
+  } catch {
+    return undefined;
+  }
+}
+
 function formatMatchedOutput(matched) {
   const out = matched.map(formatMemory).join('\n\n---\n\n');
   if (out.length <= MAX_INJECT_CHARS) return out;
@@ -106,7 +149,11 @@ function formatMatchedOutput(matched) {
     }
 
     if (!memories.length) process.exit(0);
-    const matched = selectForEvent(memories, event, payload);
+
+    // Build activeDomains from registry + sticky-state (fail-open: on any
+    // error, omit `opts.activeDomains` to preserve pre-classifier behavior).
+    const selectOpts = buildActiveDomainsForPayload(event, payload);
+    const matched = selectForEvent(memories, event, payload, selectOpts);
     if (!matched.length) process.exit(0);
 
     process.stdout.write(formatMatchedOutput(matched));

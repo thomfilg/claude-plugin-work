@@ -13,7 +13,7 @@
 /**
  * @typedef {Object} MatchResult
  * @property {boolean} fired
- * @property {('events-exclude'|'no-prompt-match'|'no-pretool-match'|'no-content-match'|'negative-excludes'|'no-session-trigger'|'expired'|'disabled')} [reason]
+ * @property {('events-exclude'|'no-prompt-match'|'no-pretool-match'|'no-content-match'|'negative-excludes'|'no-session-trigger'|'expired'|'disabled'|'domain-mismatch')} [reason]
  * @property {Matched} [matched]
  */
 
@@ -322,17 +322,45 @@ function matchStop(memory) {
 }
 
 /**
+ * Domain gate (GH-513 R4 / AC2): when `memory.domain` is non-empty AND an
+ * `activeDomains` set is supplied AND their intersection is empty, the memory
+ * is excluded BEFORE trigger evaluation. Returns true when the memory should
+ * be skipped with reason `domain-mismatch`.
+ *
+ * Fail-open semantics:
+ *   - memory.domain empty/missing  -> not gated (backward compat R10/AC1)
+ *   - activeDomains undefined/null -> not gated (backward compat R10)
+ *
+ * @param {object} memory
+ * @param {Set<string>|undefined} activeDomains
+ * @returns {boolean}
+ */
+function isDomainMismatch(memory, activeDomains) {
+  if (!activeDomains) return false;
+  const domains = memory && memory.domain;
+  if (!Array.isArray(domains) || domains.length === 0) return false;
+  for (const d of domains) {
+    if (activeDomains.has(d)) return false;
+  }
+  return true;
+}
+
+/**
  * Select memories that fire for the given event payload.
  * Reads `.fired` from each per-memory `MatchResult`.
  *
  * @param {Array<object>} memories
  * @param {string} event
  * @param {object} payload
+ * @param {{ activeDomains?: Set<string> }} [opts]
  * @returns {Array<object>} subset of `memories` whose matcher fired.
  */
-function selectForEvent(memories, event, payload) {
+function selectForEvent(memories, event, payload, opts) {
+  const activeDomains = opts && opts.activeDomains;
   const matched = [];
   for (const m of memories) {
+    // Domain gate ANDed BEFORE trigger evaluation (cheaper check first).
+    if (isDomainMismatch(m, activeDomains)) continue;
     let result = { fired: false };
     if (event === 'UserPromptSubmit') result = matchPrompt(m, payload?.prompt || '');
     else if (event === 'PreToolUse') result = matchPreTool(m, payload);
@@ -356,4 +384,5 @@ module.exports = {
   evaluatePretoolContent,
   evaluatePretoolContentNot,
   hasNegativeContentPatterns,
+  isDomainMismatch,
 };
