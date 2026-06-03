@@ -37,11 +37,23 @@ function isDisabled(memory) {
   return false;
 }
 
+// Whitelist filename characters so an attacker-controlled session_id (or one
+// containing path separators / "..") can never make appendFileSync escape
+// the telemetry directory. Anything containing characters outside [A-Za-z0-9._-]
+// — including '/', '\\', or "..", and leading dots used to hide files — falls
+// back to the unknown-session bucket.
+const SAFE_SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
+
 function resolveSessionId(payload) {
-  if (payload && typeof payload.session_id === 'string' && payload.session_id) {
-    return payload.session_id;
+  if (!payload || typeof payload.session_id !== 'string' || !payload.session_id) {
+    return '_unknown-session';
   }
-  return '_unknown-session';
+  const candidate = payload.session_id;
+  if (!SAFE_SESSION_ID.test(candidate)) return '_unknown-session';
+  if (candidate.startsWith('.') || candidate === '..' || candidate.includes('..')) {
+    return '_unknown-session';
+  }
+  return candidate;
 }
 
 function unknownSessionToken() {

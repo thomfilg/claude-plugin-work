@@ -231,3 +231,21 @@ test('extractSignals honors top-level memory.citeSignals (scalar normalized to a
     assert.deepEqual(telemetry.extractSignals(memMeta), ['c']);
   });
 });
+
+// PR #524 cursor[bot] Medium — session_id sanitization (path traversal defense)
+test('resolveSessionId rejects unsafe values (path separators, dotdot, absolute)', () => {
+  withTempHome(() => {
+    const telemetry = require('../telemetry');
+    // Allowed
+    assert.equal(telemetry.resolveSessionId({ session_id: 'abc123' }), 'abc123');
+    assert.equal(telemetry.resolveSessionId({ session_id: 'a-b_c.1' }), 'a-b_c.1');
+    // Disallowed — fall back to _unknown-session
+    assert.equal(telemetry.resolveSessionId({ session_id: '../evil' }), '_unknown-session');
+    assert.equal(telemetry.resolveSessionId({ session_id: '/etc/passwd' }), '_unknown-session');
+    assert.equal(telemetry.resolveSessionId({ session_id: 'a/b' }), '_unknown-session');
+    assert.equal(telemetry.resolveSessionId({ session_id: 'a\\b' }), '_unknown-session');
+    assert.equal(telemetry.resolveSessionId({ session_id: '..' }), '_unknown-session');
+    assert.equal(telemetry.resolveSessionId({ session_id: '.hidden' }), '_unknown-session');
+    assert.equal(telemetry.resolveSessionId({ session_id: 'x'.repeat(200) }), '_unknown-session');
+  });
+});
