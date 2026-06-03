@@ -230,8 +230,12 @@ function runSilenceDetector(ctx) {
     // ticket because the workflow state belongs to the ticket, not the pane).
     ['silence', 'spinner', 'question'].forEach((k) => state.clear(ctx.session, k));
     ['phase', 'pr-comments'].forEach((k) => state.clear(ctx.ticket, k));
+    return true;
   }
-  return true;
+  // autoRestart skipped (wedged quiet window, ci-gate-freed, dead-end, or
+  // missing worktree) — pane is still alive and listed, so let downstream
+  // detectors (notably prStatus) keep emitting pr-ready/pr-broken transitions.
+  return false;
 }
 
 function runPhaseStallDetector(ctx) {
