@@ -71,14 +71,12 @@ function log(line) {
  *
  * The tmux summary line embeds the kind + instruction so it's grep-friendly
  * and self-explanatory in the maestro-alerts pane.
- */
-/**
- * Emit an action-required alert. Returns { count } — the number of times this
- * same (session, kind, sha-or-phase) has been emitted since last reset.
  *
- * The caller must check the count and escalate when it crosses a threshold
- * (typically auto-call freeDeadEndSlot at count >= 3). The instruction string
- * gets a [REPEAT N] prefix when count > 1 so the operator can see momentum.
+ * Returns { count } — the number of times this same (session, kind,
+ * sha-or-phase) has been emitted since last reset. The caller must check
+ * the count and escalate when it crosses a threshold (typically auto-call
+ * freeDeadEndSlot at count >= 3). The instruction string gets a [REPEAT N]
+ * prefix when count > 1 so the operator can see momentum.
  */
 function alert(obj) {
   if (!obj || typeof obj.instruction !== 'string' || !obj.instruction.trim()) {
