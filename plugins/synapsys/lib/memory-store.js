@@ -184,8 +184,11 @@ function normalizeCiteSignals(value) {
     const filtered = value.map((s) => String(s).trim()).filter(Boolean);
     return filtered.length ? filtered : undefined;
   }
-  const s = String(value).trim();
-  return s ? [s] : undefined;
+  // Inline scalar form matches the README example `cite_signals: A, B, C`;
+  // split on commas so each token is a separate signal rather than a single
+  // combined string that would never match the assistant response.
+  const tokens = String(value).split(',').map((s) => s.trim()).filter(Boolean);
+  return tokens.length ? tokens : undefined;
 }
 
 // Coerce `meta.telemetry` to a boolean when explicitly set, or `undefined`

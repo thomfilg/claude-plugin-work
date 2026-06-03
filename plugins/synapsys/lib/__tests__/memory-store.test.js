@@ -142,3 +142,32 @@ test('readMemoryFile top-level telemetry is undefined when field absent', () => 
   assert.equal(memories.length, 1);
   assert.equal(memories[0].telemetry, undefined);
 });
+
+// PR #524 cursor[bot] Medium — inline comma-separated cite_signals must be split
+// per the README example `cite_signals: Button, packages/ui, @scope/foo`.
+test('readMemoryFile splits inline comma-separated cite_signals into tokens', () => {
+  const { storeDir } = makeTempStore();
+  writeMemory(storeDir, 'inline-csv.md', {
+    name: 'inline-csv',
+    description: 'd',
+    cite_signals: 'Button, packages/ui, @app/foo',
+  });
+
+  const store = { kind: 'local', dir: storeDir, projectName: 'test' };
+  const memories = listMemoriesFromStore(store);
+  assert.equal(memories.length, 1);
+  assert.deepEqual(memories[0].citeSignals, ['Button', 'packages/ui', '@app/foo']);
+});
+
+test('readMemoryFile keeps a single scalar cite_signal as one token', () => {
+  const { storeDir } = makeTempStore();
+  writeMemory(storeDir, 'inline-solo.md', {
+    name: 'inline-solo',
+    description: 'd',
+    cite_signals: 'solo',
+  });
+
+  const store = { kind: 'local', dir: storeDir, projectName: 'test' };
+  const memories = listMemoriesFromStore(store);
+  assert.deepEqual(memories[0].citeSignals, ['solo']);
+});
