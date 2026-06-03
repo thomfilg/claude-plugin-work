@@ -42,17 +42,17 @@ The .js daemon emits exactly these event kinds. Anything else is bookkeeping noi
 
 | Event | Shape | Emitted by | Dedup |
 |---|---|---|---|
-| `QUESTION-DETECTED` | `[<S>] QUESTION-DETECTED: …` + structured `MAESTRO-ALERT` row | `detectors/question.js` | Per-session, fires once when prompt sits ≥`Q_WAIT_MIN` minutes |
-| `MAESTRO-ALERT … kind=…` | JSONL row in `/tmp/maestro-alerts.jsonl`, summary line in tmux `maestro-alerts` | `actions.alert` | One per kind per ticket per state, then mutes until state flips |
-| `pr-ready` | `MAESTRO-ALERT … kind=pr-ready prNumber=N sha=…` | `detectors/pr-status.js` | Emit on first sight + state transition; re-emit same state at most every `PR_STATUS_RE_EMIT_MIN` (30m) |
-| `pr-broken` | `MAESTRO-ALERT … kind=pr-broken failingChecks=[…]` | `detectors/pr-status.js` | Same dedup as `pr-ready` |
+| `QUESTION-DETECTED` | `[<S>] QUESTION-DETECTED: …` + structured `ACTION` row | `detectors/question.js` | Per-session, fires once when prompt sits ≥`Q_WAIT_MIN` minutes |
+| `ACTION … kind=…` | JSONL row in `/tmp/maestro-alerts.jsonl`, summary line in tmux `maestro-alerts` | `actions.alert` | One per kind per ticket per state, then mutes until state flips |
+| `pr-ready` | `ACTION … kind=pr-ready prNumber=N sha=…` | `detectors/pr-status.js` | Emit on first sight + state transition; re-emit same state at most every `PR_STATUS_RE_EMIT_MIN` (30m) |
+| `pr-broken` | `ACTION … kind=pr-broken failingChecks=[…]` | `detectors/pr-status.js` | Same dedup as `pr-ready` |
 | `pr-pending` | log-only, `<S> pr-pending PR #N sha=… checks running` | `detectors/pr-status.js` | Per-tick log; informational, **not** an alert |
-| `wedged` | `MAESTRO-ALERT … kind=wedged restartsInWindow=N` + `<S> WEDGED — N auto-restarts in Mm` | `actions.autoRestart` (restart-loop guard) | Once per session per `WEDGED_QUIET_MIN` (60m) suppression window |
+| `wedged` | `ACTION … kind=wedged restartsInWindow=N` + `<S> WEDGED — N auto-restarts in Mm` | `actions.autoRestart` (restart-loop guard) | Once per session per `WEDGED_QUIET_MIN` (60m) suppression window |
 | `AUTO-RESTART after Ns silence` | log-only | `actions.autoRestart` | One per restart, not throttled |
 | `AUTO-RESTART skipped: non-work helper` | log-only | `runSilenceDetector` | Throttled by `SILENCE_LIMIT_SEC` |
 | `NUDGE soft` / `NUDGE interrupt` | log-only + tmux send to agent pane | `actions.soft` / `actions.interrupt` | Per phase `reNudgeMin` |
-| `nudges-exhausted` | `MAESTRO-ALERT … kind=nudges-exhausted` | `handlePhaseStall` | One alert per phase, until phase advances |
-| `pr-comments-stuck` | `MAESTRO-ALERT … kind=pr-comments-stuck` | `handlePrComments` | One alert until comment count or HEAD changes |
+| `nudges-exhausted` | `ACTION … kind=nudges-exhausted` | `handlePhaseStall` | One alert per phase, until phase advances |
+| `pr-comments-stuck` | `ACTION … kind=pr-comments-stuck` | `handlePrComments` | One alert until comment count or HEAD changes |
 | `commit-stall NNNm` | `<S> commit-stall NNNm in phase=… (threshold=TTTm)` | `runCommitStallDetector` | **Threshold-only**: emits at `[30, 60, 120, 240, 480]` minutes, at most 5 lines per stall |
 | `HEARTBEAT N active, X pr-ready, Y pr-broken, Z pr-pending, W wedged ‖ …` | log-only | `maybeEmitHeartbeat` (main loop) | Once per `HEARTBEAT_MIN` (default 30m); always emits even when nothing else changed |
 
@@ -61,7 +61,7 @@ The .js daemon emits exactly these event kinds. Anything else is bookkeeping noi
 Use this exact regex. Anything outside it is noise:
 
 ```
-QUESTION-DETECTED|AUTO-RESTART|SESSION-GONE|NUDGE|MAESTRO-ALERT|pr-ready|pr-broken|wedged|WEDGED|HEARTBEAT|commit-stall
+QUESTION-DETECTED|AUTO-RESTART|SESSION-GONE|NUDGE|ACTION|pr-ready|pr-broken|wedged|WEDGED|HEARTBEAT|commit-stall
 ```
 
 `pr-ready` is the **positive** signal — when you see it, the agent's PR is CLEAN and all checks are green; merge it (or hold per `[[never-auto-merge-pr]]`). `wedged` is the **escalation** signal — auto-restart loop hit its cap; operator must inspect. `HEARTBEAT` is the periodic forced re-read; never ignore it.

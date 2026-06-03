@@ -15,12 +15,12 @@ canonical Monitor regex.
 | Signal | Meaning | Operator action |
 |---|---|---|
 | `QUESTION-DETECTED` | An agent has a menu or permission prompt sitting unanswered | Capture the agent pane, read every menu option, pick the one that is not a bypass |
-| `MAESTRO-ALERT … kind=pr-ready` | All CI checks SUCCESS and `mergeStateStatus=CLEAN` | Run the bypass checker (`work-workflow:code-checker` against the diff) before merging. On APPROVED, the PR is yours to merge or hand to your operator |
-| `MAESTRO-ALERT … kind=pr-broken` | A check is failing or merge state is DIRTY | Identify the failing checks, drive the originating agent to fix in this PR (do not defer to a follow-up) |
-| `MAESTRO-ALERT … kind=wedged` | A session has been auto-restarted ≥3 times in 30m — daemon will not restart it for the next 60m | Inspect the pane manually. Diagnose why /work keeps dying |
-| `MAESTRO-ALERT … kind=nudges-exhausted` | A phase exceeded its budget past `maxNudges` | Surface to operator — the agent may be genuinely stuck |
-| `MAESTRO-ALERT … kind=pr-comments-stuck` | Unaddressed bot review comments on the agent's PR with no new HEAD | Direct the agent to address them in this PR |
-| `MAESTRO-ALERT … kind=question-pending` | Question sat ≥`Q_WAIT_MIN` minutes | Same as QUESTION-DETECTED — pick the legitimate option |
+| `ACTION … kind=pr-ready` | All CI checks SUCCESS and `mergeStateStatus=CLEAN` | Run the bypass checker (`work-workflow:code-checker` against the diff) before merging. On APPROVED, the PR is yours to merge or hand to your operator |
+| `ACTION … kind=pr-broken` | A check is failing or merge state is DIRTY | Identify the failing checks, drive the originating agent to fix in this PR (do not defer to a follow-up) |
+| `ACTION … kind=wedged` | A session has been auto-restarted ≥3 times in 30m — daemon will not restart it for the next 60m | Inspect the pane manually. Diagnose why /work keeps dying |
+| `ACTION … kind=nudges-exhausted` | A phase exceeded its budget past `maxNudges` | Surface to operator — the agent may be genuinely stuck |
+| `ACTION … kind=pr-comments-stuck` | Unaddressed bot review comments on the agent's PR with no new HEAD | Direct the agent to address them in this PR |
+| `ACTION … kind=question-pending` | Question sat ≥`Q_WAIT_MIN` minutes | Same as QUESTION-DETECTED — pick the legitimate option |
 | `commit-stall NNNm (threshold=TTTm)` | Worktree had no new commits across one of the thresholds (`30/60/120/240/480` by default) | If agent is in `implement` and threshold escalated → capture pane. If agent is in `wait_merge`/`complete` → ignore, expected |
 | `NUDGE soft` / `NUDGE interrupt` | Daemon already poked the agent's pane | No operator action — daemon handles escalation |
 | `AUTO-RESTART after Ns silence` | Daemon relaunched a dead `-work` session | Only act if a `wedged` alert follows |
@@ -37,7 +37,7 @@ canonical Monitor regex.
 
 ## The pr-ready playbook (every time)
 
-When `MAESTRO-ALERT kind=pr-ready` lands:
+When `ACTION kind=pr-ready` lands:
 
 1. Spawn `work-workflow:code-checker` against the PR diff inside a tmux session and keep it alive until verdict. The check must answer FOUR questions:
    1. **Completion** — did the agent finish every requirement / AC declared in the ticket?
