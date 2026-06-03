@@ -19,6 +19,7 @@ const alerts = require('./alerts');
 const state = require('./state');
 const { headSha } = require('./detectors/gh-shared');
 const { eligibleTasks } = require('./session-shared');
+const { purgeAlertCountsForTicket } = require('../../maestro-cleanup');
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const SKILL_NAME = process.env.SKILL_NAME || 'work';
@@ -326,6 +327,14 @@ function freeDeadEndSlot({ session, ticket, kind, repeatCount, sha }) {
   const marker = state.read(ticket, 'dead-end') || {};
   if (marker.killed) return false; // already freed
   killTicketTmux(ticket);
+  // Purge persisted alert counts so a fresh agent on the same ticket starts
+  // with a clean repeat-count slate (otherwise it could inherit a count
+  // already ≥ DEAD_END_REEMITS and immediately re-trigger rotation).
+  try {
+    purgeAlertCountsForTicket(ticket, false);
+  } catch (err) {
+    alerts.log(`${session} freeDeadEndSlot: purgeAlertCountsForTicket failed: ${err.message}`);
+  }
   state.write(ticket, 'dead-end', { killed: true, freedAt: state.now(), trigger: kind });
   const next = findNextEligibleTask();
   const autoBootstrapped = next && maybeAutoBootstrap(next.taskId);
