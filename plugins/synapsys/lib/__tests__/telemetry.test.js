@@ -203,3 +203,31 @@ test('telemetryDir returns ~/.claude/synapsys/.telemetry', () => {
     assert.equal(telemetry.telemetryDir(), path.join(home, '.claude', 'synapsys', '.telemetry'));
   });
 });
+
+// PR #524 cursor[bot] Low — isDisabled must honor top-level memory.telemetry
+test('isDisabled honors top-level memory.telemetry === false (memory-store normalized field)', () => {
+  withTempHome(() => {
+    const telemetry = require('../telemetry');
+    assert.equal(telemetry.isDisabled({ name: 'm', telemetry: false }), true);
+    assert.equal(telemetry.isDisabled({ name: 'm', telemetry: true }), false);
+    assert.equal(telemetry.isDisabled({ name: 'm' }), false);
+    // meta fallback still works
+    assert.equal(telemetry.isDisabled({ name: 'm', meta: { telemetry: false } }), true);
+  });
+});
+
+// PR #524 cursor[bot] Medium — extractSignals must honor top-level memory.citeSignals
+test('extractSignals honors top-level memory.citeSignals (scalar normalized to array by memory-store)', () => {
+  withTempHome(() => {
+    const telemetry = require('../telemetry');
+    // Scalar in YAML becomes a one-element array on top-level via memory-store.
+    const memScalar = { name: 'm', citeSignals: ['solo'], body: 'unused', meta: {} };
+    assert.deepEqual(telemetry.extractSignals(memScalar), ['solo']);
+    // Array form
+    const memArr = { name: 'm', citeSignals: ['a', 'b'], body: 'unused', meta: {} };
+    assert.deepEqual(telemetry.extractSignals(memArr), ['a', 'b']);
+    // meta fallback still works when top-level absent
+    const memMeta = { name: 'm', body: 'unused', meta: { cite_signals: ['c'] } };
+    assert.deepEqual(telemetry.extractSignals(memMeta), ['c']);
+  });
+});

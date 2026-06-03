@@ -29,7 +29,11 @@ function telemetryDir() {
 
 function isDisabled(memory) {
   if (process.env.SYNAPSYS_TELEMETRY === '0') return true;
-  if (memory && memory.meta && memory.meta.telemetry === false) return true;
+  if (!memory) return false;
+  // Read top-level normalized field (preferred — memory-store sets this) and
+  // fall back to raw meta for memories constructed without normalization.
+  if (memory.telemetry === false) return true;
+  if (memory.meta && memory.meta.telemetry === false) return true;
   return false;
 }
 
@@ -48,9 +52,13 @@ function ensureDir() {
   try {
     const dir = telemetryDir();
     fs.mkdirSync(dir, { recursive: true });
-    const gi = path.join(dir, '.gitignore');
-    if (!fs.existsSync(gi)) {
-      fs.writeFileSync(gi, '*\n');
+    // Atomic create-if-missing: avoids the TOCTOU window between existsSync
+    // and writeFileSync. EEXIST on concurrent first-write is the desired
+    // "already there" outcome — swallow it.
+    try {
+      fs.writeFileSync(path.join(dir, '.gitignore'), '*\n', { flag: 'wx' });
+    } catch (err) {
+      if (!err || err.code !== 'EEXIST') throw err;
     }
     return dir;
   } catch {
@@ -124,11 +132,12 @@ function stripFences(body) {
 }
 
 function extractAuto(memory) {
+  // Callers (extractSignals) guarantee `memory` is truthy.
   const out = new Set();
-  if (memory && typeof memory.name === 'string' && memory.name.length > 0) {
+  if (typeof memory.name === 'string' && memory.name.length > 0) {
     out.add(memory.name);
   }
-  const body = memory && typeof memory.body === 'string' ? memory.body : '';
+  const body = typeof memory.body === 'string' ? memory.body : '';
   const stripped = stripFences(body);
 
   // First H2/H3 heading text (≥ 4 chars).
@@ -150,10 +159,17 @@ function extractAuto(memory) {
 
 function extractSignals(memory) {
   if (!memory) return [];
-  const declared =
-    memory.meta && Array.isArray(memory.meta.cite_signals)
-      ? memory.meta.cite_signals.filter((s) => typeof s === 'string' && s.length > 0)
-      : [];
+  // Prefer the top-level normalized `citeSignals` array (memory-store coerces
+  // both scalar and list YAML forms here). Fall back to raw `meta.cite_signals`
+  // for memories that bypass the normalizer.
+  const source = Array.isArray(memory.citeSignals)
+    ? memory.citeSignals
+    : Array.isArray(memory.meta && memory.meta.cite_signals)
+      ? memory.meta.cite_signals
+      : null;
+  const declared = source
+    ? source.filter((s) => typeof s === 'string' && s.length > 0)
+    : [];
   if (declared.length > 0) return declared.slice();
   return extractAuto(memory);
 }
