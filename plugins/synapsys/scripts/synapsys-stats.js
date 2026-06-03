@@ -18,6 +18,7 @@ const {
   discoverStores,
   listMemoriesFromStore,
 } = require(require('node:path').join(__dirname, '..', 'lib', 'script-bootstrap'));
+const { telemetryDir } = require(require('node:path').join(__dirname, '..', 'lib', 'telemetry'));
 
 const NOISE_FIRED_THRESHOLD = 10;
 
@@ -26,10 +27,6 @@ function parseWindow(spec) {
   const m = s.match(/^(\d+)d$/i);
   const days = m ? parseInt(m[1], 10) : 7;
   return days * 24 * 60 * 60 * 1000;
-}
-
-function telemetryDirFor(store) {
-  return path.join(store.dir, '.telemetry');
 }
 
 function listJsonlFiles(telDir) {
@@ -81,15 +78,16 @@ function aggregate(cwd, { windowMs }) {
     for (const mem of listMemoriesFromStore(store)) {
       if (mem && mem.name) known.add(mem.name);
     }
-    for (const file of listJsonlFiles(telemetryDirFor(store))) {
-      const events = readJsonlInWindow(file, cutoff);
-      for (const ev of events) {
-        if (!ev || !ev.memory || !ev.event) continue;
-        const c = counts.get(ev.memory) || { fired: 0, cited: 0 };
-        if (ev.event === 'fired') c.fired += 1;
-        else if (ev.event === 'cited') c.cited += 1;
-        counts.set(ev.memory, c);
-      }
+  }
+
+  for (const file of listJsonlFiles(telemetryDir())) {
+    const events = readJsonlInWindow(file, cutoff);
+    for (const ev of events) {
+      if (!ev || !ev.memory || !ev.event) continue;
+      const c = counts.get(ev.memory) || { fired: 0, cited: 0 };
+      if (ev.event === 'fired') c.fired += 1;
+      else if (ev.event === 'cited') c.cited += 1;
+      counts.set(ev.memory, c);
     }
   }
 

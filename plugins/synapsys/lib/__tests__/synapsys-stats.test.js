@@ -34,14 +34,30 @@ function writeMemoryFile(storeDir, name) {
 
 function makeFixture() {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'synapsys-stats-'));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'synapsys-stats-home-'));
   const storeDir = path.join(cwd, '.claude', 'synapsys');
-  const telDir = path.join(storeDir, '.telemetry');
+  // Telemetry lives under the FIXED home dir (matches lib/telemetry.telemetryDir()),
+  // not under the per-store directory.
+  const telDir = path.join(home, '.claude', 'synapsys', '.telemetry');
+  fs.mkdirSync(storeDir, { recursive: true });
   fs.mkdirSync(telDir, { recursive: true });
   fs.writeFileSync(
     path.join(storeDir, '.synapsys.json'),
     JSON.stringify({ projectName: 'synapsys-stats-fixture' })
   );
-  return { cwd, storeDir, telDir, cleanup: () => fs.rmSync(cwd, { recursive: true, force: true }) };
+  const prevHome = process.env.HOME;
+  process.env.HOME = home;
+  return {
+    cwd,
+    home,
+    storeDir,
+    telDir,
+    cleanup: () => {
+      process.env.HOME = prevHome;
+      try { fs.rmSync(cwd, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(home, { recursive: true, force: true }); } catch {}
+    },
+  };
 }
 
 function writeJsonl(file, lines) {
