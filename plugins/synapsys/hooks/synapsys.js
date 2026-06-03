@@ -20,6 +20,66 @@ const { discoverStores, listMemoriesFromStore } = require(
   path.join(__dirname, '..', 'lib', 'memory-store')
 );
 const { selectForEvent } = require(path.join(__dirname, '..', 'lib', 'matcher'));
+const injectLedger = require('../lib/inject-ledger');
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * decideInjection — pure helper implementing the brief AC-5 renderer policy.
+ *
+ *   always       → full body on every match
+ *   once         → full body iff injectedCount === 0, else reminder
+ *   occasionally → full body iff injectedCount % fireCadence === 0, else reminder
+ *
+ * `ledgerEntry` is the per-memory record from `loadLedger().memories[name]`
+ * (or `undefined` for "never injected this session").
+ */
+function resolveCadence(memory) {
+  const raw = Number(memory && memory.fireCadence);
+  return raw > 0 ? raw : 5;
+}
+
+function decideInjection(memory, ledgerEntry) {
+  const mode = (memory && memory.fireMode) || 'once';
+  const count = Number(ledgerEntry && ledgerEntry.injectedCount) || 0;
+  if (mode === 'always') return { kind: 'full' };
+  if (mode === 'occasionally') {
+    const cadence = resolveCadence(memory);
+    return { kind: count % cadence === 0 ? 'full' : 'reminder' };
+  }
+  // default: once
+  return { kind: count === 0 ? 'full' : 'reminder' };
+}
+
+function reminderLine(memory) {
+  return `[synapsys:active] ${memory.name} (fired earlier; full body in this session)`;
+}
+
+/**
+ * renderMatchedMemories — per-memory loop wrapper. Routes each match through
+ * the ledger + decideInjection + recordInjection. The entire call is fail-open
+ * (R1): any throw → fall back to formatting every memory as full body.
+ */
+function renderMatchedMemories(matched, sessionId) {
+  try {
+    const ledger = injectLedger.loadLedger(sessionId);
+    const out = matched.map((m) => {
+      const entry = ledger && ledger.memories ? ledger.memories[m.name] : undefined;
+      const decision = decideInjection(m, entry);
+      const text = decision.kind === 'full' ? formatMemory(m) : reminderLine(m);
+      try {
+        injectLedger.recordInjection(sessionId, m.name, { full: decision.kind === 'full' });
+      } catch {
+        /* fail-open */
+      }
+      return text;
+    });
+    return out.join('\n\n---\n\n');
+  } catch {
+    // Fail-open: any ledger error → emit full body for every match.
+    return matched.map(formatMemory).join('\n\n---\n\n');
+  }
+}
 
 const VALID_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop']);
 const MAX_INJECT_CHARS = 8000;
@@ -83,8 +143,8 @@ function getSessionStartHint(event, stores, memories) {
   return null;
 }
 
-function formatMatchedOutput(matched) {
-  const out = matched.map(formatMemory).join('\n\n---\n\n');
+function formatMatchedOutput(matched, sessionId) {
+  const out = renderMatchedMemories(matched, sessionId);
   if (out.length <= MAX_INJECT_CHARS) return out;
   return `${out.slice(0, MAX_INJECT_CHARS)}\n\n[synapsys: output truncated at ${MAX_INJECT_CHARS} chars]`;
 }
@@ -99,6 +159,27 @@ function formatMatchedOutput(matched) {
     const stores = discoverStores(cwd);
     const memories = stores.flatMap(listMemoriesFromStore);
 
+    // Resolve session id once; used for both ledger reset (SessionStart) and
+    // the per-memory render path. Fail-open: any throw → noop and the rest of
+    // the dispatcher behaves like the pre-ledger code path.
+    let sessionId;
+    try {
+      sessionId = injectLedger.resolveSessionId(payload);
+    } catch {
+      sessionId = '';
+    }
+
+    // SessionStart resets the per-session ledger (brief AC-4 / spec §3.3) and
+    // opportunistically GCs stale ledger files older than 7 days (spec §4.2).
+    if (event === 'SessionStart') {
+      try {
+        injectLedger.resetLedgerForSession(sessionId);
+        injectLedger.gcStaleLedgers({ maxAgeMs: SEVEN_DAYS_MS });
+      } catch {
+        /* fail-open */
+      }
+    }
+
     const sessionHint = getSessionStartHint(event, stores, memories);
     if (sessionHint) {
       process.stdout.write(sessionHint);
@@ -109,7 +190,7 @@ function formatMatchedOutput(matched) {
     const matched = selectForEvent(memories, event, payload);
     if (!matched.length) process.exit(0);
 
-    process.stdout.write(formatMatchedOutput(matched));
+    process.stdout.write(formatMatchedOutput(matched, sessionId));
     process.exit(0);
   } catch {
     process.exit(0);
