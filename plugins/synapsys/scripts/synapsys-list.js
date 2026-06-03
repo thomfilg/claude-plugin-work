@@ -14,6 +14,34 @@
 
 const { discoverStores, listMemoriesFromStore, setupCli } = require('../lib/script-bootstrap');
 
+/**
+ * Pure renderer for the `domain:` line shown per memory in `synapsys-list`.
+ *
+ * Chosen rendering (per Task 9 AC): memories with a non-empty `domain` array
+ * render a `domain: <values>` line (comma-joined); memories with an empty or
+ * absent `domain` render NO line (returns null) — cleaner default output.
+ *
+ * The returned string is pre-styled with the script's dim/magenta palette so
+ * callers can just println it; tests strip ANSI for assertions.
+ *
+ * @param {string[] | null | undefined} domain
+ * @param {{ dim?: (s: string) => string, magenta?: (s: string) => string }} [palette]
+ * @returns {string | null}
+ */
+function formatDomainLine(domain, palette) {
+  if (!Array.isArray(domain) || domain.length === 0) return null;
+  const dim = palette && typeof palette.dim === 'function' ? palette.dim : (s) => s;
+  const magenta = palette && typeof palette.magenta === 'function' ? palette.magenta : (s) => s;
+  return `    ${dim('domain:')}  ${magenta(domain.join(', '))}`;
+}
+
+module.exports = { formatDomainLine };
+
+// When required (e.g. from tests), skip the CLI side-effects.
+if (require.main !== module) {
+  return;
+}
+
 const { flag } = setupCli();
 
 const cwd = flag('cwd') || process.cwd();
@@ -41,6 +69,7 @@ if (json) {
           triggerPretool: m.triggerPretool,
           triggerSession: m.triggerSession,
           inject: m.inject,
+          domain: Array.isArray(m.domain) ? m.domain : [],
           store: m.store.kind,
           file: m.file,
         })),
@@ -142,6 +171,9 @@ for (const [kind, bucket] of byStore.entries()) {
     const injColored = m.inject === 'full' ? C.bold(C.red(injChar)) : C.gray(injChar);
     console.log(`  ${C.green(name)}  ${C.yellow(ev)}  ${injColored}`);
     console.log(`    ${m.description}`);
+
+    const domainLine = formatDomainLine(m.domain, C);
+    if (domainLine) console.log(domainLine);
 
     if (verbose) {
       if (m.triggerPrompt)

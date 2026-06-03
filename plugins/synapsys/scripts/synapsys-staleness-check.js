@@ -39,6 +39,12 @@ const {
   summarise,
   getProfileForSource,
 } = require(nodePath.join(__dirname, '..', 'lib', 'staleness'));
+const { loadDomainRegistry } = require(nodePath.join(
+  __dirname,
+  '..',
+  'lib',
+  'domains'
+));
 
 // ---------------------------------------------------------------------------
 // Repo-root resolution
@@ -262,8 +268,74 @@ function parseCliOptions() {
     verbose: !!flag('verbose'),
     noColor: !!flag('no-color') || !!process.env.NO_COLOR,
     reConsolidate: !!flag('re-consolidate'),
+    strict: !!flag('strict'),
     storeFlag: typeof storeFlag === 'string' ? storeFlag : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Domain lint (Task 11 / R9 / AC8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Return lint warnings for every `domain:` value on `memory` that is not
+ * registered in the domain registry (neither as a root nor as `root:leaf`).
+ *
+ * Backward-compat: memories with empty / absent `domain` always return [].
+ *
+ * @param {{ name?: string, domain?: string[] }} memory
+ * @param {{ roots: Map<string, { leaves: Map<string, unknown> }> }} registry
+ * @returns {Array<{ memory: string, value: string }>}
+ */
+function lintDomainsForMemory(memory, registry) {
+  if (!memory || !Array.isArray(memory.domain) || memory.domain.length === 0) {
+    return [];
+  }
+  const roots = registry && registry.roots instanceof Map ? registry.roots : new Map();
+  const warnings = [];
+  for (const value of memory.domain) {
+    if (typeof value !== 'string' || value.length === 0) continue;
+    const colonIdx = value.indexOf(':');
+    if (colonIdx === -1) {
+      // Bare root: must exist in registry.
+      if (!roots.has(value)) {
+        warnings.push({ memory: memory.name || '(unnamed)', value });
+      }
+      continue;
+    }
+    const rootName = value.slice(0, colonIdx);
+    const leafName = value.slice(colonIdx + 1);
+    const root = roots.get(rootName);
+    if (!root || !(root.leaves instanceof Map) || !root.leaves.has(leafName)) {
+      warnings.push({ memory: memory.name || '(unnamed)', value });
+    }
+  }
+  return warnings;
+}
+
+/**
+ * Walk every memory in `stores` and accumulate unknown-domain warnings
+ * against `registry`. Returns a flat array of `{ memory, value }`.
+ */
+function collectDomainWarnings(stores, registry) {
+  const out = [];
+  for (const store of stores) {
+    const memories = listMemoriesFromStore(store);
+    for (const mem of memories) {
+      const ws = lintDomainsForMemory(mem, registry);
+      for (const w of ws) out.push(w);
+    }
+  }
+  return out;
+}
+
+function renderDomainWarnings(warnings) {
+  if (warnings.length === 0) return '';
+  const lines = [`Unknown-domain warnings (${warnings.length}):`];
+  for (const w of warnings) {
+    lines.push(`  - ${w.memory}: unknown domain "${w.value}"`);
+  }
+  return lines.join('\n') + '\n';
 }
 
 function renderReport(grouped, summary, opts) {
@@ -304,9 +376,27 @@ function main() {
 
   process.stdout.write(renderReport(grouped, summary, opts));
 
+  // Unknown-domain lint (Task 11 / R9 / AC8). Loads registry from $HOME
+  // (or bundled fallback). Warnings go to stderr so they don't pollute
+  // --json stdout; --strict promotes any warning to a non-zero exit.
+  const registry = loadDomainRegistry();
+  const domainWarnings = collectDomainWarnings(stores, registry);
+  if (domainWarnings.length > 0) {
+    process.stderr.write(renderDomainWarnings(domainWarnings));
+  }
+
   const sawSpawnFailure = maybeReconsolidate(grouped, opts);
   const hasIssue = summary.drifted > 0 || summary.orphan > 0 || sawSpawnFailure;
-  process.exit(hasIssue ? 1 : 0);
+  const strictDomainFail = opts.strict && domainWarnings.length > 0;
+  process.exit(hasIssue || strictDomainFail ? 1 : 0);
 }
 
-main();
+module.exports = {
+  lintDomainsForMemory,
+  collectDomainWarnings,
+  renderDomainWarnings,
+};
+
+if (require.main === module) {
+  main();
+}
