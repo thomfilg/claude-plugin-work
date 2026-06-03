@@ -104,7 +104,7 @@ test('list returns all active sessions', () => {
 test('summarize emits the operator-facing one-liner', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ms-sum-'));
   const m = freshModule(dir);
-  const s = m.init('topic', 5, [
+  m.init('topic', 5, [
     { id: 'A', priority: 1 },
     { id: 'B', priority: 2 },
     { id: 'C', priority: 3 },
