@@ -87,10 +87,8 @@ function handleQuestion(ctx, qHit) {
   }
   const mins = state.minutesSince(prev.startedAt);
   if (mins < Q_WAIT_MIN) return;
-  // Re-emit on Q_WAIT_MIN cadence so the alert count can grow to
-  // DEAD_END_REEMITS and trigger freeDeadEndSlot. Previously this branch
-  // gated on !prev.alerted, which capped the count at 1 and made dead-end
-  // auto-rotation unreachable from the daemon loop.
+  // Re-emit on Q_WAIT_MIN cadence so alert count can grow to DEAD_END_REEMITS
+  // and trigger freeDeadEndSlot (one-shot gate previously capped count at 1).
   if (prev.alerted) {
     const sinceLastAlert = prev.lastAlertAt ? state.minutesSince(prev.lastAlertAt) : Infinity;
     if (sinceLastAlert < Q_WAIT_MIN) return;
@@ -153,12 +151,8 @@ function handlePhaseStall(ctx, stallHit) {
   const sinceLastNudge = marker.lastNudgeAt ? state.minutesSince(marker.lastNudgeAt) : Infinity;
   // Don't re-nudge before the per-phase cooldown.
   if (marker.lastNudgeAt && sinceLastNudge < stallHit.reNudgeMin) return;
-  // After the one-shot alert fires, keep re-emitting on reNudgeMin cadence so
-  // the alert count grows to DEAD_END_REEMITS and triggers freeDeadEndSlot.
-  // Previously this branch fully suppressed re-alerting, which capped the count
-  // at 1 and made dead-end auto-rotation unreachable. The phase-stall detector
-  // resets the marker on phase change, so re-emits stop naturally on advance.
-
+  // Re-emit on reNudgeMin cadence so alert count grows to DEAD_END_REEMITS
+  // (marker resets on phase change, so re-emits stop naturally on advance).
   const escalation = escalationFor(ctx.phase, marker.nudges);
   const reason = `phase=${ctx.phase} stuck ${stallHit.elapsedMin}m budget=${stallHit.budgetMin}m nudge ${marker.nudges + 1}/${stallHit.maxNudges}`;
 
@@ -217,12 +211,8 @@ function runSilenceDetector(ctx) {
   const sHit = DETECTORS.silence.detect(ctx);
   if (!sHit.hit) return false;
   if (!restartEligible(ctx.session)) {
-    // Helper (-dev / -listen) is idle past SILENCE_LIMIT_SEC but we won't kill
-    // it. Without resetting the marker, silence would fire every subsequent
-    // tick → log spam + short-circuit of other detectors forever. Instead:
-    // log once, refresh the marker so the silence timer restarts, and let the
-    // remaining detectors run by returning false. Worst case we log again in
-    // another SILENCE_LIMIT_SEC, not every tick.
+    // Helper (-dev / -listen) idle past SILENCE_LIMIT_SEC — don't kill. Refresh
+    // marker so silence timer restarts (else fires every tick → log spam).
     alerts.log(
       `${ctx.session} AUTO-RESTART skipped: non-work helper session (not restart-eligible)`
     );

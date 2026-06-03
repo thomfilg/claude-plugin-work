@@ -154,51 +154,40 @@ function declareWedged({ session, ticket, restarts, now, silenceSec }) {
  * for restart eligibility (only -work sessions) and for clearing per-ticket
  * markers after the restart so detectors don't fire against the stale state.
  */
+function checkCiGateFreedGuard({ session, ticket, worktree }) {
+  const ciFreed = state.read(ticket, 'ci-gate-freed');
+  if (!ciFreed || !ciFreed.killed) return { skip: false };
+  const currentSha = headSha(worktree);
+  if (currentSha && ciFreed.sha && currentSha !== ciFreed.sha) {
+    alerts.log(
+      `${session} AUTO-RESTART ci-gate-freed marker cleared: HEAD moved ${(ciFreed.sha || '').slice(0, 7)} -> ${currentSha.slice(0, 7)}`
+    );
+    state.clear(ticket, 'ci-gate-freed');
+    return { skip: false };
+  }
+  alerts.log(
+    `${session} AUTO-RESTART skipped: ticket ${ticket} CI-gate-freed at sha=${(ciFreed.sha || '').slice(0, 7)}; awaiting operator merge`
+  );
+  return { skip: true };
+}
+
+function checkDeadEndGuard({ session, ticket }) {
+  const deadEnd = state.read(ticket, 'dead-end');
+  if (!deadEnd || !deadEnd.killed) return { skip: false };
+  alerts.log(
+    `${session} AUTO-RESTART skipped: ticket ${ticket} dead-end-freed (trigger=${deadEnd.trigger || 'unknown'}); slot rotated, do not resurrect`
+  );
+  return { skip: true };
+}
+
 function checkRestartGuards({ session, ticket, worktree }) {
   if (!worktree || !fs.existsSync(worktree)) {
     alerts.log(`${session} AUTO-RESTART skipped: worktree ${worktree} not found`);
     return { skip: true };
   }
-  // CI-gate slot-freed guard. If freeCIGateSlot already killed this ticket's
-  // tmux because its PR hit pr-ready, do NOT resurrect it — the agent's job
-  // is done until operator merges. Marker is per-ticket, written by
-  // freeCIGateSlot / freeDeadEndSlot.
-  //
-  // SHA-gated clear: if the worktree HEAD has moved past the stored SHA (new
-  // commit pushed, e.g. CI broke again and the agent — or operator — pushed
-  // a fix), the freeze is stale. Clear the marker and let autoRestart proceed
-  // so the agent can resume monitoring the new CI run. Without this clear,
-  // `killed: true` would block restarts forever even after the underlying
-  // PR state has changed.
-  const ciFreed = state.read(ticket, 'ci-gate-freed');
-  if (ciFreed && ciFreed.killed) {
-    const currentSha = headSha(worktree);
-    if (currentSha && ciFreed.sha && currentSha !== ciFreed.sha) {
-      alerts.log(
-        `${session} AUTO-RESTART ci-gate-freed marker cleared: HEAD moved ${(ciFreed.sha || '').slice(0, 7)} -> ${currentSha.slice(0, 7)}`
-      );
-      state.clear(ticket, 'ci-gate-freed');
-      return { skip: false };
-    }
-    alerts.log(
-      `${session} AUTO-RESTART skipped: ticket ${ticket} CI-gate-freed at sha=${(ciFreed.sha || '').slice(0, 7)}; awaiting operator merge`
-    );
-    return { skip: true };
-  }
-  // Dead-end guard. If freeDeadEndSlot already killed this ticket's tmux
-  // because the agent was stuck in a non-recoverable state, do NOT resurrect
-  // it. Unlike ci-gate-freed, dead-end has no SHA-gated clear: the slot has
-  // been rotated and the operator must bootstrap the next ticket manually
-  // (or it was auto-bootstrapped). Resurrecting here would undo slot rotation
-  // if tmux wasn't fully torn down or a session reappeared between ticks.
-  const deadEnd = state.read(ticket, 'dead-end');
-  if (deadEnd && deadEnd.killed) {
-    alerts.log(
-      `${session} AUTO-RESTART skipped: ticket ${ticket} dead-end-freed (trigger=${deadEnd.trigger || 'unknown'}); slot rotated, do not resurrect`
-    );
-    return { skip: true };
-  }
-  return { skip: false };
+  const ciGuard = checkCiGateFreedGuard({ session, ticket, worktree });
+  if (ciGuard.skip) return ciGuard;
+  return checkDeadEndGuard({ session, ticket });
 }
 
 function autoRestart({ session, ticket, worktree, silenceSec }) {
