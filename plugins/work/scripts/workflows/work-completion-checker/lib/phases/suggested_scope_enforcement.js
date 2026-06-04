@@ -37,8 +37,38 @@ function numstatRowHasHunk(adds, dels) {
 }
 
 /**
+ * Expand a `git diff --numstat` path field into the set of paths it
+ * represents. Renames take two forms:
+ *   - `old/path => new/path`
+ *   - `prefix/{old => new}/suffix`  (brace-style for shared prefixes)
+ *
+ * Returns both the old and new path so a scoped file that was renamed in
+ * this PR still matches (review feedback): `hasNonEmptyHunk` previously
+ * required an exact string match and silently treated renamed scoped files
+ * as unchanged.
+ *
+ * @param {string} raw
+ * @returns {string[]}
+ */
+function expandNumstatPath(raw) {
+  const p = (raw || '').trim();
+  if (!p) return [];
+  const brace = p.match(/^(.*)\{([^{}]*?)\s*=>\s*([^{}]*?)\}(.*)$/);
+  if (brace) {
+    const [, prefix, oldPart, newPart, suffix] = brace;
+    const join = (mid) => `${prefix}${mid}${suffix}`.replace(/\/{2,}/g, '/').replace(/\/$/, '');
+    return [join(oldPart.trim()), join(newPart.trim())];
+  }
+  const arrow = p.match(/^(.+?)\s*=>\s*(.+)$/);
+  if (arrow) return [arrow[1].trim(), arrow[2].trim()];
+  return [p];
+}
+
+/**
  * Parse `git diff --numstat` output and decide whether `file` has any
  * non-empty hunks. Each numstat line has the shape `<adds>\t<dels>\t<path>`.
+ * Renamed paths are recognized via `expandNumstatPath` so a rename of the
+ * scoped file is treated as a change.
  *
  * @param {string} file
  * @param {string} numstatOutput
@@ -50,7 +80,7 @@ function hasNonEmptyHunk(file, numstatOutput) {
     const parts = line.split('\t');
     if (parts.length < 3) continue;
     const [adds, dels, p] = parts;
-    if (p.trim() !== file) continue;
+    if (!expandNumstatPath(p).includes(file)) continue;
     return numstatRowHasHunk(adds, dels);
   }
   return false;
@@ -152,12 +182,9 @@ function validate(ctx) {
     const numstat = numstatResult.output;
     const missing = checkScopedFiles(scopedFiles, changedSet, numstat, failures);
     ctx.scopeChecked = scopedFiles.length;
-    appendForCheckType(
-      ctx.tasksDir,
-      'suggested_scope',
-      failures.slice(startLen),
-      { scopeChecked: scopedFiles.length },
-    );
+    appendForCheckType(ctx.tasksDir, 'suggested_scope', failures.slice(startLen), {
+      scopeChecked: scopedFiles.length,
+    });
 
     if (missing > 0) {
       return {
@@ -196,3 +223,4 @@ module.exports = function register(registerPhase) {
 module.exports.validate = validate;
 module.exports.instructions = instructions;
 module.exports.hasNonEmptyHunk = hasNonEmptyHunk;
+module.exports.expandNumstatPath = expandNumstatPath;
