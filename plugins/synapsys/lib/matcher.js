@@ -13,7 +13,7 @@
 /**
  * @typedef {Object} MatchResult
  * @property {boolean} fired
- * @property {('events-exclude'|'no-prompt-match'|'no-pretool-match'|'no-content-match'|'negative-excludes'|'no-session-trigger'|'expired'|'disabled')} [reason]
+ * @property {('events-exclude'|'no-prompt-match'|'no-pretool-match'|'no-content-match'|'negative-excludes'|'no-session-trigger'|'no-stop-response-match'|'expired'|'disabled')} [reason]
  * @property {Matched} [matched]
  */
 
@@ -311,14 +311,45 @@ function matchSession(memory) {
   return { fired: true };
 }
 
+// Resolve the assistant-side text surface that trigger_stop_response evaluates
+// against. Strictly excludes tool inputs and tool results: only the assistant's
+// natural-language response counts. Reads payload.response, falling back to
+// payload.assistant_response, then payload.transcript. Returns '' otherwise.
+function _extractStopResponse(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  if (typeof payload.response === 'string') return payload.response;
+  if (typeof payload.assistant_response === 'string') return payload.assistant_response;
+  if (typeof payload.transcript === 'string') return payload.transcript;
+  return '';
+}
+
 // Stop event fires at the assistant's turn end. The classifier matrix assigns
 // Stop to memories that are retrospective checks ("did I run follow-up-pr?",
-// "cleanup the tmp file"). They fire unconditionally for any memory listing
-// Stop in events — the body itself IS the reminder, no separate trigger.
-function matchStop(memory) {
+// "cleanup the tmp file"). When `triggerStopResponse` is absent, the memory
+// fires unconditionally for any Stop hook (backward-compat). When present, the
+// memory only fires if the assistant's response (NOT tool inputs/results)
+// matches the regex.
+//
+// @param {object} memory
+// @param {object} [payload] Stop hook payload; consulted only when
+//   memory.triggerStopResponse is set.
+function matchStop(memory, payload) {
   const gate = gateMemory(memory, 'Stop');
   if (gate) return { fired: false, reason: gate };
-  return { fired: true };
+  if (!memory.triggerStopResponse) return { fired: true };
+
+  const regex = safeRegex(memory.triggerStopResponse, 'i');
+  if (!regex) {
+    process.stderr.write(
+      `[synapsys] memory ${memory.name}: invalid trigger_stop_response regex "${memory.triggerStopResponse}"\n`
+    );
+    return { fired: false, reason: 'no-stop-response-match' };
+  }
+
+  const text = _extractStopResponse(payload);
+  const m = regex.exec(text);
+  if (!m) return { fired: false, reason: 'no-stop-response-match' };
+  return { fired: true, matched: makeMatched({ stop_response_substring: m[0] }) };
 }
 
 /**
@@ -337,7 +368,7 @@ function selectForEvent(memories, event, payload) {
     if (event === 'UserPromptSubmit') result = matchPrompt(m, payload?.prompt || '');
     else if (event === 'PreToolUse') result = matchPreTool(m, payload);
     else if (event === 'SessionStart') result = matchSession(m);
-    else if (event === 'Stop') result = matchStop(m);
+    else if (event === 'Stop') result = matchStop(m, payload);
     if (result.fired) matched.push(m);
   }
   return matched;
@@ -350,6 +381,7 @@ module.exports = {
   matchPreToolResult,
   matchSession,
   matchStop,
+  _extractStopResponse,
   safeRegex,
   splitTopLevelAlternation,
   extractPretoolContent,

@@ -149,6 +149,8 @@ for (const [kind, bucket] of byStore.entries()) {
       if (m.triggerPretool.length)
         console.log(`    ${C.dim('pretool:')} ${C.magenta(m.triggerPretool.join(', '))}`);
       if (m.triggerSession) console.log(`    ${C.dim('session:')} ${C.magenta('yes')}`);
+      if (m.triggerStopResponse)
+        console.log(`    ${C.dim('stop-response:')} ${C.magenta('/' + m.triggerStopResponse + '/i')}`);
       console.log(`    ${C.dim('file:')}    ${C.dim(m.file)}`);
     }
     console.log('');

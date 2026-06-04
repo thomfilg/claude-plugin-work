@@ -137,6 +137,17 @@ function parseFrontmatter(content) {
 
 const SKIP_FILES = new Set(['INDEX.md', 'README.md']);
 
+function buildTriggerFields(meta) {
+  return {
+    triggerPrompt: meta.trigger_prompt || '',
+    triggerPretool: toList(meta.trigger_pretool),
+    triggerPretoolContent: toList(meta.trigger_pretool_content),
+    triggerPretoolContentNot: toList(meta.trigger_pretool_content_not),
+    triggerStopResponse: meta.trigger_stop_response || '',
+    triggerSession: meta.trigger_session === true || meta.trigger_session === 'true',
+  };
+}
+
 function readMemoryFile(store, name) {
   if (!name.endsWith('.md') || SKIP_FILES.has(name)) return null;
   const file = path.join(store.dir, name);
@@ -153,11 +164,7 @@ function readMemoryFile(store, name) {
     name: meta.name || path.basename(name, '.md'),
     description: meta.description || '',
     events: toList(meta.events),
-    triggerPrompt: meta.trigger_prompt || '',
-    triggerPretool: toList(meta.trigger_pretool),
-    triggerPretoolContent: toList(meta.trigger_pretool_content),
-    triggerPretoolContentNot: toList(meta.trigger_pretool_content_not),
-    triggerSession: meta.trigger_session === true || meta.trigger_session === 'true',
+    ...buildTriggerFields(meta),
     inject: meta.inject === 'full' ? 'full' : 'summary',
     disabled: meta.disabled === true || meta.disabled === 'true',
     expired: parseExpired(meta.expires),
