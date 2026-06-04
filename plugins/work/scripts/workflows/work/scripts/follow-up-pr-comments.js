@@ -2,16 +2,37 @@
 /**
  * follow-up-pr-comments.js
  *
- * Sequential PR comment resolution CLI. Provides subcommands to snapshot
- * PR comments, iterate them one-at-a-time by priority, and build
- * review-accountability.json incrementally.
+ * Sequential PR comment resolution CLI. This tool performs
+ * local tracking only by default: it snapshots PR comments, iterates
+ * them one-at-a-time by priority, and builds review-accountability.json
+ * incrementally — without ever touching the GitHub conversation threads.
  *
  * Subcommands:
- *   --snapshot --pr <N>                     Fetch & cache all PR comments
- *   --next-comment                          Return first unsolved comment
- *   --solve-comment <id> <sha> "<desc>"     Mark comment solved
- *   --skip-comment <id> "<reason>"          Mark comment skipped
- *   --status                                Show summary counts
+ *   --snapshot --pr <N>                            Fetch & cache all PR comments
+ *   --next-comment                                 Return first unsolved comment
+ *   --mark-locally-solved <id> <sha> "<desc>"      Mark comment solved (local only)
+ *   --mark-locally-skipped <id> "<reason>"         Mark comment skipped (local only)
+ *   --status                                       Show summary counts
+ *
+ * Opt-in GitHub thread resolution:
+ *   Pass --also-resolve-on-github together with --mark-locally-solved to
+ *   additionally invoke the `resolveReviewThread` GraphQL mutation and
+ *   close the conversation on GitHub. This flag requires the `gh` CLI
+ *   to be authenticated with the repo scope (gh CLI repo scope);
+ *   without it the call exits
+ *   gracefully (see `[[follow-up-stuck-means-human-blocker]]`). When the
+ *   flag is paired with --mark-locally-skipped it is a no-op with a
+ *   stderr warning (skips are an audit trail only).
+ *
+ * Deprecated aliases:
+ *   --solve-comment <id> <sha> "<desc>"     Deprecated alias of
+ *                                           --mark-locally-solved. Still
+ *                                           works for a 2-3 release
+ *                                           window; emits a one-line
+ *                                           stderr deprecation warning.
+ *   --skip-comment <id> "<reason>"          Deprecated alias of
+ *                                           --mark-locally-skipped. Same
+ *                                           deprecation warning behavior.
  *
  * Usage: node follow-up-pr-comments.js <subcommand> [args]
  */

@@ -868,4 +868,32 @@ describe('follow-up-pr-comments CLI', () => {
       assert.equal(comment.resolution, 'reason');
     });
   });
+
+  // ── Task 8: top-of-file JSDoc documents local-only default ────────────────
+  describe('top-of-file JSDoc (Task 8)', () => {
+    const source = fs.readFileSync(SCRIPT, 'utf8');
+    // Capture only the leading JSDoc block (top-of-file).
+    const headerMatch = source.match(/^#![^\n]*\n\/\*\*[\s\S]*?\*\//);
+    const header = headerMatch ? headerMatch[0] : '';
+
+    it('JSDoc top-of-file states local tracking only by default', () => {
+      assert.ok(header.length > 0, 'expected a top-of-file JSDoc block');
+      assert.match(
+        header,
+        /local tracking only by default/,
+        'top-of-file JSDoc must contain literal "local tracking only by default"'
+      );
+    });
+
+    it('documents opt-in --also-resolve-on-github (requires gh CLI repo scope)', () => {
+      assert.match(header, /--also-resolve-on-github/);
+      assert.match(header, /repo\s*scope/i);
+    });
+
+    it('notes --solve-comment / --skip-comment as deprecated aliases', () => {
+      assert.match(header, /--solve-comment/);
+      assert.match(header, /--skip-comment/);
+      assert.match(header, /deprecated/i);
+    });
+  });
 });
