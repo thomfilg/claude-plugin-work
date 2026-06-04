@@ -68,6 +68,16 @@ function loadChangedContents(ctx, changed) {
   return out;
 }
 
+function extractAddedLines(diffOutput) {
+  // Keep only lines starting with `+` but not `+++` (file header).
+  const adds = [];
+  for (const line of (diffOutput || '').split('\n')) {
+    if (line.startsWith('+++')) continue;
+    if (line.startsWith('+')) adds.push(line.slice(1));
+  }
+  return adds.join('\n');
+}
+
 // B3 fix: extract just the added-line text from `git diff -U0` output so
 // reuse checks only count lines this PR actually added. Comments, unchanged
 // imports, and incidental mentions in untouched code no longer pass the gate.
@@ -82,15 +92,7 @@ function readAddedLines(ctx) {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
     });
-    if (r && r.status === 0) {
-      // Keep only lines starting with `+` but not `+++` (file header).
-      const adds = [];
-      for (const line of (r.stdout || '').split('\n')) {
-        if (line.startsWith('+++')) continue;
-        if (line.startsWith('+')) adds.push(line.slice(1));
-      }
-      return adds.join('\n');
-    }
+    if (r && r.status === 0) return extractAddedLines(r.stdout);
   }
   return '';
 }
@@ -142,8 +144,7 @@ function checkMustReuseEntries(entries, blobs, joined, addedLines, failures) {
     // Prefer added-line match (B3). If git was unavailable, fall back to the
     // legacy full-content proxy so we don't fail-closed on missing tooling.
     const addedHit = symbolPresentInAdded(entry.symbol, addedLines);
-    const present =
-      addedHit === null ? symbolPresentInBlobs(entry.symbol, blobs) : addedHit;
+    const present = addedHit === null ? symbolPresentInBlobs(entry.symbol, blobs) : addedHit;
     if (present) continue;
     mustMissing += 1;
     failures.push(buildMissingFailure(entry, joined));
@@ -202,15 +203,12 @@ function validate(ctx) {
       blobs,
       joined,
       addedLines,
-      failures,
+      failures
     );
     ctx.reuseAuditChecked = mustChecked;
-    appendForCheckType(
-      ctx.tasksDir,
-      'reuse_audit',
-      failures.slice(startLen),
-      { reuseChecked: mustChecked },
-    );
+    appendForCheckType(ctx.tasksDir, 'reuse_audit', failures.slice(startLen), {
+      reuseChecked: mustChecked,
+    });
 
     if (mustMissing > 0) {
       return {
