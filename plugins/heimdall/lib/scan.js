@@ -40,7 +40,11 @@ function alreadyProtected(cwd, repoRoot) {
 function suggestionFor(item, kind, repoRoot, protectedAbs) {
   const protect = [];
   for (const target of item.targets) {
-    if (target.anchor === 'home' && kind !== 'global') continue;
+    if (kind === 'shared') {
+      if (target.anchor !== 'home') continue;
+    } else if (target.anchor === 'home' && kind !== 'global') {
+      continue;
+    }
     const abs = resolveTarget(target, repoRoot);
     if (!fs.existsSync(abs)) continue;
     if (protectedAbs.has(abs)) continue;

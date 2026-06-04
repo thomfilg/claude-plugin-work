@@ -28,6 +28,23 @@ if (paths.length === 0) {
   console.error('missing --paths');
   process.exit(1);
 }
+
+// Shared stores are home-anchored; they must never protect repo-relative
+// paths (a per-project file like package.json has no meaning in a HOME-wide
+// store shared across worktrees). Reject any non-home-anchored path and
+// suggest the three project-scoped alternatives.
+if (args.kind === 'shared') {
+  const nonHome = paths.filter((p) => !/^~(\/|$)/.test(p));
+  if (nonHome.length > 0) {
+    console.error(
+      `--kind=shared only accepts home-anchored paths (e.g. ~/.claude/...); ` +
+        `got: ${nonHome.join(', ')}. ` +
+        `use --kind=local, --kind=worktree, or --kind=global for project-relative paths`
+    );
+    process.exit(1);
+  }
+}
+
 const storeDir = dirs[0];
 
 const cfg = readConfig(storeDir);

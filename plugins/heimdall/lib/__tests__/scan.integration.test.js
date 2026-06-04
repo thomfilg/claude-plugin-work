@@ -88,4 +88,12 @@ describe("scan kind='global' regression", () => {
       `expected '~/.claude' in global cc.protect, got ${JSON.stringify(cc.protect)}`,
     );
   });
+
+  it('still surfaces repo-anchored targets for local', () => {
+    const ids = scan({ cwd: repo, kind: 'local' }).map((s) => s.id);
+    assert.ok(
+      ids.includes('root-package-json'),
+      `expected 'root-package-json' in local scan, got ${JSON.stringify(ids)}`,
+    );
+  });
 });
