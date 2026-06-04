@@ -333,11 +333,38 @@ function evaluateSignal2(s, c) {
   if (typeof c.exec !== 'function') {
     return { fired: false, evidence: { reason: 'no exec provided' } };
   }
-  const runId = c.runId || s.runId || null;
-  if (!runId || !c.jobId) {
+  // Bug 542-19: signal2 must consider every failed job, not just the first.
+  // If ANY failed job has real assertion output, refuse to fire — otherwise
+  // we'd misclassify a real code failure as an infra flake whenever the FIRST
+  // failed job happens to have an empty log.
+  const failedJobs = Array.isArray(s._ciFailedJobs) ? s._ciFailedJobs : [];
+  const fallbackRunId = c.runId || s.runId;
+  const fallbackJobId = c.jobId;
+  const candidates =
+    failedJobs.length > 0
+      ? failedJobs.map((j) => ({
+          runId: j.runId || fallbackRunId,
+          jobId: j.jobId || fallbackJobId,
+        }))
+      : [{ runId: fallbackRunId, jobId: fallbackJobId }];
+  const evaluable = candidates.filter((j) => j.runId && j.jobId);
+  if (evaluable.length === 0) {
     return { fired: false, evidence: { reason: 'no runId/jobId' } };
   }
-  return signal2_emptyFailedLog(runId, c.jobId, c.exec);
+  let lastFired = null;
+  for (const j of evaluable) {
+    const result = signal2_emptyFailedLog(j.runId, j.jobId, c.exec);
+    // If ANY failed job has real error markers (fired=false), signal2 must
+    // NOT fire — there's a real code failure somewhere.
+    if (!result.fired) {
+      return {
+        fired: false,
+        evidence: { ...result.evidence, reason: 'real assertion output present' },
+      };
+    }
+    lastFired = result;
+  }
+  return lastFired;
 }
 
 function isInfraSuspected(firedSignals) {
