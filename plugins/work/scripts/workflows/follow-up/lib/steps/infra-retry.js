@@ -265,16 +265,16 @@ function runInfraRetryStep(state, ctx) {
     state.infraRetry = { count: 0, attempts: [] };
   }
 
-  if (shouldBypass(state)) return null;
-
-  // R15: short-circuit on retry-success before consulting the classifier
-  // again — we are simply confirming a green run for an already-recorded
-  // attempt. Route directly to `report` (CI is green) and clear any stale
-  // `ci_failure` category so downstream branches don't dispatch fix-ci.
+  // Bug 542-18: handle retry-success BEFORE shouldBypass. If a prior
+  // auto-retry left a pending attempt and CI is now green, we must record the
+  // success and route to `report` even after the feature flag was disabled,
+  // so the orchestrator doesn't fall through to fix-ci dispatch.
   if (maybeHandleRetrySuccess(state, ctx)) {
     routeRetrySuccessToReport(state);
     return null;
   }
+
+  if (shouldBypass(state)) return null;
 
   // Bug 542-16: when this step resumes from disk (e.g. a new /follow-up
   // process after a previous infra rerun), a pending attempt still exists
