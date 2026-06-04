@@ -78,21 +78,21 @@ function candidateStores(cwd, projectName) {
  * (Same rationale as synapsys: sessions may run from a sub-directory of a
  * worktree whose shared store sits at the worktree base.)
  *
- * Stops at the user's HOME directory: the per-user global / shared stores
- * live under `~/.claude/` and are already discovered as the `global` and
- * `shared` kinds; treating `~/.claude/heimdall` as a "worktree" ancestor of
- * any cwd inside HOME would double-count it and, worse, cause an unrelated
- * project's marker to leak into sandboxed e2e tests whose tmp HOME is
- * nested under the real user's HOME (GH-541 R11 / Task 11).
+ * Stops AFTER checking the user's HOME directory: a `--kind=worktree` install
+ * from a repo directly under home writes its marker to `~/.claude/heimdall`
+ * via `candidateStores`, and that legitimate worktree marker must remain
+ * discoverable. The walk does not continue past HOME so sandboxed e2e tests
+ * (whose tmp HOME is set via $HOME env) cannot leak the real user's marker
+ * into the test session.
  */
 function findAncestorStore(startDir) {
   const home = os.homedir();
   let dir = startDir;
   for (;;) {
-    if (dir === home) return '';
     if (fs.existsSync(path.join(dir, '.claude', FOLDER, MARKER))) {
       return path.join(dir, '.claude', FOLDER);
     }
+    if (dir === home) return '';
     const parent = path.dirname(dir);
     if (parent === dir) return '';
     dir = parent;

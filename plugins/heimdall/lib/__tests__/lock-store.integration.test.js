@@ -92,15 +92,26 @@ describe('discoverStores returns the shared store from any cwd', () => {
   });
 });
 
-describe('discoverStores does not report ~/.claude/heimdall as a worktree ancestor', () => {
-  it('returns no spurious worktree entry when cwd is nested under HOME', () => {
-    // Seed a marker at `<fakeHome>/.claude/heimdall/.heimdall.json`. Without
-    // the HOME-stop in findAncestorStore(), discoverStores() for a cwd nested
-    // under HOME would walk up past HOME and pick this marker up as a
-    // "worktree" ancestor — leaking an unrelated project's locks into this
-    // session. Guards the GH-541 R11 fix in lib/lock-store.js.
-    writeConfig(path.join(fakeHome, '.claude', FOLDER), { kind: 'global', locks: [] });
+describe('findAncestorStore HOME boundary', () => {
+  it('discovers worktree marker installed at HOME (repo directly under home)', () => {
+    // A `--kind=worktree` install from `~/myrepo` writes its marker to
+    // `~/.claude/heimdall/.heimdall.json` via candidateStores. discoverStores
+    // from `~/myrepo` must surface that as the worktree entry.
+    writeConfig(path.join(fakeHome, '.claude', FOLDER), { kind: 'worktree', locks: [] });
 
+    const repo = path.join(fakeHome, 'myrepo');
+    fs.mkdirSync(repo, { recursive: true });
+
+    const stores = discoverStores(repo);
+    const worktree = stores.find((s) => s.kind === 'worktree');
+    assert.ok(worktree, 'expected worktree store for repo directly under HOME');
+    assert.equal(worktree.dir, path.join(fakeHome, '.claude', FOLDER));
+  });
+
+  it('does not walk past HOME (sandbox isolation)', () => {
+    // No marker seeded at HOME or above. discoverStores from a cwd nested
+    // under HOME must not walk past HOME and pick up a marker in the real
+    // user's HOME (this is what the HOME stop protects against).
     const sub = path.join(fakeHome, 'sub', 'dir');
     fs.mkdirSync(sub, { recursive: true });
 
