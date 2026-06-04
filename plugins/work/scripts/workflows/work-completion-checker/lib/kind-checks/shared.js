@@ -85,6 +85,10 @@ function readRequirementCoverageFromSubsections(tasksText) {
           description: '',
           status: 'DELIVERED',
           evidence: `tasks.md:Task ${taskNum}`,
+          // Tag synthesized rows so downstream gates (test_pass_crossref B2)
+          // can avoid forcing test citations on the R4 fallback, which has
+          // no concept of per-row test evidence by design.
+          source: 'subsection',
         });
       }
     }
@@ -119,6 +123,7 @@ function readRequirementCoverage(tasksDir) {
         description: cells[1] || '',
         status: cells[2] || '',
         evidence: cells[3] || '',
+        source: 'table',
       });
     }
   }
@@ -171,7 +176,9 @@ function readReuseAudit(specDir) {
   const blockLines = (block || '').split('\n');
   for (let i = 0; i < blockLines.length; i += 1) {
     const raw = blockLines[i];
-    const m = raw.match(/^\s*[-*]\s+`([^`]+)`\s+(MUST\s+be\s+reused|be\s+reused|may\s+be\s+reused)/i);
+    const m = raw.match(
+      /^\s*[-*]\s+`([^`]+)`\s+(MUST\s+be\s+reused|be\s+reused|may\s+be\s+reused)/i
+    );
     if (!m) continue;
     const mustReuse = /MUST/i.test(m[2]);
     entries.push({
@@ -186,7 +193,7 @@ function readReuseAudit(specDir) {
   }
   if (entries.length === 0) {
     throw new Error(
-      `readReuseAudit: '## Reuse Audit' section in ${path.join(specDir, 'spec.md')} contains no parseable entries`,
+      `readReuseAudit: '## Reuse Audit' section in ${path.join(specDir, 'spec.md')} contains no parseable entries`
     );
   }
   return entries;

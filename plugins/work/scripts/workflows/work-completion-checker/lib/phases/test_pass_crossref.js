@@ -20,7 +20,11 @@ const { COMPLETION_PHASES } = require('../../completion-phase-registry');
 const { readRequirementCoverage, readTestReport } = require('../kind-checks/shared');
 const { makeFailure } = require('../failure-record');
 const { appendForCheckType } = require('../failure-store');
-const { hasVerdict, escapeRegex, buildVerdictRegex } = require('../../../lib/parse-completion-status');
+const {
+  hasVerdict,
+  escapeRegex,
+  buildVerdictRegex,
+} = require('../../../lib/parse-completion-status');
 
 // B4/B5 fix: tighten the test-file char class so a leading `(` is not captured
 // (`\S+` would grab `(foo.test.js`), and allow `-` and `.` in test names so
@@ -135,7 +139,7 @@ function recordMissingReport(deliveredCitations, failures) {
         checkType: 'test_pass',
         expected: 'tests.check.md present',
         observed: 'tests.check.md not found — cannot verify test pass',
-      }),
+      })
     );
   }
 }
@@ -199,23 +203,29 @@ function checkCitations(deliveredCitations, reportContent, failures) {
         checkType: 'test_pass',
         expected: `${cite.testName} PASS`,
         observed: describeCitationFailure(cite, overall, result),
-      }),
+      })
     );
   }
   return { testsChecked, testsFailing };
 }
 
 /**
- * B2 fix: when the coverage table has DELIVERED rows but ZERO of them cite a
- * test in their Evidence cell, the previous implementation silently skipped
- * test verification — which is the exact failure mode ticket #282 calls out
- * ("checked 'does code exist' but never verified tests pass"). Surface a
- * single advisory failure so the gate has teeth without exploding noise per
- * row (kind_checks already covers the per-row behavioral classification).
+ * B2 fix: when the top-level `## Requirement Coverage` table has DELIVERED
+ * rows but ZERO of them cite a test in their Evidence cell, the previous
+ * implementation silently skipped test verification — which is the exact
+ * failure mode ticket #282 calls out ("checked 'does code exist' but never
+ * verified tests pass"). Surface a single advisory failure so the gate has
+ * teeth without exploding noise per row (kind_checks already covers the
+ * per-row behavioral classification).
+ *
+ * Review feedback: legacy tickets that only use the R4 fallback (per-task
+ * `### Requirements Covered` bullets) synthesize rows whose evidence is
+ * always `tasks.md:Task N` and could never carry test citations by design.
+ * Filter those out so B2 only fires against table-sourced rows.
  */
 function recordZeroCitationsFailure(coverage, failures) {
   const delivered = coverage.filter(
-    (r) => r && String(r.status).toUpperCase() === 'DELIVERED',
+    (r) => r && String(r.status).toUpperCase() === 'DELIVERED' && r.source !== 'subsection'
   );
   if (delivered.length === 0) return false;
   failures.push(
@@ -224,7 +234,7 @@ function recordZeroCitationsFailure(coverage, failures) {
       checkType: 'test_pass',
       expected: 'at least one DELIVERED row cites a test (foo.test.js:test_name)',
       observed: `${delivered.length} DELIVERED row(s), 0 cite a test — cannot verify pass`,
-    }),
+    })
   );
   return true;
 }
@@ -243,12 +253,7 @@ function validate(ctx) {
       // rows at all) still skips — coverage_check is responsible for that.
       const hadFailure = recordZeroCitationsFailure(coverage, failures);
       ctx.testsChecked = 0;
-      appendForCheckType(
-        ctx.tasksDir,
-        'test_pass',
-        failures.slice(startLen),
-        { testsChecked: 0 },
-      );
+      appendForCheckType(ctx.tasksDir, 'test_pass', failures.slice(startLen), { testsChecked: 0 });
       if (hadFailure) {
         return {
           ok: false,
@@ -263,12 +268,7 @@ function validate(ctx) {
     if (!report.exists) {
       recordMissingReport(deliveredCitations, failures);
       ctx.testsChecked = 0;
-      appendForCheckType(
-        ctx.tasksDir,
-        'test_pass',
-        failures.slice(startLen),
-        { testsChecked: 0 },
-      );
+      appendForCheckType(ctx.tasksDir, 'test_pass', failures.slice(startLen), { testsChecked: 0 });
       return {
         ok: false,
         errors: ['tests.check.md missing'],
@@ -279,15 +279,10 @@ function validate(ctx) {
     const { testsChecked, testsFailing } = checkCitations(
       deliveredCitations,
       report.content,
-      failures,
+      failures
     );
     ctx.testsChecked = testsChecked;
-    appendForCheckType(
-      ctx.tasksDir,
-      'test_pass',
-      failures.slice(startLen),
-      { testsChecked },
-    );
+    appendForCheckType(ctx.tasksDir, 'test_pass', failures.slice(startLen), { testsChecked });
 
     if (testsFailing > 0) {
       return {
