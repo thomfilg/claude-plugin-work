@@ -11,7 +11,7 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -63,7 +63,9 @@ function createOutputScript(dir, name, { stdout = '', stderr = '', exitCode = 1 
 function runCli(args, homeDir, cwd) {
   try {
     const tasksBase = path.join(homeDir, 'worktrees', 'tasks');
-    const stdout = execSync(`node ${CLI_PATH} ${args}`, {
+    const argv = Array.isArray(args) ? args : String(args).match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+    const cleanArgv = argv.map((a) => (a.startsWith('"') && a.endsWith('"') ? a.slice(1, -1) : a));
+    const stdout = execFileSync('node', [CLI_PATH, ...cleanArgv], {
       encoding: 'utf8',
       env: {
         ...process.env,
