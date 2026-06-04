@@ -19,6 +19,7 @@ const alerts = require('./alerts');
 const state = require('./state');
 const { headSha } = require('./detectors/gh-shared');
 const { eligibleTasks } = require('./session-shared');
+const manifest = require('./manifest');
 const { purgeAlertCountsForTicket } = require('../../maestro-cleanup');
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
@@ -86,10 +87,23 @@ function maybeAutoBootstrap(taskId) {
   if (process.env.AUTO_BOOTSTRAP_NEXT !== '1') return false;
   if (!taskId || !/^[A-Z]+-\d+$/.test(taskId)) return false;
   if (!fs.existsSync(BOOTSTRAP_SCRIPT)) return false;
+  // Respect manifest-declared pool size (sum of `slots` across manifests).
+  // Avoids over-bootstrapping when an operator pre-launched sessions.
+  try {
+    const tmuxMod = require('./tmux');
+    const activeSessions = tmuxMod.listSessions ? tmuxMod.listSessions() : [];
+    if (manifest.poolFull(activeSessions)) {
+      alerts.log(`AUTO-BOOTSTRAP skipped for ${taskId}: pool full per manifest slots`);
+      return false;
+    }
+  } catch {}
   const res = spawnSync('bash', [BOOTSTRAP_SCRIPT, taskId], {
     stdio: 'ignore',
     env: { ...process.env, REPO_NAME },
   });
+  if (res.status === 0) {
+    manifest.updateTaskStatus(taskId, 'in_progress', 'auto-bootstrapped by daemon');
+  }
   return res.status === 0;
 }
 
@@ -310,6 +324,7 @@ function freeCIGateSlot({ session, ticket, prNumber, sha }) {
   // spam on every tick. The kill above still runs (defensive).
   if (marker.sha === sha || ciFreed.sha === sha) return false;
   state.write(session, 'slot-freed', { sha, prNumber, freedAt: state.now() });
+  manifest.updateTaskStatus(ticket, 'awaiting-merge', `PR #${prNumber} CLEAN/SUCCESS at sha=${(sha || '').slice(0, 7)}`);
   const next = findNextEligibleTask();
   const autoBootstrapped = next && maybeAutoBootstrap(next.taskId);
   const prefix = `Slot freed for PR #${prNumber} (sha=${(sha || '').slice(0, 7)}). `;
@@ -343,6 +358,7 @@ function freeDeadEndSlot({ session, ticket, kind, repeatCount, sha }) {
     alerts.log(`${session} freeDeadEndSlot: purgeAlertCountsForTicket failed: ${err.message}`);
   }
   state.write(ticket, 'dead-end', { killed: true, freedAt: state.now(), trigger: kind });
+  manifest.updateTaskStatus(ticket, 'blocked', `dead-end after ${kind} ×${repeatCount}`);
   const next = findNextEligibleTask();
   const autoBootstrapped = next && maybeAutoBootstrap(next.taskId);
   const prefix = `DEAD-END on ${ticket} after ${kind} ×${repeatCount}. `;
@@ -367,4 +383,12 @@ function freeDeadEndSlot({ session, ticket, kind, repeatCount, sha }) {
   return true;
 }
 
-module.exports = { soft, interrupt, alert, autoRestart, freeCIGateSlot, freeDeadEndSlot };
+module.exports = {
+  soft,
+  interrupt,
+  alert,
+  autoRestart,
+  freeCIGateSlot,
+  freeDeadEndSlot,
+  syncManifest: manifest.syncFromTmux,
+};
