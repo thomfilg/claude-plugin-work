@@ -18,65 +18,15 @@ const tmux = require('./tmux');
 const alerts = require('./alerts');
 const state = require('./state');
 const { headSha } = require('./detectors/gh-shared');
-const { eligibleTasks } = require('./session-shared');
 const manifest = require('./manifest');
+const { findNextEligibleTask, buildNextActionInstruction } = require('./next-task');
 const { purgeAlertCountsForTicket } = require('../../maestro-cleanup');
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const SKILL_NAME = process.env.SKILL_NAME || 'work';
 
-const SESSION_MANIFEST_DIR =
-  process.env.MAESTRO_SESSION_DIR ||
-  path.join(process.env.HOME || '/tmp', '.cache', 'maestro', 'sessions');
 const BOOTSTRAP_SCRIPT = path.join(__dirname, '..', '..', 'maestro-bootstrap.sh');
 const REPO_NAME = process.env.REPO_NAME || 'claude-plugin-work';
-
-/**
- * Look across every orchestration manifest in ~/.cache/maestro/sessions/ for
- * the next pending task whose deps are all done. Returns { topic, taskId } or
- * null. First match wins (lowest priority across all manifests).
- */
-function readManifestSafe(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function topPendingForManifest(manifest, entry) {
-  // Reuse session-shared.eligibleTasks so the slot-freed bootstrap path and
-  // the maestro-session CLI agree on the next task (incl. default priority).
-  const ranked = eligibleTasks(Array.isArray(manifest.tasks) ? manifest.tasks : []);
-  if (ranked.length === 0) return null;
-  const top = ranked[0];
-  return {
-    topic: manifest.topic || entry.replace(/\.json$/, ''),
-    taskId: top.id,
-    priority: top.priority,
-  };
-}
-
-function findNextEligibleTask() {
-  if (!fs.existsSync(SESSION_MANIFEST_DIR)) return null;
-  let best = null;
-  // Sort manifest filenames so readdirSync iteration order is deterministic
-  // across filesystems. This gives a stable tie-break by filename when two
-  // eligible tasks share the same numeric priority (the natural tie-break
-  // here is ticket id, since manifest filenames are derived from topic/ticket).
-  const entries = fs.readdirSync(SESSION_MANIFEST_DIR).slice().sort();
-  for (const entry of entries) {
-    if (!entry.endsWith('.json')) continue;
-    const manifest = readManifestSafe(path.join(SESSION_MANIFEST_DIR, entry));
-    if (!manifest) continue;
-    const candidate = topPendingForManifest(manifest, entry);
-    if (!candidate) continue;
-    if (!best || (candidate.priority || 999) < (best.priority || 999)) {
-      best = candidate;
-    }
-  }
-  return best;
-}
 
 /**
  * Optionally bootstrap a fresh tmux + worktree for the next ticket. Returns
@@ -185,18 +135,24 @@ function checkCiGateFreedGuard({ session, ticket, worktree }) {
     state.clear(ticket, 'ci-gate-freed');
     return { skip: false };
   }
-  alerts.log(
-    `${session} AUTO-RESTART skipped: ticket ${ticket} CI-gate-freed at sha=${(ciFreed.sha || '').slice(0, 7)}; awaiting operator merge`
-  );
+  if (!ciFreed.skipLogged) {
+    alerts.log(
+      `${session} AUTO-RESTART skipped: ticket ${ticket} CI-gate-freed at sha=${(ciFreed.sha || '').slice(0, 7)}; awaiting operator merge`
+    );
+    state.write(ticket, 'ci-gate-freed', { ...ciFreed, skipLogged: true });
+  }
   return { skip: true };
 }
 
 function checkDeadEndGuard({ session, ticket }) {
   const deadEnd = state.read(ticket, 'dead-end');
   if (!deadEnd || !deadEnd.killed) return { skip: false };
-  alerts.log(
-    `${session} AUTO-RESTART skipped: ticket ${ticket} dead-end-freed (trigger=${deadEnd.trigger || 'unknown'}); slot rotated, do not resurrect`
-  );
+  if (!deadEnd.skipLogged) {
+    alerts.log(
+      `${session} AUTO-RESTART skipped: ticket ${ticket} dead-end-freed (trigger=${deadEnd.trigger || 'unknown'}); slot rotated, do not resurrect`
+    );
+    state.write(ticket, 'dead-end', { ...deadEnd, skipLogged: true });
+  }
   return { skip: true };
 }
 
@@ -273,16 +229,6 @@ function autoRestart({ session, ticket, worktree, silenceSec }) {
  *
  * No-op if AUTO_FREE_CI_SLOT=0.
  */
-function buildNextActionInstruction({ prefix, suffix, next, autoBootstrapped }) {
-  if (autoBootstrapped) {
-    return `${prefix}NEXT_ACTION=auto-bootstrapped ${next.taskId} from manifest "${next.topic}". No operator action needed unless bootstrap log shows failure.`;
-  }
-  if (next) {
-    return `${prefix}NEXT_ACTION=bootstrap ${next.taskId} (manifest "${next.topic}", priority=${next.priority}). Run: bash plugins/maestro/scripts/maestro-bootstrap.sh ${next.taskId}. Set AUTO_BOOTSTRAP_NEXT=1 to skip this step.${suffix}`;
-  }
-  return `${prefix}NEXT_ACTION=do-nothing — no eligible pending task across orchestration manifests.${suffix}`;
-}
-
 function killTicketTmux(ticket) {
   for (const suffix of ['work', 'listen']) {
     spawnSync('tmux', ['kill-session', '-t', `${ticket}-${suffix}`], { stdio: 'ignore' });

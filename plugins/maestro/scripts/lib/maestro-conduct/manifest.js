@@ -79,49 +79,58 @@ function updateTaskStatus(taskId, status, note) {
  */
 const TERMINAL = new Set(['awaiting-merge', 'blocked', 'done']);
 
-function syncFromTmux(activeWorkSessions) {
-  const aliveTickets = new Set(
-    (activeWorkSessions || [])
-      .map((s) => (s.match(/^(GH-\d+)-work$/) || [])[1])
-      .filter(Boolean)
+function aliveTicketSet(activeWorkSessions) {
+  return new Set(
+    (activeWorkSessions || []).map((s) => (s.match(/^(GH-\d+)-work$/) || [])[1]).filter(Boolean)
   );
+}
+
+function reconcileTask(task, aliveTickets) {
+  if (TERMINAL.has(task.status)) return false;
+  const isAlive = aliveTickets.has(task.id);
+  if (isAlive && task.status !== 'in_progress') {
+    task.status = 'in_progress';
+    task.note = 'tmux session detected by daemon';
+    task.updatedAt = new Date().toISOString();
+    return true;
+  }
+  if (!isAlive && task.status === 'in_progress') {
+    task.status = 'stopped';
+    task.note = 'tmux session gone (killed or exited)';
+    task.updatedAt = new Date().toISOString();
+    return true;
+  }
+  return false;
+}
+
+function syncFromTmux(activeWorkSessions) {
+  const aliveTickets = aliveTicketSet(activeWorkSessions);
   for (const file of listManifestFiles()) {
     const m = readManifest(file);
     if (!m || !Array.isArray(m.tasks)) continue;
     let dirty = false;
     for (const task of m.tasks) {
-      if (TERMINAL.has(task.status)) continue;
-      const isAlive = aliveTickets.has(task.id);
-      if (isAlive && task.status !== 'in_progress') {
-        task.status = 'in_progress';
-        task.note = 'tmux session detected by daemon';
-        task.updatedAt = new Date().toISOString();
-        dirty = true;
-      } else if (!isAlive && task.status === 'in_progress') {
-        task.status = 'stopped';
-        task.note = 'tmux session gone (killed or exited)';
-        task.updatedAt = new Date().toISOString();
-        dirty = true;
-      }
+      if (reconcileTask(task, aliveTickets)) dirty = true;
     }
     if (dirty) writeManifest(file, m);
   }
 }
 
 /**
- * Pool-size check. Sums `slots` across all manifests (or per-topic) and
- * compares to current live work-session count. Returns true if pool is full.
+ * Pool-size check, per-manifest. For each manifest, count its OWN live
+ * work-sessions (tickets the manifest knows about) and compare to that
+ * manifest's `slots`. Pool is full if ANY manifest is at-or-over its cap.
+ * This prevents stale manifests from inflating the global total.
  */
 function poolFull(activeWorkSessions) {
-  let totalSlots = 0;
+  const aliveTickets = aliveTicketSet(activeWorkSessions);
   for (const file of listManifestFiles()) {
     const m = readManifest(file);
-    if (!m) continue;
-    if (typeof m.slots === 'number') totalSlots += m.slots;
+    if (!m || typeof m.slots !== 'number' || !Array.isArray(m.tasks)) continue;
+    const liveInThisManifest = m.tasks.filter((t) => aliveTickets.has(t.id)).length;
+    if (liveInThisManifest >= m.slots) return true;
   }
-  if (totalSlots <= 0) return false;
-  const live = (activeWorkSessions || []).filter((s) => /^GH-\d+-work$/.test(s)).length;
-  return live >= totalSlots;
+  return false;
 }
 
 module.exports = {
