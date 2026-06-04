@@ -354,6 +354,177 @@ function runTestCommandWithOutput(cmd) {
 }
 
 /**
+ * GH-532 — RED load-failure signatures. When a test runner exits non-zero
+ * because the test FILE itself failed to load (ReferenceError / SyntaxError
+ * / Cannot find module) or reported zero tests, the non-zero exit is not
+ * evidence of a real failing assertion. `cmdRecordRed` MUST reject these
+ * so agents fix the test file rather than persisting fake-RED evidence.
+ *
+ * Frozen so callers (and a future `enforce-tdd-on-stop.js` consumer) share
+ * the exact heuristic.
+ */
+const RED_LOAD_FAILURE_PATTERNS = Object.freeze([
+  Object.freeze({ name: 'ReferenceError', regex: /\bReferenceError:/ }),
+  Object.freeze({ name: 'SyntaxError', regex: /\bSyntaxError:/ }),
+  Object.freeze({
+    name: 'Cannot find module',
+    regex: /Cannot find module|MODULE_NOT_FOUND/,
+  }),
+  Object.freeze({ name: '0 tests', regex: /#\s*tests\s+0\b|\b0\s+tests?\b/ }),
+]);
+
+/**
+ * Scan combined stdout+stderr line-by-line for a RED-load-failure signature.
+ *
+ * Lines ignored:
+ *   - stack frames matching /^\s+at\s/ — a `ReferenceError:` thrown inside
+ *     a passing test's `assert.throws` reports the type name on a stack
+ *     frame; we don't want that to count as a top-level load failure.
+ *   - lines inside a contiguous `details:` block — node:test prints the
+ *     expected/actual values of a failing `assert.throws` under a
+ *     `details:` heading; the block ends at the next non-indented line
+ *     (typically the YAML terminator `...` or a blank line).
+ *
+ * Fail-closed: if the scan throws unexpectedly, return a match with
+ * signature `'scan-error'` so the recorder rejects rather than silently
+ * accepting the RED.
+ *
+ * @param {string} output combined stdout + '\n' + stderr
+ * @returns {{ matched: boolean, signature: string|null }}
+ */
+function detectRedLoadFailure(output) {
+  try {
+    if (typeof output !== 'string' || output.length === 0) {
+      return { matched: false, signature: null };
+    }
+    const lines = output.split(/\r?\n/);
+    let inDetailsBlock = false;
+    let detailsBaseIndent = -1;
+    for (const line of lines) {
+      // Stack frames — `    at Foo (file:1:2)` — never match.
+      if (/^\s+at\s/.test(line)) continue;
+      // Track contiguous `details:` block (R5 / AC9). The block opens on a
+      // line whose trimmed content starts with `details:` and closes when
+      // we hit a line with less indentation than the first content line
+      // following the heading, OR a YAML doc-end `...`, OR a blank line.
+      const trimmed = line.trim();
+      if (inDetailsBlock) {
+        const indentMatch = line.match(/^(\s*)\S/);
+        const indent = indentMatch ? indentMatch[1].length : -1;
+        if (trimmed === '' || trimmed === '...' || indent <= detailsBaseIndent) {
+          inDetailsBlock = false;
+          detailsBaseIndent = -1;
+          // fall through — this line is not inside the block
+        } else {
+          continue;
+        }
+      }
+      if (/^\s*details:\s*$/.test(line)) {
+        inDetailsBlock = true;
+        const headIndent = line.match(/^(\s*)/)[1].length;
+        detailsBaseIndent = headIndent;
+        continue;
+      }
+      for (const pattern of RED_LOAD_FAILURE_PATTERNS) {
+        if (pattern.regex.test(line)) {
+          return { matched: true, signature: pattern.name };
+        }
+      }
+    }
+    return { matched: false, signature: null };
+  } catch {
+    // Fail-closed (R10): an unexpected throw must NOT result in silent
+    // acceptance of the RED.
+    return { matched: true, signature: 'scan-error' };
+  }
+}
+
+/**
+ * Extract a short (~200 char) snippet of the matched line(s) from the
+ * combined runner output for audit-row `meta.snippet`. Returns the first
+ * non-stack-frame, non-`details:`-block line that matches the named
+ * signature's pattern, falling back to a head excerpt of the output.
+ *
+ * @param {string} output combined stdout+stderr
+ * @param {string} signatureName one of RED_LOAD_FAILURE_PATTERNS[].name
+ * @returns {string}
+ */
+function extractLoadFailureSnippet(output, signatureName) {
+  const MAX = 200;
+  try {
+    if (typeof output !== 'string' || output.length === 0) return '';
+    const pattern = RED_LOAD_FAILURE_PATTERNS.find((p) => p.name === signatureName);
+    if (!pattern) return output.slice(0, MAX);
+    const lines = output.split(/\r?\n/);
+    for (const line of lines) {
+      if (/^\s+at\s/.test(line)) continue;
+      if (pattern.regex.test(line)) {
+        return line.trim().slice(0, MAX);
+      }
+    }
+    return output.slice(0, MAX);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Build the rejection diagnostic for a RED load-failure. Multi-sentence,
+ * names the matched signature, explains the test file is structurally
+ * broken, instructs the agent to fix the test file and re-run record-red.
+ * MUST NOT contain a `BYPASS:` line — this is a structural defect, not a
+ * justified bypass.
+ */
+function formatRedLoadFailureDiagnostic(signature) {
+  return (
+    `Rejected RED: detected ${signature} in test runner output. ` +
+    'The test file is structurally broken (load-time error or zero tests collected), ' +
+    'not a behavior gap. Fix the test file and re-run ' +
+    '`tdd-phase-state.js record-red`.'
+  );
+}
+
+/**
+ * GH-532 Task 2 / R7 / AC10 — append a structured audit row recording the
+ * RED load-failure rejection, then call `errorExit` with the diagnostic.
+ * Audit append is best-effort: wrapped in try/catch so a write failure
+ * does NOT swallow the rejection (errorExit always fires).
+ *
+ * @param {{
+ *   ticketId: string,
+ *   cycle: number,
+ *   testCommand: string,
+ *   signature: string,
+ *   snippet: string,
+ *   taskNum: number | null | undefined,
+ * }} args
+ * @returns {never}
+ */
+function rejectRedLoadFailure(args) {
+  try {
+    const { appendEnforcementAudit } = require('../work/lib/work-actions');
+    appendEnforcementAudit(args.ticketId, {
+      origin: 'ai-subtask',
+      task: args.taskNum || null,
+      phase: 'red',
+      action: 'tdd-red-load-failure-rejected',
+      allow: false,
+      reason: args.signature,
+      outputPath: null,
+      meta: {
+        cycle: args.cycle,
+        testCommand: args.testCommand,
+        signature: args.signature,
+        snippet: args.snippet,
+      },
+    });
+  } catch {
+    /* fail-open on audit write — rejection still fires below */
+  }
+  errorExit(formatRedLoadFailureDiagnostic(args.signature));
+}
+
+/**
  * Inspect a test runner's stdout/stderr for a summary line indicating
  * pass/skip counts. Returns { passed, skipped, parsed } where `parsed` is
  * true only if we found a recognizable summary. Be lenient on format —
@@ -560,9 +731,25 @@ function cmdRecordRed(ticketId, args) {
   }
 
   // Run tests — they must FAIL
-  const exitCode = runTestCommand(cmd);
+  const { exitCode, stdout, stderr } = runTestCommandWithOutput(cmd);
   if (exitCode === 0) {
     errorExit('Tests must FAIL in RED phase. Tests passed (exit 0).');
+  }
+
+  // GH-532: reject fake-RED caused by load failures (ReferenceError /
+  // SyntaxError / Cannot find module / 0 tests reported). These exit
+  // non-zero but the test file never actually ran an assertion.
+  const combinedOutput = (stdout || '') + '\n' + (stderr || '');
+  const loadFailure = detectRedLoadFailure(combinedOutput);
+  if (loadFailure.matched) {
+    rejectRedLoadFailure({
+      ticketId,
+      cycle: state.currentCycle,
+      testCommand: cmd,
+      signature: loadFailure.signature,
+      snippet: extractLoadFailureSnippet(combinedOutput, loadFailure.signature),
+      taskNum,
+    });
   }
 
   // Record evidence
