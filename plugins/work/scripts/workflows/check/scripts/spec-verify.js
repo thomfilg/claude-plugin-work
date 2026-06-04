@@ -309,6 +309,9 @@ function checkGrep(args, root) {
     for (const file of files) {
       try {
         const fileContent = fs.readFileSync(file, 'utf-8');
+        // Reset lastIndex so /g (or /y) regexes don't leak position across files
+        // and produce a false PASS where a later file starts mid-content.
+        regex.lastIndex = 0;
         if (regex.test(fileContent)) {
           return { type: 'GREP', args, passed: true };
         }

@@ -431,6 +431,25 @@ describe('spec-verify.js', () => {
     );
   });
 
+  it('GREP with /g regex does not leak lastIndex across glob-matched files', () => {
+    // Regression: a /g regex matched in file A advances lastIndex; without a
+    // reset, .test() against file B starts mid-content and can produce a
+    // false PASS when the pattern is absent. Here every file is empty of the
+    // pattern, but a prior file in the same scan contains it — so without the
+    // fix the second file's .test() would PASS spuriously.
+    writeFile('src/a.tsx', 'useFeatureFlag\nuseFeatureFlag\nuseFeatureFlag');
+    writeFile('src/b.tsx', 'no pattern here at all');
+    // Use a glob that matches a.tsx first; the gate should still inspect each
+    // file independently. We pick a non-matching pattern so PASS would only
+    // come from a leaked lastIndex.
+    writeFile('src/c.tsx', 'nothing relevant');
+    const specPath = writeSpec(['- GREP src/**/*.tsx /missingToken/g']);
+    const result = runScript(specPath, { json: true });
+    assert.equal(result.exitCode, 1);
+    const json = JSON.parse(result.stdout);
+    assert.equal(json.checks[0].passed, false);
+  });
+
   it('GREP rejects glob pattern with .. segments after a wildcard (traversal)', () => {
     writeFile('src/a.tsx', 'const x = 1;');
     const specPath = writeSpec(['- GREP src/**/../../../outside/*.tsx /anything/']);
