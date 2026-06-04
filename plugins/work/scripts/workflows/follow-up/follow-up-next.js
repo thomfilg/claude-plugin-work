@@ -127,6 +127,12 @@ function initState(ticketId, prNumber) {
     attempt: 0,
     maxAttempts: 40,
     // monitor cache (see infra-patterns.js for invalidation rules)
+    // GH-531 Task 6 (AC10): explicitly reset the push-retry counter so the
+    // cap-exhausted recovery path can't immediately re-trigger after
+    // `reset-follow-up`. Was previously `undefined` (incremented to 1 on
+    // first push-retry), which matches the same observable behavior; the
+    // explicit `0` makes the recovery guarantee inspectable by operators.
+    _pushRetryCount: 0,
     lastMonitorResult: null,
     lastMonitorAt: null,
     failureCategory: null,
