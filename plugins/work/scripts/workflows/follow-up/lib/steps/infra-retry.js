@@ -68,6 +68,13 @@ function maybeHandleRetrySuccess(state, ctx) {
   if (!last || last.outcome !== 'pending') return false;
   const ciStatus = ctx && ctx.ciStatus;
   if (ciStatus !== 'success') return false;
+  // Bug 542-12: refuse to trust a persisted-stale `ciStatus`. monitor.js
+  // stamps `state._ciStatusFreshAt` with `process.uptime()` of its own
+  // process; a later process re-loading from disk has a fresh uptime clock,
+  // so the stamp won't match this process's uptime and we drop through
+  // (which forces the loop to call monitor again first).
+  const freshness = state._ciStatusFreshness;
+  if (!freshness || freshness.pid !== process.pid) return false;
   last.outcome = 'succeeded';
   process.stderr.write(`${RETRY_SUCCESS_LOG}\n`);
   return true;

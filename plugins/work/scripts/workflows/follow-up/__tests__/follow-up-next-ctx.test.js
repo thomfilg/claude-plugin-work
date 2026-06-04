@@ -116,6 +116,7 @@ describe('follow-up-next.js — ctx wiring (Bug 2)', () => {
       maxAttempts: 40,
       _ciFailedJobs: [],
       _ciStatus: 'success',
+      _ciStatusFreshness: { pid: process.pid, at: new Date().toISOString() },
       failureCategory: 'ci_failure',
       infraRetry: {
         count: 1,

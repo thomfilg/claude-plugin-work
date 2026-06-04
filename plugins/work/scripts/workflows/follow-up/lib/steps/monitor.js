@@ -464,6 +464,9 @@ module.exports = function registerMonitor(register) {
     // depends on. Only fetch jobs+logs when CI is actually failing — passing
     // / pending runs don't need this and we want to keep the hot loop fast.
     state._ciStatus = mapCiStatus(ci.status);
+    // Bug 542-12: stamp the freshness so infra-retry can refuse a persisted
+    // _ciStatus inherited from a prior process (which could be stale).
+    state._ciStatusFreshness = { pid: process.pid, at: new Date().toISOString() };
     if (ci.status === 'failing' && initialFailedJobs.length > 0) {
       const classifierCtx = fetchClassifierContext(initialFailedJobs, ctx.worktreeDir);
       state._ciAllJobs = classifierCtx.allJobs;

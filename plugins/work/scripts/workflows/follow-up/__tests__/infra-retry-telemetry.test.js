@@ -20,15 +20,8 @@ const path = require('node:path');
 
 const STEP_PATH = require.resolve('../lib/steps/infra-retry');
 const CLASSIFIER_PATH = require.resolve('../lib/infra-classifier');
-const GET_CONFIG_PATH = require.resolve(
-  path.resolve(__dirname, '..', '..', 'lib', 'get-config')
-);
-const GH_ACTIONS_STATUS_PATH = path.resolve(
-  __dirname,
-  '..',
-  'lib',
-  'gh-actions-status.js'
-);
+const GET_CONFIG_PATH = require.resolve(path.resolve(__dirname, '..', '..', 'lib', 'get-config'));
+const GH_ACTIONS_STATUS_PATH = path.resolve(__dirname, '..', 'lib', 'gh-actions-status.js');
 
 function loadStep({ envFlag, classifyImpl, ghActionsStatusImpl } = {}) {
   delete require.cache[STEP_PATH];
@@ -145,6 +138,7 @@ describe('infra-retry — Task 7 telemetry / retry-success log / gh-actions outa
     const state = {
       failureCategory: 'ci_failure',
       runId: '12345',
+      _ciStatusFreshness: { pid: process.pid, at: new Date().toISOString() },
       infraRetry: {
         count: 1,
         attempts: [
