@@ -363,6 +363,37 @@ function attachJobIds(failedJobs, allJobs) {
   }
 }
 
+// Extract failing-test file paths from a CI log blob. Feeds the classifier's
+// signal3 (unrelated failures): if none of the failing tests overlap the PR
+// diff, the failure is likely infra/flake, not code the PR touched.
+//
+// Conservative by design — we'd rather miss a path than hallucinate one and
+// poison signal3. Recognised shapes:
+//   - vitest/jest:  `FAIL <path>.test.ts` or `FAIL <path>.spec.tsx (…)`
+//   - playwright:   `  × <path>.spec.ts:LINE:COL › …` (also `✘`, `✕`)
+//   - generic:      any line containing `FAIL|×|✘|✕|failed` plus a
+//                   `(plugins|apps|packages|src|tests)/.*\.(test|spec)\.[jt]sx?`
+//                   substring.
+const TEST_PATH_RE =
+  /\b((?:plugins|apps|packages|src|tests|test|e2e)\/[\w./@-]+?\.(?:test|spec)\.[jt]sx?)\b/g;
+const FAIL_MARKER_RE = /\b(FAIL|failed)\b|[×✘✕]/;
+
+function extractFailedTestPaths(rawLogs) {
+  if (typeof rawLogs !== 'string' || rawLogs.length === 0) return [];
+  const seen = new Set();
+  for (const line of rawLogs.split('\n')) {
+    if (!FAIL_MARKER_RE.test(line)) continue;
+    let m;
+    TEST_PATH_RE.lastIndex = 0;
+    while ((m = TEST_PATH_RE.exec(line)) !== null) {
+      const p = m[1];
+      if (p.startsWith('/')) continue;
+      seen.add(p);
+    }
+  }
+  return Array.from(seen);
+}
+
 // Order matters: read `j.url || j.link`. `checkCI()` renames `link → url` for
 // failed jobs that have been normalized, but legacy/un-normalized entries
 // still carry only `link`. Probing `url` first preserves the canonical name
@@ -440,9 +471,15 @@ module.exports = function registerMonitor(register) {
       // Bug C (GH-508): join databaseId from allJobs by name so each failed
       // job carries the per-job ID signal2 needs.
       attachJobIds(initialFailedJobs, classifierCtx.allJobs);
+      // PR #542 cursor[bot]: extract failing-test file paths from the raw
+      // logs so classifier signal3 has something to read. Without this,
+      // s.failedTests stays empty and the (signal3 && signal4) path can
+      // never fire from real CI data.
+      state._ciFailedTests = extractFailedTestPaths(classifierCtx.failedLogs);
     } else {
       state._ciAllJobs = [];
       state._ciFailedLogs = '';
+      state._ciFailedTests = [];
     }
 
     if (exitCode === 0) state.currentStep = computeNextStepOnGreen(state);
@@ -477,4 +514,5 @@ module.exports.__test__ = {
   mapCiStatus,
   fetchClassifierContext,
   computeNextStepOnGreen,
+  extractFailedTestPaths,
 };

@@ -130,6 +130,29 @@ describe('infra-classifier', () => {
       const result = signal3_unrelatedFailures(failedTests, prDiffFiles);
       assert.equal(result.fired, false);
     });
+
+    it('PR #542 cursor[bot]: realistic populated shape — state.failedTests flows in from CI log extraction', () => {
+      // Simulates the new pipeline: monitor.js extracts paths from raw logs
+      // into state._ciFailedTests; follow-up-next.js mirrors onto
+      // state.failedTests; classify reads s.failedTests. End-to-end realism.
+      const state = {
+        _ciFailedJobs: [],
+        failedTests: [
+          'plugins/work/scripts/workflows/follow-up/__tests__/unrelated.test.js',
+          'apps/web/src/unrelated/foo.spec.tsx',
+        ],
+      };
+      const ctx = {
+        allJobs: [],
+        prDiffFiles: ['src/payment/checkout.ts'],
+        rawLogs: ['e2e-deps cache: MISS', 'fallback install FAILED'].join('\n'),
+        exec: () => ({ stdout: 'real assertion', stderr: '', status: 0 }),
+        jobId: '222',
+      };
+      const result = classify(state, ctx);
+      assert.ok(result.signals.includes('signal3'));
+      assert.equal(result.classification, 'infra-suspected');
+    });
   });
 
   describe('signal4_setupArtifacts', () => {

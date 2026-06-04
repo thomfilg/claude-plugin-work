@@ -198,10 +198,17 @@ function buildExecForCtx(worktreeDir) {
 function buildClassifierCtx(state, worktreeDir) {
   const failedJobs = Array.isArray(state._ciFailedJobs) ? state._ciFailedJobs : [];
   const firstFailed = failedJobs[0] || {};
+  // PR #542 cursor[bot]: signal3 reads state.failedTests. monitor.js writes
+  // extracted paths to state._ciFailedTests; mirror onto state.failedTests so
+  // the classifier's existing read works without a signature change, and
+  // surface on ctx for future ctx-consumers.
+  const failedTests = Array.isArray(state._ciFailedTests) ? state._ciFailedTests : [];
+  state.failedTests = failedTests;
   return {
     allJobs: Array.isArray(state._ciAllJobs) ? state._ciAllJobs : [],
     prDiffFiles: loadPrDiffFiles(worktreeDir),
     rawLogs: typeof state._ciFailedLogs === 'string' ? state._ciFailedLogs : '',
+    failedTests,
     exec: buildExecForCtx(worktreeDir),
     // Bug C (GH-508): monitor.js records IDs on _ciFailedJobs only — state.runId
     // is never populated. Read both runId and jobId from the failed-job entry so
