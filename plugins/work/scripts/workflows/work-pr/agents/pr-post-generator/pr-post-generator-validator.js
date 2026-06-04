@@ -18,28 +18,11 @@ const path = require('path');
 const getConfig = require(path.join(__dirname, '..', '..', '..', 'lib', 'get-config'));
 const { detectFabrication } = require('./fabrication-detector');
 const { appendAction } = require(path.join(__dirname, '..', '..', '..', 'work', 'lib', 'work-actions'));
+const { getCurrentTaskId } = require(path.join(__dirname, '..', '..', '..', 'lib', 'scripts', 'get-ticket-id'));
 const WORKTREES_BASE = getConfig.orExit('WORKTREES_BASE');
 const REPO_NAME = getConfig('REPO_NAME') || 'my-project';
 const REPO_DIR = path.join(WORKTREES_BASE, REPO_NAME);
 const APPS_DIR = process.env.APPS_DIR || path.join(REPO_DIR, 'apps');
-
-/**
- * Resolve the active ticket ID from the current git branch, returning the
- * first `[A-Z]+-[0-9]+` match. Returns null if git fails or no match.
- */
-function getTicketIdFromBranch() {
-  try {
-    const branch = execSync('git branch --show-current', {
-      encoding: 'utf8',
-      timeout: 5000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    const m = branch.match(/[A-Z]+-[0-9]+/);
-    return m ? m[0] : null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Run the fabrication-detector against the live PR body and emit a
@@ -214,19 +197,23 @@ async function main() {
 
   // ========== FABRICATION CHECK (runs FIRST, regardless of frontend status) ==========
   const prBody = getPRBody();
-  const ticketId = getTicketIdFromBranch();
+  const ticketId = getCurrentTaskId();
   const tasksBase = getConfig('TASKS_BASE');
   if (!tasksBase) {
     process.stderr.write(
       'PR-POST-GENERATOR VALIDATOR: TASKS_BASE not configured; skipping fabrication check (fail-open).\n'
     );
-  } else if (ticketId) {
-    const taskDir = path.join(tasksBase, ticketId);
-    runFabricationCheck(prBody, taskDir, ticketId);
   } else {
-    process.stderr.write(
-      'PR-POST-GENERATOR VALIDATOR: could not extract ticket ID from branch name (expected /[A-Z]+-[0-9]+/); skipping fabrication check (fail-open).\n'
-    );
+    // Detection runs even without a ticketId — only the audit-log appendAction
+    // requires it. A missing ticketId yields taskDir === tasksBase, which has
+    // no tests.check.md / stability artifacts, so unsourced claims still trip.
+    const taskDir = ticketId ? path.join(tasksBase, ticketId) : tasksBase;
+    if (!ticketId) {
+      process.stderr.write(
+        'PR-POST-GENERATOR VALIDATOR: could not resolve ticket ID; running fabrication check without audit log.\n'
+      );
+    }
+    runFabricationCheck(prBody, taskDir, ticketId);
   }
 
   // ========== CHECK IF FRONTEND APPS ARE AFFECTED ==========
