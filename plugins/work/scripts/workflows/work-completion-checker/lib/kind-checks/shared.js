@@ -183,7 +183,12 @@ function readReuseAudit(specDir) {
     const mustReuse = /MUST/i.test(m[2]);
     entries.push({
       symbol: m[1],
-      line: headingLine + i,
+      // headingLine is the 1-indexed line of `## Reuse Audit`; sliceSection
+      // returns text AFTER that heading, so body index 0 corresponds to the
+      // line immediately below the heading (`headingLine + 1`). Previous
+      // form `headingLine + i` was off-by-one and pointed every entry one
+      // line above its actual location in spec.md (review feedback).
+      line: headingLine + 1 + i,
       mustReuse,
       // Self-evident, per-entry identifier — Reuse Audit entries in spec.md
       // have no explicit R-ID, so we synthesize one. Used by failure records
