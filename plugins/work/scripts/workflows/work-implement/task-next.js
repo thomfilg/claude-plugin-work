@@ -448,25 +448,15 @@ function recordEvidence(phase, ticket, taskNum, cmd, cwd, scope, opts = {}) {
       '--cmd',
       wrapStrictMode(cmd),
     ];
-    // Task 4 (GH-528): when the orchestrator detects a docs-exempt or
-    // visual-only GREEN, forward `--docs-exempt` so the recorder relaxes
-    // the RC-D empty-command trap for this single invocation. Sibling of
-    // the RED-side fallback emitted around line 909.
-    if (opts && opts.docsExempt === true && phase === TDD_PHASES.green) {
-      recordArgs.push('--docs-exempt');
-    }
-    // Task 4 (GH-528): RED-side parity — the existing RED docs-exempt
-    // fallback (line ~911) calls recordEvidence without opts when scope
-    // contains zero test files (the documented docs-exempt/visual-only
-    // shape). The recorder's `record-red` "No test files changed" guard
-    // would otherwise reject. Auto-forward `--docs-exempt` for that exact
-    // shape so the recorder accepts the documentation-task RED evidence.
-    // This is a recordEvidence-internal heuristic and does NOT modify the
-    // sibling-owned RED branch call site at line ~911.
+    // Task 4 (GH-528): caller opt-in for `--docs-exempt` (symmetric across
+    // RED and GREEN). Only the docs-exempt / visual-only RED and GREEN
+    // fallback call sites pass `opts.docsExempt: true`. All other callers
+    // get default behavior so the RED test-file guard and GREEN RC-D
+    // empty-command trap stay armed for normal code tasks.
     if (
-      phase === TDD_PHASES.red &&
-      Array.isArray(scope) &&
-      filterToTestFiles(scope).length === 0
+      opts &&
+      opts.docsExempt === true &&
+      (phase === TDD_PHASES.red || phase === TDD_PHASES.green)
     ) {
       recordArgs.push('--docs-exempt');
     }
@@ -928,7 +918,10 @@ function main() {
           // command failed as RED requires (exitCode !== 0 confirmed above).
           // Accept it. Fires for documentation tasks (isDocsExempt) and for
           // Storybook stories-only tasks (isVisualOnlyTask).
-          const rec = recordEvidence(TDD_PHASES.red, ticket, taskNum, testCmd, repoRoot, scope);
+          const rec = recordEvidence(
+            TDD_PHASES.red, ticket, taskNum, testCmd, repoRoot, scope,
+            { docsExempt: true }
+          );
           if (!rec.ok) {
             blockReason = `Could not record RED evidence:\n${rec.out}`;
           } else {

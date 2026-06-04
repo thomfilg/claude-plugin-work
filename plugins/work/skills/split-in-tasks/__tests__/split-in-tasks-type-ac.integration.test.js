@@ -19,7 +19,7 @@
  * entry-point does not yet require lint-type-ac-consistency.
  */
 
-const { describe, it, before, after } = require('node:test');
+const { describe, it, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');

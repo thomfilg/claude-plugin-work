@@ -12,7 +12,7 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -26,30 +26,27 @@ function mkTempHome() {
 }
 
 function runCli(args, homeDir) {
-  try {
-    const stdout = execSync(`node ${CLI_PATH} ${args}`, {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        HOME: homeDir,
-        TASKS_BASE: path.join(homeDir, 'worktrees', 'tasks'),
-        WORK_TDD_TOKEN_SKIP: '1',
-        WORK_TDD_SKIP_WORKSPACE_CHECK: '1',
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    return { stdout, stderr: '', exitCode: 0 };
-  } catch (e) {
-    return {
-      stdout: e.stdout || '',
-      stderr: e.stderr || e.message,
-      exitCode: typeof e.status === 'number' ? e.status : 1,
-    };
-  }
+  const argv = Array.isArray(args) ? args : [];
+  const res = spawnSync(process.execPath, [CLI_PATH, ...argv], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      HOME: homeDir,
+      TASKS_BASE: path.join(homeDir, 'worktrees', 'tasks'),
+      WORK_TDD_TOKEN_SKIP: '1',
+      WORK_TDD_SKIP_WORKSPACE_CHECK: '1',
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  return {
+    stdout: res.stdout || '',
+    stderr: res.stderr || '',
+    exitCode: typeof res.status === 'number' ? res.status : 1,
+  };
 }
 
 function seedGreenPhase(homeDir, ticket) {
-  runCli(`init ${ticket}`, homeDir);
+  runCli(['init', ticket], homeDir);
   const statePath = path.join(homeDir, 'worktrees', 'tasks', ticket, 'tdd-phase.json');
   const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
   state.currentPhase = 'green';
@@ -75,14 +72,14 @@ describe('RC-D --docs-exempt relaxation', () => {
 
   it('tdd-phase-state record-green still rejects silent verifiers by default', () => {
     seedGreenPhase(homeDir, 'TEST-DOCS-1');
-    const r = runCli('record-green TEST-DOCS-1 --cmd \'eval ""\'', homeDir);
+    const r = runCli(['record-green', 'TEST-DOCS-1', '--cmd', 'eval ""'], homeDir);
     assert.notStrictEqual(r.exitCode, 0, 'default invocation must still reject empty output');
     assert.match(r.stderr, /empty-command trap|NO stdout\/stderr/i);
   });
 
   it('tdd-phase-state record-green accepts silent verifiers when docs-exempt flag is set', () => {
     const statePath = seedGreenPhase(homeDir, 'TEST-DOCS-2');
-    const r = runCli('record-green TEST-DOCS-2 --docs-exempt --cmd \'eval ""\'', homeDir);
+    const r = runCli(['record-green', 'TEST-DOCS-2', '--docs-exempt', '--cmd', 'eval ""'], homeDir);
     assert.strictEqual(
       r.exitCode,
       0,
