@@ -199,6 +199,24 @@ async function main() {
   const prBody = getPRBody();
   const ticketId = getCurrentTaskId();
   const tasksBase = getConfig('TASKS_BASE');
+  // Fail-closed when the PR body cannot be fetched: a transient `gh` failure
+  // must not become a silent bypass for fabricated test evidence. Empty body
+  // (`""`) is fine — nothing to scan — but `null` means we never saw the body.
+  if (prBody === null) {
+    process.stderr.write(`
+╔══════════════════════════════════════════════════════════════════════╗
+║  POST-PR-GENERATOR: COULD NOT FETCH PR BODY                          ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║  \`gh pr view --json body\` failed; fabrication check cannot run.      ║
+║  Blocking to avoid silently accepting unverified PR content.         ║
+║                                                                      ║
+║  Re-run after confirming \`gh\` auth and PR association.               ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+`);
+    process.exit(2);
+  }
   if (!tasksBase) {
     process.stderr.write(
       'PR-POST-GENERATOR VALIDATOR: TASKS_BASE not configured; skipping fabrication check (fail-open).\n'

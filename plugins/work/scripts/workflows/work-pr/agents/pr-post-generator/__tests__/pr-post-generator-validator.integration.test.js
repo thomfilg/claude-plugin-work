@@ -242,6 +242,37 @@ describe('pr-post-generator-validator: fabrication check', () => {
     assert.equal(code, 0, `expected exit 0, got ${code}; stderr=\n${stderr}`);
   });
 
+  it('Fails closed when gh pr view fails (cannot fetch PR body)', async () => {
+    resetTaskDir();
+    // Stub `gh` so it exits non-zero — getPRBody() returns null and the
+    // validator must block (exit 2) rather than silently allow.
+    writeStubBin('gh', '#!/usr/bin/env bash\nexit 1\n');
+    writeStubBin('git', `#!/usr/bin/env bash\necho '${TICKET_BRANCH}'\n`);
+    const getAffectedDir = path.join(REPO_DIR, 'scripts');
+    fs.mkdirSync(getAffectedDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(getAffectedDir, 'get-affected.js'),
+      `process.stdout.write(${JSON.stringify(JSON.stringify([]))});\n`,
+      'utf8'
+    );
+
+    const { code, stderr } = await runHook({
+      agent_name: 'pr-post-generator',
+      agent_output: AGENT_OUTPUT_STUB,
+    });
+
+    assert.equal(
+      code,
+      2,
+      `expected exit 2 when gh pr view fails; got ${code}; stderr=\n${stderr}`
+    );
+    assert.match(
+      stderr,
+      /COULD NOT FETCH PR BODY/,
+      `expected block reason in stderr; got:\n${stderr}`
+    );
+  });
+
   it('Backend-only change still runs the fabrication check', async () => {
     resetTaskDir();
     // No frontend apps registered in APPS_DIR for this case — but even if
