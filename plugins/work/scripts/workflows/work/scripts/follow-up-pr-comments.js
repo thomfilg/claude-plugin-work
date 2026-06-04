@@ -398,6 +398,77 @@ function handleNextComment() {
   process.exit(0);
 }
 
+// ── Helpers: solveLocally / skipLocally ──────────────────────────────────────
+//
+// These helpers update the local follow-up-comments.json snapshot for a
+// single comment. They are pure side-effecting functions (no argv parsing,
+// no process.exit) so the CLI handlers below and any new flag aliases can
+// share them. See GH-537 / Task 1.
+
+/**
+ * Mark a comment as solved in the local snapshot.
+ * @param {string|number} commentId - The comment id (already validated).
+ * @param {string} commitSha - The commit sha that addresses the comment (already validated).
+ * @param {string} description - Free-form resolution note (already truncated).
+ * @returns {{ solved: string|number, commitSha: string }} payload safe to serialize.
+ * @throws {Error} when the snapshot is missing or the comment id is not present.
+ */
+function solveLocally(commentId, commitSha, description) {
+  const state = loadState();
+  if (!state) {
+    const err = new Error('No snapshot found. Run --snapshot --pr <N> first.');
+    err.code = 'NO_SNAPSHOT';
+    throw err;
+  }
+
+  const comment = state.comments.find((c) => String(c.id) === String(commentId));
+  if (!comment) {
+    const err = new Error(`Comment ID ${commentId} not found in snapshot.`);
+    err.code = 'COMMENT_NOT_FOUND';
+    throw err;
+  }
+
+  comment.status = 'solved';
+  comment.commitSha = commitSha;
+  comment.resolution = description;
+
+  saveState(state);
+  rebuildAccountability(state);
+
+  return { solved: commentId, commitSha };
+}
+
+/**
+ * Mark a comment as skipped in the local snapshot.
+ * @param {string|number} commentId - The comment id (already validated).
+ * @param {string} reason - Free-form skip reason (already truncated).
+ * @returns {{ skipped: string|number }} payload safe to serialize.
+ * @throws {Error} when the snapshot is missing or the comment id is not present.
+ */
+function skipLocally(commentId, reason) {
+  const state = loadState();
+  if (!state) {
+    const err = new Error('No snapshot found. Run --snapshot --pr <N> first.');
+    err.code = 'NO_SNAPSHOT';
+    throw err;
+  }
+
+  const comment = state.comments.find((c) => String(c.id) === String(commentId));
+  if (!comment) {
+    const err = new Error(`Comment ID ${commentId} not found in snapshot.`);
+    err.code = 'COMMENT_NOT_FOUND';
+    throw err;
+  }
+
+  comment.status = 'skipped';
+  comment.resolution = reason;
+
+  saveState(state);
+  rebuildAccountability(state);
+
+  return { skipped: commentId };
+}
+
 // ── Subcommand: --solve-comment ──────────────────────────────────────────────
 
 function handleSolveComment(rawId, rawSha, rawDesc) {
@@ -415,26 +486,15 @@ function handleSolveComment(rawId, rawSha, rawDesc) {
 
   const description = truncate(rawDesc);
 
-  const state = loadState();
-  if (!state) {
-    console.error('Error: No snapshot found. Run --snapshot --pr <N> first.');
+  let payload;
+  try {
+    payload = solveLocally(commentId, commitSha, description);
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
     process.exit(1);
   }
 
-  const comment = state.comments.find((c) => String(c.id) === String(commentId));
-  if (!comment) {
-    console.error(`Error: Comment ID ${commentId} not found in snapshot.`);
-    process.exit(1);
-  }
-
-  comment.status = 'solved';
-  comment.commitSha = commitSha;
-  comment.resolution = description;
-
-  saveState(state);
-  rebuildAccountability(state);
-
-  console.log(JSON.stringify({ solved: commentId, commitSha }));
+  console.log(JSON.stringify(payload));
   process.exit(0);
 }
 
@@ -449,25 +509,15 @@ function handleSkipComment(rawId, rawReason) {
 
   const reason = truncate(rawReason);
 
-  const state = loadState();
-  if (!state) {
-    console.error('Error: No snapshot found. Run --snapshot --pr <N> first.');
+  let payload;
+  try {
+    payload = skipLocally(commentId, reason);
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
     process.exit(1);
   }
 
-  const comment = state.comments.find((c) => String(c.id) === String(commentId));
-  if (!comment) {
-    console.error(`Error: Comment ID ${commentId} not found in snapshot.`);
-    process.exit(1);
-  }
-
-  comment.status = 'skipped';
-  comment.resolution = reason;
-
-  saveState(state);
-  rebuildAccountability(state);
-
-  console.log(JSON.stringify({ skipped: commentId }));
+  console.log(JSON.stringify(payload));
   process.exit(0);
 }
 
@@ -552,9 +602,12 @@ function main() {
       handleNextComment();
       break;
 
-    case '--solve-comment': {
+    case '--solve-comment':
+    case '--mark-locally-solved': {
       if (argv.length < 4) {
-        console.error('Error: --solve-comment requires <commentId> <commitSha> "<description>"');
+        console.error(
+          `Error: ${subcommand} requires <commentId> <commitSha> "<description>"`
+        );
         printUsage();
         process.exit(2);
       }
@@ -562,9 +615,10 @@ function main() {
       break;
     }
 
-    case '--skip-comment': {
+    case '--skip-comment':
+    case '--mark-locally-skipped': {
       if (argv.length < 3) {
-        console.error('Error: --skip-comment requires <commentId> "<reason>"');
+        console.error(`Error: ${subcommand} requires <commentId> "<reason>"`);
         printUsage();
         process.exit(2);
       }
@@ -583,4 +637,11 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  solveLocally,
+  skipLocally,
+};

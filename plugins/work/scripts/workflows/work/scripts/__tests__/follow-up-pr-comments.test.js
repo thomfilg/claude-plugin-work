@@ -505,4 +505,121 @@ describe('follow-up-pr-comments CLI', () => {
       assert.equal(result.status, 2);
     });
   });
+
+  // ── Task 1 refactor: solveLocally / skipLocally helper exports ─────────────
+
+  describe('solveLocally / skipLocally helpers (Task 1)', () => {
+    const SCRIPT_PATH = path.join(__dirname, '..', 'follow-up-pr-comments.js');
+
+    it('declares a solveLocally helper function', () => {
+      const src = fs.readFileSync(SCRIPT_PATH, 'utf8');
+      assert.match(
+        src,
+        /function\s+solveLocally\s*\(/,
+        'expected follow-up-pr-comments.js to declare `function solveLocally(...)`'
+      );
+    });
+
+    it('declares a skipLocally helper function', () => {
+      const src = fs.readFileSync(SCRIPT_PATH, 'utf8');
+      assert.match(
+        src,
+        /function\s+skipLocally\s*\(/,
+        'expected follow-up-pr-comments.js to declare `function skipLocally(...)`'
+      );
+    });
+
+    it('exports the new helpers on module.exports', () => {
+      const src = fs.readFileSync(SCRIPT_PATH, 'utf8');
+      assert.match(
+        src,
+        /module\.exports[\s\S]*solveLocally/,
+        'expected module.exports to include solveLocally'
+      );
+      assert.match(
+        src,
+        /module\.exports[\s\S]*skipLocally/,
+        'expected module.exports to include skipLocally'
+      );
+    });
+
+    it('handleSolveComment delegates to solveLocally (thin dispatcher)', () => {
+      const src = fs.readFileSync(SCRIPT_PATH, 'utf8');
+      // After refactor, handleSolveComment body must reference solveLocally.
+      const handlerMatch = src.match(
+        /function\s+handleSolveComment\s*\([^)]*\)\s*\{([\s\S]*?)\n\}/
+      );
+      assert.ok(handlerMatch, 'expected handleSolveComment definition');
+      assert.match(
+        handlerMatch[1],
+        /solveLocally\s*\(/,
+        'expected handleSolveComment body to call solveLocally(...)'
+      );
+    });
+
+    it('handleSkipComment delegates to skipLocally (thin dispatcher)', () => {
+      const src = fs.readFileSync(SCRIPT_PATH, 'utf8');
+      const handlerMatch = src.match(
+        /function\s+handleSkipComment\s*\([^)]*\)\s*\{([\s\S]*?)\n\}/
+      );
+      assert.ok(handlerMatch, 'expected handleSkipComment definition');
+      assert.match(
+        handlerMatch[1],
+        /skipLocally\s*\(/,
+        'expected handleSkipComment body to call skipLocally(...)'
+      );
+    });
+  });
+
+  // ── Task 2: new flag aliases ─────────────────────────────────────────────
+
+  describe('--mark-locally-solved / --mark-locally-skipped (Task 2)', () => {
+    let ctx;
+    afterEach(() => ctx?.cleanup());
+
+    it('New flag --mark-locally-solved marks comment solved without warnings', () => {
+      const comments = [makeComment({ id: 100 })];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--mark-locally-solved', '100', 'abc1234', 'fixed null check'],
+        envFor(ctx.tmpDir),
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
+      assert.equal(result.stderr, '', `expected empty stderr, got: ${result.stderr}`);
+
+      const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
+      const comment = state.comments.find((c) => c.id === 100);
+      assert.equal(comment.status, 'solved');
+      assert.equal(comment.commitSha, 'abc1234');
+      assert.equal(comment.resolution, 'fixed null check');
+    });
+
+    it('New flag --mark-locally-skipped marks comment skipped without warnings', () => {
+      const comments = [makeComment({ id: 200 })];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--mark-locally-skipped', '200', 'Out of scope'],
+        envFor(ctx.tmpDir),
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
+      assert.equal(result.stderr, '', `expected empty stderr, got: ${result.stderr}`);
+
+      const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
+      const comment = state.comments.find((c) => c.id === 200);
+      assert.equal(comment.status, 'skipped');
+      assert.equal(comment.resolution, 'Out of scope');
+    });
+
+    it('--mark-locally-solved exits 2 when missing args', () => {
+      const result = run(['--mark-locally-solved', '100']);
+      assert.equal(result.status, 2);
+    });
+
+    it('--mark-locally-skipped exits 2 when missing reason', () => {
+      const result = run(['--mark-locally-skipped', '200']);
+      assert.equal(result.status, 2);
+    });
+  });
 });
