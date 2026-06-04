@@ -40,19 +40,21 @@ const SILENCE_LIMIT_SEC = parseInt(process.env.SILENCE_LIMIT_SEC || String(DEFAU
  *   3. ctx.skill === 'work' (or unknown) AND $SILENCE_LIMIT_SEC set → that value
  *   4. DEFAULT_SILENCE_LIMIT_SEC (300)
  */
+function posInt(v) {
+  const n = parseInt(v || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function resolveSilenceLimit(ctx) {
-  const skill = ctx && ctx.skill;
+  const skill = (ctx && ctx.skill) || null;
   if (skill === 'follow-up') {
-    const envOverride = parseInt(process.env.SILENCE_LIMIT_SEC_FOLLOWUP || '', 10);
-    if (Number.isFinite(envOverride) && envOverride > 0) return envOverride;
+    const envFollowup = posInt(process.env.SILENCE_LIMIT_SEC_FOLLOWUP);
+    if (envFollowup) return envFollowup;
   }
-  const row = skill ? skillRegistry.get(skill) : undefined;
-  if (row && Number.isFinite(row.silenceLimitSec) && row.silenceLimitSec > 0) {
-    return row.silenceLimitSec;
-  }
-  const envWork = parseInt(process.env.SILENCE_LIMIT_SEC || '', 10);
-  if (Number.isFinite(envWork) && envWork > 0) return envWork;
-  return DEFAULT_SILENCE_LIMIT_SEC;
+  const row = skill ? skillRegistry.get(skill) : null;
+  const rowLimit = row && posInt(row.silenceLimitSec);
+  if (rowLimit) return rowLimit;
+  return posInt(process.env.SILENCE_LIMIT_SEC) || DEFAULT_SILENCE_LIMIT_SEC;
 }
 
 // Shared with detectors/spinner.js — see ../live-spinner.js for the contract.

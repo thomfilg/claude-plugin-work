@@ -62,18 +62,10 @@ const REPO_NAME = process.env.REPO_NAME || 'claude-plugin-work';
 const Q_WAIT_MIN = parseInt(process.env.Q_WAIT_MIN || '3', 10);
 const TICK_SEC = parseInt(process.env.TICK_SEC || '60', 10);
 
-/** Build the context object passed to every detector.
- *
- * GH-514 R2/AC3: route per-ticket snapshot through the skill-registry so the
- * conductor honours non-/work skills (e.g. /follow-up). The skill is read
- * per-call (not at module load) so daemon restarts and mid-session skill
- * writes are picked up. When `.maestro-skill` is absent, `readTicketSkill`
- * falls open to `'work'` and the `work` row's snapshot delegates to
- * `workstate.snapshot` — identical to legacy behavior.
- */
+// ctxFor: build the context object passed to every detector.
+// GH-514 R2/AC3: skill is read per-call via skill-registry so /follow-up etc.
+// are honored and daemon restarts pick up mid-session skill writes.
 function ctxFor(session) {
-  // Strip session-suffix to derive ticket id. -dev/-listen are informational only;
-  // restartEligible() gates auto-restart to -work. Snapshot is a single on-disk read.
   const ticket = tmux.ticketIdFor(session);
   const skill = skillRegistry.readTicketSkill(ticket);
   const row = skillRegistry.get(skill) || skillRegistry.get('work');
@@ -183,13 +175,10 @@ function handlePhaseStall(ctx, stallHit) {
   bumpMarker(ctx.ticket, 'phase', marker, escalation === 'alert');
 }
 
-// Cooldown so spinner interrupts don't repeat every tick and flood the pane.
 const SPINNER_RE_INTERRUPT_MIN = parseInt(process.env.SPINNER_RE_INTERRUPT_MIN || '5', 10);
 
-// Spinner hang is an immediate interrupt; doesn't go through nudge counter.
-// Returns true ONLY when a fresh interrupt was just sent (caller skips remaining
-// detectors so we don't double-message the pane in the same tick). Cooldown
-// suppresses the re-interrupt but lets the other detectors keep observing.
+// Spinner hang → immediate interrupt; returns true only when a fresh interrupt
+// was sent so the caller skips remaining detectors this tick.
 function runSpinnerDetector(ctx) {
   const sHit = DETECTORS.spinner.detect(ctx);
   // Spinner marker is per-SESSION: a hung `-work` pane and an idle `-dev`
@@ -210,10 +199,8 @@ function runSpinnerDetector(ctx) {
   return true;
 }
 
-// Silence is a "session is dead" signal; on hit, auto-restart -work sessions
-// and clear all per-ticket markers so detectors don't fire against the
-// pre-restart state. Returns true when handled so the tick can skip the
-// remaining detectors (no point running them against a session we just killed).
+// Silence = "session dead"; on hit, auto-restart -work and clear markers.
+// Returns true when handled so the tick skips remaining detectors.
 function runSilenceDetector(ctx) {
   const sHit = DETECTORS.silence.detect(ctx);
   if (!sHit.hit) return false;

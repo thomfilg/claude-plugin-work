@@ -84,6 +84,7 @@ module.exports = {
   isKnownSkill,
   readTicketSkill,
   writeTicketSkill,
+  ticketSkillFile,
   SKILL_NAME_REGEX,
   DEFAULT_SKILL,
   TICKET_SKILL_BASENAME,

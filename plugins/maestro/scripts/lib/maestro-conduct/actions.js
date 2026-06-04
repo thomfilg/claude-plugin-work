@@ -209,18 +209,11 @@ function checkRestartGuards({ session, ticket, worktree }) {
 function resolveSkillForRestart(ticket, session) {
   const skill = skillRegistry.readTicketSkill(ticket);
   // Best-effort: peek at the raw stored value to detect a whitelist reject.
-  const fs2 = require('fs');
-  const os2 = require('os');
-  const path2 = require('path');
-  const tasksBase =
-    process.env.TASKS_BASE ||
-    path2.join(process.env.WORKTREES_BASE || path2.join(os2.homedir(), 'worktrees'), 'tasks');
-  const file = path2.join(tasksBase, ticket, skillRegistry.TICKET_SKILL_BASENAME);
   let raw = null;
   try {
-    raw = fs2.readFileSync(file, 'utf8').trim();
+    raw = fs.readFileSync(skillRegistry.ticketSkillFile(ticket), 'utf8').trim();
   } catch {
-    raw = null;
+    /* missing file → skill === default, no warning */
   }
   if (raw && !skillRegistry.isKnownSkill(raw)) {
     alerts.log(
