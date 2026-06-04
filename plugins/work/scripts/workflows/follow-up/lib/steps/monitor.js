@@ -57,14 +57,6 @@ function appendInitHintIfInfra(result, previousLastMonitorAt) {
 }
 
 /**
- * Single chokepoint for writing monitor results to state (R11).
- * Writes both `state.lastMonitorResult` and `state.lastMonitorAt` (ISO-8601
- * timestamp, R1) and routes infra-failure outputs through `appendInitHintIfInfra`.
- *
- * @param {object} state - mutable workflow state.
- * @param {{exitCode:number, output:string}} result
- */
-/**
  * Auto-clear stale infra-failure cache on monitor-step entry (R2, R5, R8, R9, R10).
  *
  * Drops ONLY `state.lastMonitorResult` and `state.lastMonitorAt` when BOTH:
@@ -87,6 +79,14 @@ function clearStaleInfraCache(state) {
   delete state.lastMonitorAt;
 }
 
+/**
+ * Single chokepoint for writing monitor results to state (R11).
+ * Writes both `state.lastMonitorResult` and `state.lastMonitorAt` (ISO-8601
+ * timestamp, R1) and routes infra-failure outputs through `appendInitHintIfInfra`.
+ *
+ * @param {object} state - mutable workflow state.
+ * @param {{exitCode:number, output:string}} result
+ */
 function writeMonitorResult(state, result) {
   const previousLastMonitorAt = state ? state.lastMonitorAt : null;
   const finalResult = appendInitHintIfInfra(result, previousLastMonitorAt);

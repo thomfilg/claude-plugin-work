@@ -8,6 +8,16 @@
  * IMPORTANT: No step-specific logic here. Steps live in lib/steps/.
  *
  * Usage: node follow-up-next.js <TICKET_ID> [--pr N] [--init]
+ *
+ * Flags:
+ *   --pr N   Pin the PR number (skips discovery).
+ *   --init   Drop cached state and start a fresh follow-up cycle. Use at
+ *            first-run bootstrap OR after manually fixing an infra-shaped
+ *            failure (gh auth, network, VPN) so the next monitor run
+ *            executes against fresh inputs instead of re-emitting a stale
+ *            cached failure. Note: the monitor step also auto-clears
+ *            stale infra failures (see lib/infra-patterns.js); --init is
+ *            still required for non-infra cached failures.
  */
 
 'use strict';
@@ -110,6 +120,7 @@ function initState(ticketId, prNumber) {
     dispatched: null,
     attempt: 0,
     maxAttempts: 40,
+    // monitor cache (see infra-patterns.js for invalidation rules)
     lastMonitorResult: null,
     lastMonitorAt: null,
     failureCategory: null,
