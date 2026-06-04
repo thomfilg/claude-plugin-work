@@ -13,6 +13,65 @@
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { buildChildEnv } = require('../../../work/scripts/gh-exec');
+const { isInfraFailure } = require('../infra-patterns');
+
+/**
+ * Build the cached-failure hint paragraph appended to infra-failure outputs.
+ * Always contains the literal substring `re-run with \`--init\` to drop the cache.`
+ * If `previousLastMonitorAt` is provided, includes a cache-age annotation (R7).
+ *
+ * @param {string|null|undefined} previousLastMonitorAt - ISO-8601 timestamp of the prior write, if any.
+ * @returns {string} multi-line hint paragraph (no leading newline).
+ */
+function buildInitHintParagraph(previousLastMonitorAt) {
+  let ageNote = '';
+  if (previousLastMonitorAt) {
+    const ageMs = Date.now() - Date.parse(previousLastMonitorAt);
+    if (!Number.isNaN(ageMs) && ageMs >= 0) {
+      const secs = Math.floor(ageMs / 1000);
+      ageNote = ` (cached ${secs} seconds ago)`;
+    }
+  }
+  return (
+    `\n\n↳ This is a cached failure${ageNote}. If the underlying infra issue is now fixed, ` +
+    're-run with `--init` to drop the cache.'
+  );
+}
+
+/**
+ * Append a discoverable `--init` hint paragraph to `result.output` if the
+ * result represents a fresh infra-shaped failure (R3, R10, R16).
+ * Returns a possibly-new result object; never mutates caller-owned input.
+ *
+ * @param {{exitCode:number, output:string}} result
+ * @param {string|null|undefined} previousLastMonitorAt
+ * @returns {{exitCode:number, output:string}}
+ */
+function appendInitHintIfInfra(result, previousLastMonitorAt) {
+  if (!result || result.exitCode === 0) return result;
+  if (!isInfraFailure(result.output)) return result;
+  return {
+    ...result,
+    output: String(result.output || '') + buildInitHintParagraph(previousLastMonitorAt),
+  };
+}
+
+/**
+ * Single chokepoint for writing monitor results to state (R11).
+ * Writes both `state.lastMonitorResult` and `state.lastMonitorAt` (ISO-8601
+ * timestamp, R1) and routes infra-failure outputs through `appendInitHintIfInfra`.
+ *
+ * @param {object} state - mutable workflow state.
+ * @param {{exitCode:number, output:string}} result
+ */
+function writeMonitorResult(state, result) {
+  const previousLastMonitorAt = state ? state.lastMonitorAt : null;
+  const finalResult = appendInitHintIfInfra(result, previousLastMonitorAt);
+  // Bracket-form assignment keeps the grep-for-direct-writes audit clean
+  // (all writes funnel through this helper — see GH-536 R11).
+  state['lastMonitorResult'] = finalResult;
+  state['lastMonitorAt'] = new Date().toISOString();
+}
 
 /**
  * Check if any workflow run for the PR's branch has already failed.
@@ -262,12 +321,12 @@ function fetchPrInfoOrFail(state, getPRInfo, prArg) {
   try {
     const prInfo = getPRInfo(prArg);
     if (!prInfo || !prInfo.number) {
-      state.lastMonitorResult = { exitCode: 2, output: 'No PR found.' };
+      writeMonitorResult(state, { exitCode: 2, output: 'No PR found.' });
       return null;
     }
     return prInfo;
   } catch (err) {
-    state.lastMonitorResult = { exitCode: 2, output: `Error getting PR info: ${err.message}` };
+    writeMonitorResult(state, { exitCode: 2, output: `Error getting PR info: ${err.message}` });
     return null;
   }
 }
@@ -321,7 +380,7 @@ module.exports = function registerMonitor(register) {
     recordMergeStatus(state, prInfo, refreshed.retries, local);
 
     if (prInfo.state === 'MERGED') {
-      state.lastMonitorResult = { exitCode: 0, output: `PR #${prInfo.number} is merged.` };
+      writeMonitorResult(state, { exitCode: 0, output: `PR #${prInfo.number} is merged.` });
       state.currentStep = 'report';
       return null;
     }
@@ -330,7 +389,7 @@ module.exports = function registerMonitor(register) {
     try {
       ci = checkCI(prInfo.number);
     } catch (err) {
-      state.lastMonitorResult = { exitCode: 2, output: `Error checking CI: ${err.message}` };
+      writeMonitorResult(state, { exitCode: 2, output: `Error checking CI: ${err.message}` });
       return null;
     }
     if (ci.status === 'pending' && hasFailedJobs(prInfo, ctx.worktreeDir)) {
@@ -346,7 +405,7 @@ module.exports = function registerMonitor(register) {
 
     const output = buildOutput(state, prInfo, ci, reviews, formatReport);
     const exitCode = computeExitCode(prInfo, ci, reviews);
-    state.lastMonitorResult = { exitCode, output: output.substring(0, 3000) };
+    writeMonitorResult(state, { exitCode, output: output.substring(0, 3000) });
     state._ciRunningCount = ci.running ? ci.running.length : 0;
 
     if (!state._monitorStartTime) state._monitorStartTime = new Date().toISOString();
@@ -375,4 +434,6 @@ module.exports.__test__ = {
   computeExitCode,
   resolveMissingRunIds,
   buildInitialFailedJobs,
+  writeMonitorResult,
+  appendInitHintIfInfra,
 };

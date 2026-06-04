@@ -361,6 +361,104 @@ describe('refreshPrUntilKnown', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Task 2 (GH-536) — writeMonitorResult helper + --init hint routing
+// ---------------------------------------------------------------------------
+
+describe('writeMonitorResult (GH-536 Task 2)', () => {
+  it('is exposed via __test__ as a function', () => {
+    const monitor = freshLoadMonitor();
+    assert.equal(
+      typeof monitor.__test__.writeMonitorResult,
+      'function',
+      'expected monitor.__test__.writeMonitorResult to be a function'
+    );
+  });
+
+  it('writes both lastMonitorResult and ISO-8601 lastMonitorAt', () => {
+    const monitor = freshLoadMonitor();
+    const { writeMonitorResult } = monitor.__test__;
+    const state = {};
+    writeMonitorResult(state, { exitCode: 0, output: 'ok' });
+    assert.ok(state.lastMonitorResult, 'lastMonitorResult must be set');
+    assert.equal(typeof state.lastMonitorAt, 'string', 'lastMonitorAt must be a string');
+    assert.ok(
+      !Number.isNaN(Date.parse(state.lastMonitorAt)),
+      `lastMonitorAt must be Date.parse-able, got ${state.lastMonitorAt}`
+    );
+    // ISO-8601 shape check
+    assert.match(state.lastMonitorAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('appends --init hint when result is an infra failure', () => {
+    const monitor = freshLoadMonitor();
+    const { writeMonitorResult } = monitor.__test__;
+    const state = {};
+    writeMonitorResult(state, { exitCode: 2, output: 'ENOTFOUND api.github.com' });
+    assert.ok(
+      state.lastMonitorResult.output.includes('re-run with `--init` to drop the cache'),
+      `expected infra-failure output to contain --init hint, got: ${state.lastMonitorResult.output}`
+    );
+  });
+
+  it('does NOT append --init hint for non-infra failures (R16)', () => {
+    const monitor = freshLoadMonitor();
+    const { writeMonitorResult } = monitor.__test__;
+    const state = {};
+    writeMonitorResult(state, { exitCode: 1, output: 'Reviews: 2 BLOCKING' });
+    assert.ok(
+      !state.lastMonitorResult.output.includes('--init'),
+      `non-infra failure must not include --init hint, got: ${state.lastMonitorResult.output}`
+    );
+  });
+
+  it('does NOT append --init hint for successful results (exitCode 0)', () => {
+    const monitor = freshLoadMonitor();
+    const { writeMonitorResult } = monitor.__test__;
+    const state = {};
+    writeMonitorResult(state, { exitCode: 0, output: 'CI: passing\nReviews: CLEAR' });
+    assert.ok(
+      !state.lastMonitorResult.output.includes('--init'),
+      `success must not include --init hint, got: ${state.lastMonitorResult.output}`
+    );
+  });
+});
+
+describe('writeMonitorResult routing in monitor.js (GH-536 Task 2)', () => {
+  it('has zero direct `state.lastMonitorResult =` assignments — all writes routed through helper', () => {
+    // Re-read source after possible edits
+    const src = fs.readFileSync(MONITOR_PATH, 'utf8');
+    const matches = src.match(/state\.lastMonitorResult\s*=/g) || [];
+    assert.equal(
+      matches.length,
+      0,
+      `expected zero direct \`state.lastMonitorResult =\` assignments, found ${matches.length}`
+    );
+  });
+
+  it('defines writeMonitorResult and calls it at least 4 times', () => {
+    const src = fs.readFileSync(MONITOR_PATH, 'utf8');
+    assert.ok(
+      /function\s+writeMonitorResult\s*\(/.test(src),
+      'expected `function writeMonitorResult(` declaration in monitor.js'
+    );
+    const calls = src.match(/writeMonitorResult\s*\(/g) || [];
+    // ≥5 = 1 declaration + 4 call sites
+    assert.ok(
+      calls.length >= 5,
+      `expected ≥5 occurrences of writeMonitorResult( (1 decl + 4 calls), found ${calls.length}`
+    );
+  });
+
+  it('requires ../infra-patterns', () => {
+    const src = fs.readFileSync(MONITOR_PATH, 'utf8');
+    assert.ok(
+      /require\(['"]\.\.\/infra-patterns['"]\)/.test(src),
+      'expected monitor.js to require("../infra-patterns")'
+    );
+  });
+});
+
 describe('resolveMissingRunIds', () => {
   afterEach(() => {
     delete require.cache[MONITOR_ID];
