@@ -182,14 +182,15 @@ function checkTestResultsRows(prBody, taskDir) {
     // If Status is pending-like but the Notes column smuggles a verdict
     // (e.g. "PASS in CI" or "works in prod"), treat the row as a claim that
     // still needs sourcing. Otherwise pending rows always pass.
-    const notesHasVerdict = !!row.notes && NOTES_VERDICT_REGEX.test(row.notes);
+    const notes = typeof row.notes === 'string' ? row.notes : '';
+    const notesHasVerdict = notes.length > 0 && NOTES_VERDICT_REGEX.test(notes);
     if (statusAllowed && !notesHasVerdict) continue;
     if (rowIsSourced(row.test, taskDir)) continue;
     // Surface the offending content — the Notes verdict if that's what
     // tripped it, otherwise the Status verdict.
-    const offending = statusAllowed ? row.notes : row.status;
+    const offending = statusAllowed ? notes : row.status;
     violations.push({
-      phrase: `| ${row.test} | ${row.status} | ${row.notes} |`,
+      phrase: `| ${row.test} | ${row.status} | ${notes} |`,
       reason: 'unsourced-test-row',
       suggestion: `Rewrite to "pending" — remove "${offending}" or source "${row.test}" in tests.check.md / completion.check.md before claiming a verdict.`,
     });

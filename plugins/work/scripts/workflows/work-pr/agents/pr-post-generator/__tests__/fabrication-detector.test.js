@@ -161,6 +161,49 @@ test('Verdict in Notes column with pending Status still trips a violation', () =
   }
 });
 
+test('Known over-eager cases: benign Notes containing verdict words DO trip (documented)', () => {
+  // The Notes verdict regex is deliberately over-eager — a false positive
+  // forces the agent to source the row or rewrite Notes, which is the safer
+  // failure mode. This test pins that behavior so future tightening is a
+  // conscious choice, not an accidental drift.
+  const dir = makeTaskDir({ 'tests.check.md': 'unrelated content\n' });
+  const benignCases = [
+    'works in progress',
+    'verified pending product review',
+    'OK to merge after review',
+    'follow-up: passed manual but not yet in tests.check.md',
+  ];
+  for (const notes of benignCases) {
+    const prBody = [
+      '## Test Results',
+      '',
+      '| Test | Status | Notes |',
+      '| --- | --- | --- |',
+      `| feature Z | pending | ${notes} |`,
+      '',
+    ].join('\n');
+    const { violations } = detectFabrication(prBody, dir);
+    const row = violations.find((v) => v.reason === 'unsourced-test-row');
+    assert.ok(row, `over-eager (expected) violation for benign notes="${notes}"`);
+  }
+});
+
+test('Row with no Notes column (2-column row) does not crash and does not trip', () => {
+  // parseTableRow defaults notes to '' when only Test and Status are present.
+  // Guards `!!row.notes` against undefined / null defensively.
+  const dir = makeTaskDir();
+  const prBody = [
+    '## Test Results',
+    '',
+    '| Test | Status |',
+    '| --- | --- |',
+    '| modal opens | pending |',
+    '',
+  ].join('\n');
+  const { violations } = detectFabrication(prBody, dir);
+  assert.equal(violations.length, 0);
+});
+
 test('Plain pending row with non-verdict Notes does not trip', () => {
   const dir = makeTaskDir();
   const prBody = [
