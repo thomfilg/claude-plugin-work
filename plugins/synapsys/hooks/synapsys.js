@@ -210,11 +210,14 @@ function formatMatchedOutput(matched) {
       process.exit(0);
     }
 
+    // Build activeDomains FIRST so UserPromptSubmit advances sticky-state
+    // even when the memory list is empty — early prompts must still establish
+    // sticky domains for later-installed memories. Fail-open: on any error,
+    // omit `opts.activeDomains` to preserve pre-classifier behavior.
+    const selectOpts = buildActiveDomainsForPayload(event, payload);
+
     if (!memories.length) process.exit(0);
 
-    // Build activeDomains from registry + sticky-state (fail-open: on any
-    // error, omit `opts.activeDomains` to preserve pre-classifier behavior).
-    const selectOpts = buildActiveDomainsForPayload(event, payload);
     const matched = selectForEvent(memories, event, payload, selectOpts);
     if (!matched.length) process.exit(0);
 
