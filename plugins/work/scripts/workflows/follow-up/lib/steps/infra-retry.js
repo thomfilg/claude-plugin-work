@@ -219,19 +219,20 @@ function classifyWithDefaults(state, ctx) {
   return classify(state || {}, ctx || {});
 }
 
+function freshnessIsCurrentProcess(state) {
+  const f = state && state._ciStatusFreshness;
+  return Boolean(f && f.pid === process.pid);
+}
+
+function ctxIndicatesFreshFailure(ctx) {
+  return Boolean(ctx && ctx.ciStatus && ctx.ciStatus !== 'success');
+}
+
 function needsFreshMonitorBeforeRetry(state, ctx) {
-  if (!state || !state.infraRetry) return false;
-  const attempts = state.infraRetry.attempts;
-  if (!Array.isArray(attempts) || attempts.length === 0) return false;
-  const last = attempts[attempts.length - 1];
-  if (!last || last.outcome !== 'pending') return false;
-  // If freshness is missing OR was stamped by a different process, we cannot
-  // trust the persisted _ciStatus. Re-route through monitor.
-  const freshness = state._ciStatusFreshness;
-  if (freshness && freshness.pid === process.pid) return false;
-  // Don't loop forever: if ctx already says CI is failing in *this* process,
-  // we know real work needs doing — let the classifier run.
-  if (ctx && ctx.ciStatus && ctx.ciStatus !== 'success') return false;
+  const last = lastPendingAttempt(state);
+  if (!last) return false;
+  if (freshnessIsCurrentProcess(state)) return false;
+  if (ctxIndicatesFreshFailure(ctx)) return false;
   return true;
 }
 
