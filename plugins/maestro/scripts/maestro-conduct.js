@@ -23,6 +23,11 @@ const actions = require('./lib/maestro-conduct/actions');
 const alerts = require('./lib/maestro-conduct/alerts');
 const heartbeat = require('./lib/maestro-conduct/heartbeat');
 
+const ciGate = require('./lib/maestro-conduct/ci-gate-rotation');
+const waitMute = require('./lib/maestro-conduct/wait-mute');
+const prStatusPayload = require('./lib/maestro-conduct/pr-status-payload');
+const prCommentsHandler = require('./lib/maestro-conduct/pr-comments-handler');
+
 const DETECTORS = {
   question: require('./lib/maestro-conduct/detectors/question'),
   silence: require('./lib/maestro-conduct/detectors/silence'),
@@ -33,10 +38,14 @@ const DETECTORS = {
   prStatus: require('./lib/maestro-conduct/detectors/pr-status'),
 };
 
-// Heartbeat: every HEARTBEAT_MIN emit a positive summary so silence on the
-// daemon side can't be mistaken for "nothing happening."
-const HEARTBEAT_MIN = parseInt(process.env.HEARTBEAT_MIN || '30', 10);
+// Heartbeat: emit on state-change, with a max-staleness cap so the operator
+// always gets a positive signal every HEARTBEAT_MAX_MIN even if nothing has
+// changed (proves the daemon is alive). State-change beats include any of:
+// activeCount, wedgedCount, prReady/prBroken/prPending counts, ticket set.
+const HEARTBEAT_MIN = parseInt(process.env.HEARTBEAT_MIN || '15', 10); // min gap between any two heartbeats
+const HEARTBEAT_MAX_MIN = parseInt(process.env.HEARTBEAT_MAX_MIN || '60', 10); // force-emit cap
 let lastHeartbeatAt = 0;
+let lastHeartbeatBody = '';
 
 // Re-emit escalation: when the same (session, kind, sha/phase) alert fires
 // this many times, auto-rotate the slot via freeDeadEndSlot.
@@ -88,6 +97,10 @@ function handleQuestion(ctx, qHit) {
     const sinceLastAlert = prev.lastAlertAt ? state.minutesSince(prev.lastAlertAt) : Infinity;
     if (sinceLastAlert < Q_WAIT_MIN) return;
   }
+  // Embed pane tail directly in the event so the orchestrator doesn't have to
+  // re-run tmux capture-pane (saves a Bash round-trip + the pane content is
+  // identical to what the operator would see).
+  const paneTail = (ctx.pane || '').split('\n').slice(-40).join('\n');
   const r = actions.alert({
     session: ctx.session,
     ticket: ctx.ticket,
@@ -96,7 +109,8 @@ function handleQuestion(ctx, qHit) {
     elapsedMin: mins,
     options: qHit.options,
     promptKind: qHit.promptKind,
-    instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — read full menu, pick the option that does NOT bypass any workflow gate (avoid: state-file edits, set-step CLI, completion-checker skip, --no-verify). If all options bypass, send a directive via "Type something".`,
+    paneTail,
+    instruction: `UNBLOCK-PROTOCOL: refuse-bypass → verify-real-work-done → fix-artifact-NOT-gate → file-root-cause-bug. Pane tail in paneTail field. Answer within Q_WAIT_MIN (3 repeats → DEAD-END).`,
   });
   state.write(ctx.session, 'question', {
     startedAt: prev.startedAt,
@@ -137,9 +151,7 @@ function handlePhaseStall(ctx, stallHit) {
   }
   // Suppress when the agent is correctly waiting for a human action (merge, etc.)
   if (isHaltedWaitingForUser(ctx.pane)) {
-    alerts.log(
-      `${ctx.session} phase-stall suppressed — agent halted waiting for user (phase=${ctx.phase})`
-    );
+    waitMute.noteWaitingForUser({ session: ctx.session, phase: ctx.phase, state, alerts });
     return;
   }
   const marker = stallHit.marker;
@@ -152,6 +164,7 @@ function handlePhaseStall(ctx, stallHit) {
   const reason = `phase=${ctx.phase} stuck ${stallHit.elapsedMin}m budget=${stallHit.budgetMin}m nudge ${marker.nudges + 1}/${stallHit.maxNudges}`;
 
   if (escalation === 'alert') {
+    const paneTail = (ctx.pane || '').split('\n').slice(-40).join('\n');
     const r = actions.alert({
       session: ctx.session,
       ticket: ctx.ticket,
@@ -160,7 +173,8 @@ function handlePhaseStall(ctx, stallHit) {
       elapsedMin: stallHit.elapsedMin,
       budgetMin: stallHit.budgetMin,
       nudges: marker.nudges,
-      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — agent exceeded phase=${ctx.phase} budget (${stallHit.elapsedMin}m vs ${stallHit.budgetMin}m). Diagnose or send directive via "Type something".`,
+      paneTail,
+      instruction: `phase=${ctx.phase} ${stallHit.elapsedMin}m/${stallHit.budgetMin}m. UNBLOCK-PROTOCOL: bad artifact (tasks.md/brief.md) usually root cause, NOT missing work. Pane tail in paneTail field.`,
     });
     maybeEscalateToDeadEnd(ctx, 'nudges-exhausted', r.count, ctx.phase);
   } else if (escalation === 'interrupt') {
@@ -208,9 +222,9 @@ function runSilenceDetector(ctx) {
   if (!restartEligible(ctx.session)) {
     // Helper (-dev / -listen) idle past SILENCE_LIMIT_SEC — don't kill. Refresh
     // marker so silence timer restarts (else fires every tick → log spam).
-    alerts.log(
-      `${ctx.session} AUTO-RESTART skipped: non-work helper session (not restart-eligible)`
-    );
+    // Helper sessions (-listen / -dev) are inert by design; their idleness
+    // carries zero information for the operator. Refresh the marker so the
+    // detector doesn't re-fire each tick, but emit nothing.
     state.write(ctx.session, 'silence', {
       hash: null,
       tokens: null,
@@ -239,11 +253,16 @@ function runSilenceDetector(ctx) {
 }
 
 function runPhaseStallDetector(ctx) {
+  // -listen/-dev helpers inherit ticket phase but have no agent to make progress;
+  // running phase-stall on them accumulates nudges that never resolve → cascade kill.
+  if (!restartEligible(ctx.session)) return;
   const pHit = DETECTORS.phaseStall.detect(ctx);
   if (pHit.hit) handlePhaseStall(ctx, pHit);
 }
 
 function runCommitStallDetector(ctx) {
+  // Helpers can't commit; only -work meaningfully stalls on commits.
+  if (!restartEligible(ctx.session)) return;
   // detector handles its own dedup + marker — only "hits" on threshold crossings.
   const cHit = DETECTORS.commitStall.detect(ctx);
   if (!cHit.hit) return;
@@ -253,6 +272,7 @@ function runCommitStallDetector(ctx) {
 }
 
 function runPrCommentsDetector(ctx) {
+  if (!restartEligible(ctx.session)) return;
   const cHit = DETECTORS.prComments.detect(ctx);
   if (cHit.hit) {
     handlePrComments(ctx, cHit);
@@ -269,6 +289,7 @@ function runPrCommentsDetector(ctx) {
 }
 
 function runPrStatusDetector(ctx) {
+  if (!restartEligible(ctx.session)) return;
   const sHit = DETECTORS.prStatus.detect(ctx);
   if (!sHit.hit) return;
   // pr-pending is informational only — log but never escalate to alert sink.
@@ -281,27 +302,8 @@ function runPrStatusDetector(ctx) {
   // pr-ready / pr-broken → structured alert sink. Target -work explicitly
   // (pr-status dedups per-ticket so -listen could otherwise own the alert).
   const workSession = `${ctx.ticket}-work`;
-  const failingList = (sHit.failingChecks || [])
-    .map((c) => `${c.name}(${c.conclusion})`)
-    .join(', ');
-  const instruction =
-    sHit.kind === 'pr-ready'
-      ? `Spawn work-workflow:code-checker (Agent tool, keep alive in tmux until verdict) on PR #${sHit.prNumber} sha=${(sHit.sha || '').slice(0, 7)} for ${ctx.ticket}. Reviewer must answer FOUR questions: (1) Did the agent complete every requirement/AC in the ticket? (2) Did it introduce any bug (logic errors, regressions, broken edge cases)? (3) Did it add any security vulnerability (injection, secrets, unsafe shell, path traversal)? (4) Did it bypass any /work workflow gate (state edits, set-step CLI, completion-checker skip, fake TDD evidence, --no-verify, deferral annotations)? Verdict must be APPROVED only if ALL four are clean. On NEEDS-WORK → forward verbatim findings to ${workSession} via tmux send-keys; re-run after agent pushes. On APPROVED → surface PR URL to operator; operator merges PR and kills tmux sessions ${ctx.ticket}-work + ${ctx.ticket}-listen to free the pool slot.`
-      : `tmux capture-pane -t ${workSession} -p | tail -40 — drive agent to fix failing checks IN-PR (no skip, no follow-up issue). Failing: ${failingList || 'see PR'}.`;
-  actions.alert({
-    session: workSession,
-    ticket: ctx.ticket,
-    kind: sHit.kind,
-    phase: ctx.phase,
-    prNumber: sHit.prNumber,
-    sha: sHit.sha,
-    checksState: sHit.checksState,
-    mergeable: sHit.mergeable,
-    failingChecks: sHit.failingChecks,
-    instruction,
-  });
-  // CI-gate slot rotation removed: auto-freeing on pr-ready killed -work before
-  // code-checker could forward NEEDS-WORK. Slot freeing is operator-driven now.
+  actions.alert(prStatusPayload.buildPayload({ ctx, sHit, workSession, tmux }));
+  ciGate.maybeFreeOnPrReady({ ctx, sHit, workSession, actions });
 }
 
 /** Run the per-session pipeline. Returns when the session has been fully processed. */
@@ -329,13 +331,30 @@ function tickSession(session) {
   if (detectorsToRun.includes('commitStall')) runCommitStallDetector(ctx);
   if (detectorsToRun.includes('prComments')) runPrCommentsDetector(ctx);
   if (detectorsToRun.includes('prStatus')) runPrStatusDetector(ctx);
+  // Phase-based rotation runs after all detectors so it sees the freshest
+  // marker state, and catches the steady-state pr-ready case independent of
+  // pr-status detector dedup.
+  ciGate.maybeRotateOnPhase({
+    ctx,
+    state,
+    actions,
+    prStatusDetector: DETECTORS.prStatus,
+    restartEligible,
+  });
 }
 
 function maybeEmitHeartbeat(sessions) {
   const now = state.now();
+  // Throttle floor: never emit two heartbeats closer than HEARTBEAT_MIN.
   if (lastHeartbeatAt && now - lastHeartbeatAt < HEARTBEAT_MIN * 60) return;
+  const body = heartbeat.buildHeartbeat(sessions);
+  const stale = !lastHeartbeatAt || now - lastHeartbeatAt >= HEARTBEAT_MAX_MIN * 60;
+  // Emit when the body changed OR when we've hit the max-staleness cap.
+  // Unchanged-state heartbeats are pure noise to the operator.
+  if (body === lastHeartbeatBody && !stale) return;
   lastHeartbeatAt = now;
-  alerts.log(heartbeat.buildHeartbeat(sessions));
+  lastHeartbeatBody = body;
+  alerts.log(body);
 }
 
 function tick() {
@@ -349,40 +368,16 @@ function tick() {
 }
 
 function handlePrComments(ctx, cHit) {
-  const marker = cHit.marker;
-  const sinceLastNudge = marker.lastNudgeAt ? state.minutesSince(marker.lastNudgeAt) : Infinity;
-  const profile = phaseFor(ctx.phase);
-  // Use the same per-phase re-nudge cooldown so we don't spam.
-  if (marker.lastNudgeAt && sinceLastNudge < profile.reNudgeMin) return;
-
-  const nudges = marker.nudges || 0;
-  // Keep re-emitting on reNudgeMin cadence so count grows to DEAD_END_REEMITS;
-  // detector resets the marker when HEAD moves or comments clear.
-  const top = cHit.summary
-    .map((s) => `${s.file}:${s.line} [${s.severity || '?'}] ${s.title}`)
-    .join(' | ');
-  const reason = `PR #${cHit.prNumber} has ${cHit.count} unaddressed bot comment(s), HEAD unchanged ${cHit.minsStuck}m. Top: ${top}`;
-  const escalation = escalationFor(ctx.phase, nudges);
-
-  if (escalation === 'alert') {
-    const r = actions.alert({
-      session: ctx.session,
-      ticket: ctx.ticket,
-      kind: 'pr-comments-stuck',
-      phase: ctx.phase,
-      prNumber: cHit.prNumber,
-      count: cHit.count,
-      elapsedMin: cHit.minsStuck,
-      summary: cHit.summary,
-      instruction: `tmux capture-pane -t ${ctx.session} -p | tail -40 — agent left ${cHit.count} bot comment(s) on PR #${cHit.prNumber} unaddressed for ${cHit.minsStuck}m, HEAD unchanged. Send directive: "Address each bot comment in the PR; never dismiss as stale."`,
-    });
-    maybeEscalateToDeadEnd(ctx, 'pr-comments-stuck', r.count, null);
-  } else if (escalation === 'interrupt') {
-    actions.interrupt(ctx.session, reason);
-  } else {
-    actions.soft(ctx.session, reason);
-  }
-  bumpMarker(ctx.ticket, 'pr-comments', marker, escalation === 'alert');
+  prCommentsHandler.handlePrComments({
+    ctx,
+    cHit,
+    state,
+    actions,
+    phaseFor,
+    escalationFor,
+    bumpMarker,
+    maybeEscalateToDeadEnd,
+  });
 }
 
 function main() {

@@ -137,6 +137,7 @@ function declareWedged({ session, ticket, restarts, now, silenceSec }) {
   alerts.log(
     `${session} WEDGED — ${count} auto-restarts in ${RESTART_WINDOW_MIN}m; suppressing restarts for ${WEDGED_QUIET_MIN}m`
   );
+  const paneTail = tmux.capture(session).split('\n').slice(-50).join('\n');
   alerts.alert({
     session,
     ticket,
@@ -145,7 +146,8 @@ function declareWedged({ session, ticket, restarts, now, silenceSec }) {
     windowMin: RESTART_WINDOW_MIN,
     quietMin: WEDGED_QUIET_MIN,
     silenceSec,
-    instruction: `tmux capture-pane -t ${session} -p | tail -50 — agent restarted ${count}x in ${RESTART_WINDOW_MIN}m. Daemon won't restart for ${WEDGED_QUIET_MIN}m. Diagnose root cause; if dead-end, kill session and bootstrap next bug.`,
+    paneTail,
+    instruction: `agent restarted ${count}x in ${RESTART_WINDOW_MIN}m. Daemon won't restart for ${WEDGED_QUIET_MIN}m. UNBLOCK-PROTOCOL: diagnose root cause from paneTail; if dead-end, kill session and bootstrap next queued.`,
   });
 }
 
