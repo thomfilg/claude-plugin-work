@@ -346,12 +346,24 @@ function transitionStep(ticket, targetStep, deps) {
   if (currentStep === STEPS.ticket && isForward) {
     try {
       const { fireTicketResolved } = require(path.join(__dirname, '..', 'steps', 'ticket'));
+      // Resolve repoRoot from the active marker (true worktree of this
+      // session) rather than process.cwd() so extension discovery scans the
+      // consumer repo's .claude/work-extensions/ directory, not whichever
+      // cwd the workflow engine happened to be spawned from.
+      let resolvedRepoRoot = process.cwd();
+      try {
+        const { findActiveMarker } = require(path.join(__dirname, '..', 'lib', 'marker'));
+        const marker = findActiveMarker(TASKS_BASE, '.work.pid');
+        if (marker && marker.worktreeRoot) resolvedRepoRoot = marker.worktreeRoot;
+      } catch {
+        /* fail-open — fall back to process.cwd() */
+      }
       Promise.resolve(
         fireTicketResolved({
           ticketId: safeTicket,
           resolution: 'completed',
           tasksDir: path.join(TASKS_BASE, safeTicket),
-          repoRoot: process.cwd(),
+          repoRoot: resolvedRepoRoot,
           transitionedToResolved: true,
         })
       )
