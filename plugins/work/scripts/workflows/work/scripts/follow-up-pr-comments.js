@@ -40,6 +40,18 @@ function getFollowUpPr() {
 const getConfig = require('../../lib/get-config');
 const { getCurrentTaskId } = require('../../lib/scripts/get-ticket-id');
 
+// ── Deprecation warnings (Task 3, GH-537) ────────────────────────────────────
+// Legacy flag aliases keep working for a 2-3 release window but must emit
+// exactly one stderr line that names the replacement and clarifies that
+// the default is local-only (no GitHub thread is resolved).
+const DEPRECATION_SOLVE_MSG =
+  'warning: --solve-comment is renamed to --mark-locally-solved ' +
+  '(no GitHub thread is resolved). ' +
+  'Pass --also-resolve-on-github to close the thread on GitHub too.';
+const DEPRECATION_SKIP_MSG =
+  'warning: --skip-comment is renamed to --mark-locally-skipped ' +
+  '(no GitHub thread is resolved). Skips are local-only audit trail.';
+
 // ── Config & Paths ───────────────────────────────────────────────────────────
 
 let _safeTicketId;
@@ -192,10 +204,15 @@ function handleSnapshot(prNumber) {
       process.exit(2);
     }
 
-    // Fetch resolved thread IDs to exclude
-    // getResolvedCommentIds returns { resolved: Set, outdatedThreadIds: Set }
+    // Fetch resolved thread IDs to exclude.
+    // getResolvedCommentIds returns:
+    //   { resolved: Set, outdatedThreadIds: Array, commentIdToThreadId: Map }
+    // commentIdToThreadId is consumed below to persist `comment.threadId` so
+    // later --also-resolve-on-github calls can target the right thread
+    // without re-querying GraphQL (GH-537 / R10).
     const resolvedResult = getResolvedCommentIds(repo, prNumber);
     const resolvedIds = resolvedResult?.resolved || new Set();
+    const commentIdToThreadId = resolvedResult?.commentIdToThreadId || new Map();
 
     // Preserve solved/skipped state from previous snapshot to avoid
     // re-presenting comments that were already addressed (GH-358).
@@ -247,6 +264,8 @@ function handleSnapshot(prNumber) {
             : 'unsolved',
           commitSha: previousStatusMap.get(String(review.id))?.commitSha || null,
           resolution: previousStatusMap.get(String(review.id))?.resolution || null,
+          // Review-level comments are not GraphQL review threads, so no threadId.
+          threadId: null,
         });
       }
     } catch (err) {
@@ -298,6 +317,7 @@ function handleSnapshot(prNumber) {
               resolution:
                 previousStatusMap.get(String(cm.id))?.resolution ||
                 'Outdated (code changed since comment)',
+              threadId: commentIdToThreadId.get(cm.id) || null,
             });
             continue;
           }
@@ -325,6 +345,7 @@ function handleSnapshot(prNumber) {
             resolution:
               previousStatusMap.get(String(cm.id))?.resolution ||
               (isResolved ? 'Resolved/outdated thread' : null),
+            threadId: commentIdToThreadId.get(cm.id) || null,
           });
         }
 
@@ -611,6 +632,9 @@ function main() {
         printUsage();
         process.exit(2);
       }
+      if (subcommand === '--solve-comment') {
+        console.error(DEPRECATION_SOLVE_MSG);
+      }
       handleSolveComment(argv[1], argv[2], argv[3]);
       break;
     }
@@ -621,6 +645,9 @@ function main() {
         console.error(`Error: ${subcommand} requires <commentId> "<reason>"`);
         printUsage();
         process.exit(2);
+      }
+      if (subcommand === '--skip-comment') {
+        console.error(DEPRECATION_SKIP_MSG);
       }
       handleSkipComment(argv[1], argv[2]);
       break;

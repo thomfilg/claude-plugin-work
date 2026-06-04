@@ -397,6 +397,98 @@ describe('getResolvedCommentIds', () => {
     assert.equal(outdatedThreadIds.length, 1);
     assert.equal(outdatedThreadIds[0], 'PRRT_outdated1');
   });
+
+  // Task 4 (GH-537 / R10): persist threadId per comment from reviewThreads.
+  describe('commentIdToThreadId map (Task 4 / R10)', () => {
+    it('returns a commentIdToThreadId Map keyed by comment databaseId', () => {
+      const exec = () =>
+        makeGraphQLResponse([
+          {
+            id: 'PRT_threadA',
+            isResolved: false,
+            isOutdated: false,
+            comments: makeComments([700, 701]),
+          },
+          {
+            id: 'PRT_threadB',
+            isResolved: false,
+            isOutdated: false,
+            comments: makeComments([702]),
+          },
+        ]);
+      const result = getResolvedCommentIds('owner/repo', 1, exec);
+      assert.ok(
+        result.commentIdToThreadId,
+        'getResolvedCommentIds must return a commentIdToThreadId field'
+      );
+      assert.ok(
+        result.commentIdToThreadId instanceof Map,
+        'commentIdToThreadId must be a Map'
+      );
+      assert.equal(result.commentIdToThreadId.get(700), 'PRT_threadA');
+      assert.equal(result.commentIdToThreadId.get(701), 'PRT_threadA');
+      assert.equal(result.commentIdToThreadId.get(702), 'PRT_threadB');
+    });
+
+    it('maps comments from active (unresolved, non-outdated) threads too', () => {
+      // Active threads also expose threadId so snapshot can record it for
+      // future --also-resolve-on-github calls. Resolved/outdated comments
+      // are filtered out elsewhere, but their threadId still belongs in the
+      // map for completeness.
+      const exec = () =>
+        makeGraphQLResponse([
+          {
+            id: 'PRT_active',
+            isResolved: false,
+            isOutdated: false,
+            comments: makeComments([800]),
+          },
+        ]);
+      const { commentIdToThreadId } = getResolvedCommentIds('owner/repo', 1, exec);
+      assert.equal(commentIdToThreadId.get(800), 'PRT_active');
+    });
+
+    it('returns an empty Map (not undefined) on GraphQL failure', () => {
+      const exec = () => {
+        throw new Error('boom');
+      };
+      const { commentIdToThreadId } = getResolvedCommentIds('owner/repo', 1, exec);
+      assert.ok(commentIdToThreadId instanceof Map);
+      assert.equal(commentIdToThreadId.size, 0);
+    });
+
+    it('paginates: collects threadId mappings across pages', () => {
+      let callCount = 0;
+      const exec = () => {
+        callCount++;
+        if (callCount === 1) {
+          return makeGraphQLResponse(
+            [
+              {
+                id: 'PRT_page1',
+                isResolved: false,
+                isOutdated: false,
+                comments: makeComments([900]),
+              },
+            ],
+            true,
+            'cursor-next'
+          );
+        }
+        return makeGraphQLResponse([
+          {
+            id: 'PRT_page2',
+            isResolved: false,
+            isOutdated: false,
+            comments: makeComments([901]),
+          },
+        ]);
+      };
+      const { commentIdToThreadId } = getResolvedCommentIds('owner/repo', 1, exec);
+      assert.equal(commentIdToThreadId.get(900), 'PRT_page1');
+      assert.equal(commentIdToThreadId.get(901), 'PRT_page2');
+    });
+  });
 });
 
 describe('resolveOutdatedThreads', () => {

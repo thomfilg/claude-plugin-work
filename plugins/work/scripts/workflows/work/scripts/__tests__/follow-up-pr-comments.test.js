@@ -3,32 +3,30 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { execFileSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'follow-up-pr-comments.js');
 
 /**
  * Helper: run the script with args and env overrides.
  * Returns { status, stdout, stderr }.
+ *
+ * Uses spawnSync so that stderr is captured regardless of exit code
+ * (execFileSync only returns stdout on success and discards stderr).
  */
 function run(args, envOverrides = {}, opts = {}) {
   const env = { ...process.env, ...envOverrides };
-  try {
-    const stdout = execFileSync(process.execPath, [SCRIPT, ...args], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env,
-      cwd: opts.cwd,
-      timeout: 10000,
-    });
-    return { status: 0, stdout, stderr: '' };
-  } catch (err) {
-    return {
-      status: err.status ?? 1,
-      stdout: (err.stdout || '').toString(),
-      stderr: (err.stderr || '').toString(),
-    };
-  }
+  const result = spawnSync(process.execPath, [SCRIPT, ...args], {
+    encoding: 'utf8',
+    env,
+    cwd: opts.cwd,
+    timeout: 10000,
+  });
+  return {
+    status: result.status ?? 1,
+    stdout: (result.stdout || '').toString(),
+    stderr: (result.stderr || '').toString(),
+  };
 }
 
 /**
@@ -620,6 +618,173 @@ describe('follow-up-pr-comments CLI', () => {
     it('--mark-locally-skipped exits 2 when missing reason', () => {
       const result = run(['--mark-locally-skipped', '200']);
       assert.equal(result.status, 2);
+    });
+  });
+
+  // ── Task 5: --also-resolve-on-github ──────────────────────────────────────
+
+  describe('--also-resolve-on-github (Task 5)', () => {
+    let ctx;
+    let mockFile;
+    let sidecarFile;
+
+    afterEach(() => {
+      ctx?.cleanup();
+      if (mockFile && fs.existsSync(mockFile)) fs.unlinkSync(mockFile);
+      if (sidecarFile && fs.existsSync(sidecarFile)) fs.unlinkSync(sidecarFile);
+      mockFile = undefined;
+      sidecarFile = undefined;
+    });
+
+    /**
+     * Create a JS mock module the script can require via
+     * FOLLOW_UP_PR_EXEC_MOCK_PATH. The mock records every call to a sidecar
+     * JSON file so the test (a separate process) can assert on it.
+     */
+    function writeExecMock() {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fup-mock-'));
+      mockFile = path.join(dir, 'mock-exec.js');
+      sidecarFile = path.join(dir, 'calls.json');
+      const src = `
+        const fs = require('node:fs');
+        const SIDECAR = ${JSON.stringify(sidecarFile)};
+        module.exports = function execFn(args) {
+          let calls = [];
+          if (fs.existsSync(SIDECAR)) {
+            calls = JSON.parse(fs.readFileSync(SIDECAR, 'utf8'));
+          }
+          calls.push(args);
+          fs.writeFileSync(SIDECAR, JSON.stringify(calls));
+          return { data: { resolveReviewThread: { thread: { isResolved: true } } } };
+        };
+      `;
+      fs.writeFileSync(mockFile, src);
+    }
+
+    it('--also-resolve-on-github calls resolveReviewThread mutation', () => {
+      writeExecMock();
+      const comments = [
+        makeComment({ id: 100, threadId: 'PRT_kwDOABCD123' }),
+      ];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--mark-locally-solved', '100', 'abc1234', 'fixed null', '--also-resolve-on-github'],
+        { ...envFor(ctx.tmpDir), FOLLOW_UP_PR_EXEC_MOCK_PATH: mockFile },
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(result.status, 0, `expected exit 0; stderr=${result.stderr}`);
+
+      // Mutation invoked exactly once with the right threadId
+      assert.ok(fs.existsSync(sidecarFile), 'expected execFn mock to be invoked');
+      const calls = JSON.parse(fs.readFileSync(sidecarFile, 'utf8'));
+      assert.equal(calls.length, 1, `expected exactly one execFn call, got ${calls.length}`);
+      const argsStr = Array.isArray(calls[0]) ? calls[0].join(' ') : String(calls[0]);
+      assert.match(argsStr, /resolveReviewThread/);
+      assert.match(argsStr, /PRT_kwDOABCD123/);
+
+      // Snapshot updated
+      const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
+      const comment = state.comments.find((c) => c.id === 100);
+      assert.equal(comment.status, 'solved');
+
+      // Second JSON line `{"githubResolved":true,"threadId":"..."}` emitted on stdout
+      const lines = result.stdout.split('\n').filter((l) => l.trim().length > 0);
+      const resolvedLine = lines.find((l) => l.includes('githubResolved'));
+      assert.ok(resolvedLine, `expected a githubResolved line in stdout, got: ${result.stdout}`);
+      const parsed = JSON.parse(resolvedLine);
+      assert.equal(parsed.githubResolved, true);
+      assert.equal(parsed.threadId, 'PRT_kwDOABCD123');
+    });
+
+    it('--also-resolve-on-github paired with --mark-locally-skipped is a no-op with warning', () => {
+      writeExecMock();
+      const comments = [
+        makeComment({ id: 200, threadId: 'PRT_kwDOSKIPPED' }),
+      ];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--mark-locally-skipped', '200', 'Out of scope', '--also-resolve-on-github'],
+        { ...envFor(ctx.tmpDir), FOLLOW_UP_PR_EXEC_MOCK_PATH: mockFile },
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(result.status, 0, `expected exit 0; stderr=${result.stderr}`);
+
+      // No mutation should have been invoked
+      const calls = fs.existsSync(sidecarFile)
+        ? JSON.parse(fs.readFileSync(sidecarFile, 'utf8'))
+        : [];
+      assert.equal(calls.length, 0, `expected zero execFn calls for skip path, got ${calls.length}`);
+
+      // Stderr warns about audit trail
+      assert.match(
+        result.stderr,
+        /audit trail/i,
+        `expected stderr to mention audit trail, got: ${result.stderr}`
+      );
+
+      // Snapshot still marked skipped
+      const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
+      const comment = state.comments.find((c) => c.id === 200);
+      assert.equal(comment.status, 'skipped');
+    });
+  });
+
+  // ── Task 3: deprecation warnings on legacy flags ─────────────────────────
+
+  describe('--solve-comment / --skip-comment deprecation warnings (Task 3)', () => {
+    let ctx;
+    afterEach(() => ctx?.cleanup());
+
+    it('Deprecated --solve-comment still works but warns', () => {
+      const comments = [makeComment({ id: 100 })];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--solve-comment', '100', 'abc1234', 'desc'],
+        envFor(ctx.tmpDir),
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
+
+      // Exactly one stderr line, mentioning both replacement flag and local-only scope.
+      const stderrLines = result.stderr.split('\n').filter((l) => l.trim().length > 0);
+      assert.equal(
+        stderrLines.length,
+        1,
+        `expected exactly one stderr line, got ${stderrLines.length}: ${result.stderr}`
+      );
+      assert.match(result.stderr, /--mark-locally-solved/);
+      assert.match(result.stderr, /no GitHub thread is resolved/);
+
+      // Still updates snapshot identically to the new flag.
+      const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
+      const comment = state.comments.find((c) => c.id === 100);
+      assert.equal(comment.status, 'solved');
+      assert.equal(comment.commitSha, 'abc1234');
+      assert.equal(comment.resolution, 'desc');
+    });
+
+    it('Deprecated --skip-comment still works but warns', () => {
+      const comments = [makeComment({ id: 200 })];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--skip-comment', '200', 'reason'],
+        envFor(ctx.tmpDir),
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
+
+      const stderrLines = result.stderr.split('\n').filter((l) => l.trim().length > 0);
+      assert.equal(
+        stderrLines.length,
+        1,
+        `expected exactly one stderr line, got ${stderrLines.length}: ${result.stderr}`
+      );
+      assert.match(result.stderr, /--mark-locally-skipped/);
+
+      const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
+      const comment = state.comments.find((c) => c.id === 200);
+      assert.equal(comment.status, 'skipped');
+      assert.equal(comment.resolution, 'reason');
     });
   });
 });
