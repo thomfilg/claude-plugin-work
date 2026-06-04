@@ -84,18 +84,23 @@ function checkGrepGlob(filePath, regex, patternStr, args, root) {
   };
 }
 
-function checkGrepLiteral(filePath, regex, patternStr, args, root) {
+function resolveAndRead(filePath, root, type, args) {
   const validation = validatePath(filePath);
   if (!validation.valid) {
-    return { type: 'GREP', args, passed: false, reason: validation.reason };
+    return { error: { type, args, passed: false, reason: validation.reason } };
   }
   const full = path.resolve(root, validation.resolved);
-  let content;
   try {
-    content = fs.readFileSync(full, 'utf-8');
+    return { content: fs.readFileSync(full, 'utf-8') };
   } catch {
-    return { type: 'GREP', args, passed: false, reason: `File ${filePath} not found` };
+    return { error: { type, args, passed: false, reason: `File ${filePath} not found` } };
   }
+}
+
+function checkGrepLiteral(filePath, regex, patternStr, args, root) {
+  const r = resolveAndRead(filePath, root, 'GREP', args);
+  if (r.error) return r.error;
+  const content = r.content;
   if (regex.test(content)) {
     return { type: 'GREP', args, passed: true };
   }
@@ -199,17 +204,9 @@ function checkReuses(args, root) {
       reason: 'REUSES requires two arguments: <path> <import-pattern>',
     };
   }
-  const validation = validatePath(filePath);
-  if (!validation.valid) {
-    return { type: 'REUSES', args, passed: false, reason: validation.reason };
-  }
-  const full = path.resolve(root, validation.resolved);
-  let content;
-  try {
-    content = fs.readFileSync(full, 'utf-8');
-  } catch {
-    return { type: 'REUSES', args, passed: false, reason: `File ${filePath} not found` };
-  }
+  const r = resolveAndRead(filePath, root, 'REUSES', args);
+  if (r.error) return r.error;
+  const content = r.content;
   const escaped = escapeRegex(importPattern);
   const importRegex = new RegExp(
     `(import\\s.*${escaped}|${escaped}.*require\\s*\\(|require\\s*\\(.*${escaped})`

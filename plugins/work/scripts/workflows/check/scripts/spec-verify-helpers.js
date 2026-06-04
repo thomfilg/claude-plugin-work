@@ -6,33 +6,30 @@ const path = require('path');
 /** Directories to skip during glob traversal to avoid slow/flaky gate checks */
 const GLOB_SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage']);
 
-function validatePath(p) {
+function checkPathBasics(p, segments) {
   if (typeof p !== 'string' || p.length === 0) {
     return { valid: false, reason: `Missing or invalid path argument: ${p}` };
   }
   if (path.isAbsolute(p)) {
     return { valid: false, reason: `Absolute path rejected: ${p}` };
   }
-  const normalized = path.normalize(p);
-  const segments = normalized.split(path.sep);
-  if (segments.some((seg) => seg === '..')) {
-    return { valid: false, reason: `Path traversal rejected: ${p}` };
-  }
-  return { valid: true, resolved: normalized };
-}
-
-function validateGlobPattern(p) {
-  if (typeof p !== 'string' || p.length === 0) {
-    return { valid: false, reason: `Missing or invalid path argument: ${p}` };
-  }
-  if (path.isAbsolute(p)) {
-    return { valid: false, reason: `Absolute path rejected: ${p}` };
-  }
-  const segments = p.split(/[/\\]/);
   if (segments.some((seg) => seg === '..')) {
     return { valid: false, reason: `Path traversal rejected: ${p}` };
   }
   return { valid: true };
+}
+
+function validatePath(p) {
+  const normalized = typeof p === 'string' ? path.normalize(p) : p;
+  const segments = typeof normalized === 'string' ? normalized.split(path.sep) : [];
+  const basics = checkPathBasics(p, segments);
+  if (!basics.valid) return basics;
+  return { valid: true, resolved: normalized };
+}
+
+function validateGlobPattern(p) {
+  const segments = typeof p === 'string' ? p.split(/[/\\]/) : [];
+  return checkPathBasics(p, segments);
 }
 
 function matchDoubleStar(dir, parts, entries) {
