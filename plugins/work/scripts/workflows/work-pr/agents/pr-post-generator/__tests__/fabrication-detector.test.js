@@ -113,6 +113,16 @@ test('Empty or dash Status no longer bypasses sourcing', () => {
   }
 });
 
+test('Bare 10/10 in a calendar date does NOT trip a stability violation', () => {
+  // Calendar dates like 10/10/2026 used to false-positive on the bare 10/10
+  // regex. Now the pattern requires no trailing `/` or digit.
+  const dir = makeTaskDir();
+  const prBody = 'Scheduled rollout on 10/10/2026. No stability claims here.';
+  const { violations } = detectFabrication(prBody, dir);
+  const stab = violations.find((v) => v.reason === 'stability-claim');
+  assert.ok(!stab, 'expected no stability-claim violation for calendar date 10/10/2026');
+});
+
 test('Unsourced row with synonym status (ok/passed/green) trips a violation', () => {
   // Previously only `pass`/`fail` were cross-checked; any other verdict-like
   // text (passed, ok, green, success, verified) silently bypassed the guard.

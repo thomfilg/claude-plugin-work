@@ -28,7 +28,10 @@ const path = require('node:path');
 const STABILITY_REGEXES = [
   /\b\d+\/\d+\s+(stability|stable|runs?)\b/gi,
   /\bstability\s+run\b/gi,
-  /\b10\/10\b/gi,
+  // Bare "10/10" only matches when NOT followed by another `/` or digit, so
+  // calendar dates like `10/10/2026` and longer ratios like `10/100` are not
+  // misclassified as stability claims.
+  /\b10\/10\b(?![/\d])/gi,
 ];
 
 const STABILITY_ARTIFACT_PATTERNS = [/^stability.*\.log$/i, /^stability.*\.md$/i];
