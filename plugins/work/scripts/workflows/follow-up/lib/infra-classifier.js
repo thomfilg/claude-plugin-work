@@ -1,22 +1,7 @@
-/**
- * Infra-classifier: identifies CI failures that look like infrastructure
- * flakes rather than genuine code/test failures. Used by the `infra-retry`
- * step to decide whether a 60s-wait + `gh run rerun --failed` is warranted.
- *
- * Per the spec, classification fires `infra-suspected` only when ≥2 signals
- * fire per the rule: (s1 && s2) || (s3 && s4) || (s2 && s4). This ≥2-signal
- * floor (R7) is documented at the call site by iterating
- * `INFRA_SUSPECTED_PAIRS` rather than inlining the boolean.
- *
- * Each collector is pure: it accepts pre-fetched payloads (or an injectable
- * `exec` for Signal 2) so unit tests can drive every branch without spawning
- * `gh`. The classifier itself never shells out — the orchestrator pre-fetches
- * payloads and passes them through `ctx`.
- *
- * See also: synapsys memory [[never-rerun-ci]] — local evidence first, no
- * blind `gh run rerun`. This module's whole purpose is to GATE retries on
- * evidence (the 4 signals) rather than retry blindly.
- */
+// Infra-classifier: identifies CI failures that look like infrastructure
+// flakes. Fires `infra-suspected` only when ≥2 signals fire per R7
+// (INFRA_SUSPECTED_PAIRS). Collectors are pure; classifier shells out via
+// injected ctx.exec. See [[never-rerun-ci]] — gate retries on evidence.
 
 'use strict';
 
