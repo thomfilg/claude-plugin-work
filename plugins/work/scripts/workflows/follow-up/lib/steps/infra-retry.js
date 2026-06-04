@@ -133,6 +133,65 @@ function buildRetryDelegate(state, runId, attemptNumber) {
   };
 }
 
+/**
+ * R16: if multi-job Signal 4 cross-checks show a github.com Actions outage,
+ * mark state and return a surface payload. Returns null when no outage applies.
+ */
+function maybeSurfaceGhActionsOutage(state, result) {
+  if (!shouldCheckGhActions(result)) return null;
+  const status = checkActionsStatus({});
+  if (!status || !status.degraded) return null;
+  if (state && state.infraRetry) {
+    state.infraRetry.ghActionsStatus = 'degraded';
+  }
+  return {
+    action: 'surface',
+    payload: {
+      reason: 'github-actions-outage',
+      signals: result.signals,
+    },
+  };
+}
+
+/**
+ * R2/R3/R4: when retry count has hit the cap, set failureCategory and return
+ * the exhaustion surface payload. Returns null otherwise.
+ */
+function maybeSurfaceExhausted(state, retry, result) {
+  if (retry.count < MAX_INFRA_RETRIES) return null;
+  state.failureCategory = 'infra-stuck';
+  retry.exhausted = true;
+  return {
+    action: 'surface',
+    reason: 'infra-stuck-exhausted',
+    signals: result.signals,
+    attempts: retry.attempts,
+  };
+}
+
+/**
+ * Increment retry counter, record the attempt entry, and return the delegate
+ * that retries the failed run.
+ */
+function dispatchRetryAttempt(state, retry, result) {
+  const attemptNumber = retry.count + 1;
+  const runId = resolveRunId(state);
+  // Validate before mutating state so a bad runId doesn't consume a retry.
+  const delegate = buildRetryDelegate(state, runId, attemptNumber);
+  retry.count = attemptNumber;
+  retry.attempts.push({
+    attemptNumber,
+    timestamp: new Date().toISOString(),
+    runId: String(runId),
+    signals: Array.isArray(result.signals) ? result.signals.slice() : [],
+    retryMethod:
+      getConfig('WORK_INFRA_RETRY_FALLBACK') === 'empty-commit' ? 'empty-commit' : 'rerun-failed',
+    outcome: 'pending',
+  });
+  state.currentStep = 'monitor';
+  return delegate;
+}
+
 module.exports = function registerInfraRetry(register) {
   register('infra-retry', (state, ctx) => {
     // R12: default the persisted retry record on first read.
@@ -145,9 +204,7 @@ module.exports = function registerInfraRetry(register) {
     // R15: short-circuit on retry-success before consulting the classifier
     // again — we are simply confirming a green run for an already-recorded
     // attempt.
-    if (maybeHandleRetrySuccess(state, ctx)) {
-      return null;
-    }
+    if (maybeHandleRetrySuccess(state, ctx)) return null;
 
     // R1e / R7: consult the classifier.
     const result = classify(state || {}, ctx || {});
@@ -157,23 +214,8 @@ module.exports = function registerInfraRetry(register) {
 
     if (!result || result.classification !== 'infra-suspected') return null;
 
-    // R16: cross-check githubstatus.com when multi-job setup failures suggest
-    // a platform-wide Actions outage. Skip retry attempts entirely if so.
-    if (shouldCheckGhActions(result)) {
-      const status = checkActionsStatus({});
-      if (status && status.degraded) {
-        if (state && state.infraRetry) {
-          state.infraRetry.ghActionsStatus = 'degraded';
-        }
-        return {
-          action: 'surface',
-          payload: {
-            reason: 'github-actions-outage',
-            signals: result.signals,
-          },
-        };
-      }
-    }
+    const outage = maybeSurfaceGhActionsOutage(state, result);
+    if (outage) return outage;
 
     // R2/R3/R4: retry state machine.
     //  - cap at MAX_INFRA_RETRIES (3); on exhaust, set failureCategory and
@@ -182,33 +224,10 @@ module.exports = function registerInfraRetry(register) {
     //  - otherwise increment count, record an attempt, and dispatch a delegate
     //    that re-runs the failed jobs.
     const retry = state.infraRetry;
-    if (retry.count >= MAX_INFRA_RETRIES) {
-      state.failureCategory = 'infra-stuck';
-      retry.exhausted = true;
-      return {
-        action: 'surface',
-        reason: 'infra-stuck-exhausted',
-        signals: result.signals,
-        attempts: retry.attempts,
-      };
-    }
+    const exhausted = maybeSurfaceExhausted(state, retry, result);
+    if (exhausted) return exhausted;
 
-    const attemptNumber = retry.count + 1;
-    const runId = resolveRunId(state);
-    // Validate before mutating state so a bad runId doesn't consume a retry.
-    const delegate = buildRetryDelegate(state, runId, attemptNumber);
-    retry.count = attemptNumber;
-    retry.attempts.push({
-      attemptNumber,
-      timestamp: new Date().toISOString(),
-      runId: String(runId),
-      signals: Array.isArray(result.signals) ? result.signals.slice() : [],
-      retryMethod:
-        getConfig('WORK_INFRA_RETRY_FALLBACK') === 'empty-commit' ? 'empty-commit' : 'rerun-failed',
-      outcome: 'pending',
-    });
-    state.currentStep = 'monitor';
-    return delegate;
+    return dispatchRetryAttempt(state, retry, result);
   });
 };
 

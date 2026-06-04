@@ -278,10 +278,7 @@ function signal4_setupArtifacts(rawLogs) {
  *   `rawLogs`, `exec`, `jobId`.
  * @returns {{ classification: 'infra-suspected'|'code-failure', signals: string[], evidence: object }}
  */
-function classify(state, ctx) {
-  const s = state || {};
-  const c = ctx || {};
-  const failedJobs = Array.isArray(s._ciFailedJobs) ? s._ciFailedJobs : [];
+function collectSignals(s, c, failedJobs) {
   const signal4Raw = signal4_setupArtifacts(c.rawLogs || '');
   // Propagate jobCount (R16): when Signal 4 fires we attach the number of
   // failing jobs so the step can decide whether to cross-check githubstatus.
@@ -292,7 +289,7 @@ function classify(state, ctx) {
     fired: signal4Raw.fired,
     evidence: { ...signal4Raw.evidence, jobCount: failedJobs.length },
   };
-  const results = {
+  return {
     signal1: signal1_shardAsymmetry(failedJobs, c.allJobs || []),
     signal2: c.exec
       ? signal2_emptyFailedLog(s.runId, c.jobId, c.exec)
@@ -300,19 +297,25 @@ function classify(state, ctx) {
     signal3: signal3_unrelatedFailures(s.failedTests || [], c.prDiffFiles || []),
     signal4,
   };
+}
+
+function isInfraSuspected(firedSignals) {
+  // ≥2-signal floor (R7): iterate the documented pair list rather than
+  // inlining the boolean — keeps the spec rule reviewable at the call site.
+  return INFRA_SUSPECTED_PAIRS.some(
+    ([a, b]) => firedSignals.includes(a) && firedSignals.includes(b)
+  );
+}
+
+function classify(state, ctx) {
+  const s = state || {};
+  const c = ctx || {};
+  const failedJobs = Array.isArray(s._ciFailedJobs) ? s._ciFailedJobs : [];
+  const results = collectSignals(s, c, failedJobs);
   const firedSignals = Object.entries(results)
     .filter(([, r]) => r.fired)
     .map(([name]) => name);
-
-  // ≥2-signal floor (R7): iterate the documented pair list rather than
-  // inlining the boolean — keeps the spec rule reviewable at the call site.
-  let infraSuspected = false;
-  for (const [a, b] of INFRA_SUSPECTED_PAIRS) {
-    if (firedSignals.includes(a) && firedSignals.includes(b)) {
-      infraSuspected = true;
-      break;
-    }
-  }
+  const infraSuspected = isInfraSuspected(firedSignals);
   return {
     classification: infraSuspected ? 'infra-suspected' : 'code-failure',
     signals: firedSignals,

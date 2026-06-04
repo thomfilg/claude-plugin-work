@@ -22,6 +22,40 @@ function stripGhPrefix(line) {
   return line.replace(/^[^\t]+\t[^\t]+\t\d{4}-\d{2}-\d{2}T[^\s]+\s?/, '');
 }
 
+// Noise patterns: drop these runner / setup / housekeeping lines.
+const NOISE_PATTERNS = [
+  /##\[group\]|##\[endgroup\]|Runner Image|Operating System/i,
+  /runner version|Secret source|Prepare workflow|Download action|Getting action/i,
+  /Image:|Version:|Commit:|Build Date:|Worker ID:|Azure Region:/i,
+  /Permissions|Actions: read|Contents: read|Metadata: read|PullRequests:/i,
+  /Temporarily overriding HOME|safe\.directory|extraheader|submodule foreach|##\[warning\]Node\.js \d+ actions are deprecated/i,
+  /\[command\]\/usr\/bin\/git/,
+  /RESOLVEDSTATS|Cleaning up orphan|Docker container caching/i,
+];
+
+// Keep patterns: preserve error markers, assertions, test names, meaningful output.
+const KEEP_PATTERNS = [
+  /error|fail|assert|expect|timeout|ERR_|✗|✕|FAIL|Error:|×/i,
+  /\.(spec|test)\.(ts|js|tsx|jsx)/,
+  /^\s+at\s/,
+  /exit code|exit\s+\d|SIGTERM|SIGKILL|Process completed/i,
+  /Run tests|Run e2e|playwright/i,
+];
+
+function isNoiseLine(line) {
+  return NOISE_PATTERNS.some((re) => re.test(line));
+}
+
+function isMeaningfulLine(line) {
+  return KEEP_PATTERNS.some((re) => re.test(line));
+}
+
+function shouldKeepLine(line) {
+  if (!line.trim()) return false;
+  if (isNoiseLine(line)) return false;
+  return isMeaningfulLine(line);
+}
+
 /**
  * Strip gh prefixes from each line of `rawLogs`, then drop runner/setup
  * noise lines while preserving error/assertion/test output. Falls back to
@@ -32,36 +66,7 @@ function stripGhPrefix(line) {
  */
 function filterLogs(rawLogs) {
   const stripped = rawLogs.split('\n').map(stripGhPrefix);
-  const filtered = stripped
-    .filter((line) => {
-      if (!line.trim()) return false;
-      // Drop runner setup / housekeeping noise
-      if (/##\[group\]|##\[endgroup\]|Runner Image|Operating System/i.test(line)) return false;
-      if (
-        /runner version|Secret source|Prepare workflow|Download action|Getting action/i.test(line)
-      )
-        return false;
-      if (/Image:|Version:|Commit:|Build Date:|Worker ID:|Azure Region:/i.test(line)) return false;
-      if (/Permissions|Actions: read|Contents: read|Metadata: read|PullRequests:/i.test(line))
-        return false;
-      if (
-        /Temporarily overriding HOME|safe\.directory|extraheader|submodule foreach|##\[warning\]Node\.js \d+ actions are deprecated/i.test(
-          line
-        )
-      )
-        return false;
-      if (/\[command\]\/usr\/bin\/git/.test(line)) return false;
-      if (/RESOLVEDSTATS|Cleaning up orphan|Docker container caching/i.test(line)) return false;
-      // Keep error markers, assertions, test names, meaningful output
-      if (/error|fail|assert|expect|timeout|ERR_|✗|✕|FAIL|Error:|×/i.test(line)) return true;
-      if (/\.(spec|test)\.(ts|js|tsx|jsx)/.test(line)) return true;
-      if (/^\s+at\s/.test(line)) return true;
-      if (/exit code|exit\s+\d|SIGTERM|SIGKILL|Process completed/i.test(line)) return true;
-      if (/Run tests|Run e2e|playwright/i.test(line)) return true;
-      return false;
-    })
-    .join('\n')
-    .substring(0, 6000);
+  const filtered = stripped.filter(shouldKeepLine).join('\n').substring(0, 6000);
   if (filtered.trim()) return filtered;
   // Fallback: tail of stripped raw logs when filter removed everything
   return stripped
