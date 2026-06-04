@@ -86,6 +86,38 @@ test('Task 4: --verbose surfaces exclude-matched reason and matched.excluded_pat
   );
 });
 
+test('Task 4: --verbose surfaces exclude-matched label via MATCHED_LABELS', (t) => {
+  const memories = [
+    {
+      name: 'jira-ops-exclude-demo-2',
+      frontmatter: {
+        description: 'Demo memory with exclude_prompt suppression',
+        events: 'UserPromptSubmit',
+        trigger_prompt: 'create jira ticket',
+        exclude_prompt: 'dry-run',
+      },
+      body: 'Use the jira task creator.',
+    },
+  ];
+  const { cwd, cleanup } = makeFixtureStore(memories);
+  t.after(cleanup);
+
+  const result = runExplain([
+    '--verbose',
+    '--event=UserPromptSubmit',
+    '--prompt=create jira ticket dry-run',
+    `--cwd=${cwd}`,
+  ]);
+
+  assert.equal(result.status, 0, `exit non-zero. stderr=${result.stderr}`);
+  // The labels block (mirrors negative-excludes) should render the excluded_pattern key.
+  assert.match(
+    result.stdout,
+    /excluded_pattern/,
+    `expected excluded_pattern label in verbose output. stdout=${result.stdout}`
+  );
+});
+
 test('Task 4: table mode shows exclude-matched reason in row', (t) => {
   const memories = [
     {
