@@ -25,6 +25,7 @@ const {
   triggerMatchesBody,
   pretoolArgSets,
 } = require('../lib/shared/trigger-tokens');
+const { STOP_WORDS } = require('../lib/lint-stopwords');
 
 // Named exit-code constants — single source of truth.
 const EXIT_OK = 0;
@@ -46,6 +47,11 @@ const BODY_DENSITY_FLOOR = 2;
 
 // `[[link]]` regex — anchored to `[a-z0-9][a-z0-9-]*` per spec §Data Model.
 const LINK_RE = /\[\[([a-z0-9][a-z0-9-]*)\]\]/g;
+
+// Task 7: too-broad-trigger thresholds.
+// A trigger is "too broad" when it is a single alternation group whose tokens
+// are all ≤ TOO_BROAD_MAX_TOKEN_LEN chars OR all entirely STOP_WORDS.
+const TOO_BROAD_MAX_TOKEN_LEN = 4;
 
 /**
  * Parse argv flags into a normalized options object. Returns `{ error }` when
@@ -489,6 +495,89 @@ function computePretoolPairs(memories, onlyInvolving) {
 }
 
 /**
+ * extractGroupTokens — collect lowercased word-ish tokens from every
+ * parenthesised group in a regex source, INCLUDING single-token groups
+ * (unlike `extractAlternationTokens` which skips them).
+ *
+ * Used by the too-broad-trigger predicate so that `\b(ci)\b` (one short
+ * token, no pipe) still counts as "trivially short" per R7 spec.
+ *
+ * @param {string} src
+ * @returns {string[]}
+ */
+function extractGroupTokens(src) {
+  if (typeof src !== 'string' || src.length === 0) return [];
+  const tokens = [];
+  const groupRe = /\(([^()]+)\)/g;
+  let m;
+  while ((m = groupRe.exec(src)) !== null) {
+    for (const raw of m[1].split('|')) {
+      const t = raw.trim();
+      if (/^[A-Za-z0-9_-]+$/.test(t)) tokens.push(t.toLowerCase());
+    }
+  }
+  return tokens;
+}
+
+/**
+ * isTooBroadTrigger — Task 7 (AC-G4 / R7).
+ *
+ * Predicate: a `trigger_prompt` is "too broad" when its group-token set
+ * is non-empty AND either
+ *   (a) every token is ≤ TOO_BROAD_MAX_TOKEN_LEN chars, OR
+ *   (b) every token (case-insensitively) is in STOP_WORDS.
+ *
+ * Returns `{ broad: false }` or `{ broad: true, reason: string }`.
+ */
+function isTooBroadTrigger(triggerSource) {
+  if (typeof triggerSource !== 'string' || triggerSource.length === 0) {
+    return { broad: false };
+  }
+  const tokens = extractGroupTokens(triggerSource);
+  if (!tokens || tokens.length === 0) return { broad: false };
+
+  const allShort = tokens.every((t) => t.length <= TOO_BROAD_MAX_TOKEN_LEN);
+  if (allShort) {
+    return {
+      broad: true,
+      reason: `all alternation tokens are ≤${TOO_BROAD_MAX_TOKEN_LEN} chars: [${tokens.join(', ')}]`,
+    };
+  }
+
+  const allStop = tokens.every((t) => STOP_WORDS.has(t));
+  if (allStop) {
+    return {
+      broad: true,
+      reason: `all alternation tokens are STOP_WORDS: [${tokens.join(', ')}]`,
+    };
+  }
+
+  return { broad: false };
+}
+
+/**
+ * computeBroadTriggers — walk each memory once and surface any with a
+ * trivially short / stop-word-only `trigger_prompt`. Per R7, these entries
+ * are reported under a distinct rule key (`too-broad-trigger`) and NOT
+ * emitted as a pair. Severity is always `medium` (AC-G4: never high).
+ */
+function computeBroadTriggers(memories, onlyInvolving) {
+  const out = [];
+  for (const m of memories) {
+    if (onlyInvolving && m.name !== onlyInvolving) continue;
+    const { broad, reason } = isTooBroadTrigger(m.triggerPrompt || '');
+    if (!broad) continue;
+    out.push({
+      name: m.name,
+      rule: 'too-broad-trigger',
+      severity: 'medium',
+      reason,
+    });
+  }
+  return out;
+}
+
+/**
  * Programmatic entry point.
  *
  * @param {object} opts
@@ -517,8 +606,13 @@ function lintStore(opts) {
   const triggerPairs = computeTriggerPairs(memories, overlapThreshold, onlyInvolving);
   const bodyPairs = computeBodyPairs(memories, bodyDensityHigh, onlyInvolving);
   const pretoolPairs = computePretoolPairs(memories, onlyInvolving);
-  const pairs = triggerPairs.concat(bodyPairs).concat(pretoolPairs);
-  const broadTriggers = []; // populated by Task 7
+  // Task 7: exclude broad-trigger memories from pairwise reporting (R7).
+  const broadTriggers = computeBroadTriggers(memories, onlyInvolving);
+  const broadNames = new Set(broadTriggers.map((e) => e.name));
+  const pairs = triggerPairs
+    .concat(bodyPairs)
+    .concat(pretoolPairs)
+    .filter((p) => !broadNames.has(p.a) && !broadNames.has(p.b));
 
   const hasHigh = pairs.some((p) => p.severity === 'high');
   const exitCode = hasHigh ? EXIT_HIGH_SEVERITY : EXIT_OK;

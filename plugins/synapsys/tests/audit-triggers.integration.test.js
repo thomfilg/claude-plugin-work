@@ -228,6 +228,68 @@ test('Pretool×pretool intersection within a tool surfaces as a pair (AC-G5)', (
   assert.ok(typeof pretoolPair.score === 'number', `pair.score must be a number, got ${typeof pretoolPair.score}`);
 });
 
+// ─── Task 7: too-broad-trigger per-memory rule (AC-G4) ───
+
+const TOO_BROAD_CI_FIXTURE = path.join(FIXTURE_ROOT, 'too-broad-ci.md');
+
+function buildTooBroadStore() {
+  // Per-test isolated store so the broad-trigger fixture does not
+  // interfere with the `proj` fixtures used by Task 3/4 tests.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'synapsys-lint-task7-'));
+  const storeDir = path.join(root, '.claude', 'synapsys');
+  fs.mkdirSync(storeDir, { recursive: true });
+  fs.writeFileSync(path.join(storeDir, '.synapsys.json'), '{"version":1,"kind":"project"}\n');
+  fs.copyFileSync(TOO_BROAD_CI_FIXTURE, path.join(storeDir, path.basename(TOO_BROAD_CI_FIXTURE)));
+  const isolatedHome = path.join(root, 'home');
+  fs.mkdirSync(isolatedHome, { recursive: true });
+  return { cwd: root, home: isolatedHome };
+}
+
+test('too-broad-trigger rule flags a trivially short trigger (AC-G4)', () => {
+  const { cwd, home } = buildTooBroadStore();
+  const { lintStore } = require(CLI);
+  const result = lintStore({ cwd, scope: 'all' });
+
+  // The broad-trigger memory must NOT appear in `pairs` (R7: distinct rule, not pairwise).
+  const broadInPairs = result.pairs.find(
+    (p) => p.a === 'too-broad-ci' || p.b === 'too-broad-ci'
+  );
+  assert.equal(
+    broadInPairs,
+    undefined,
+    `too-broad-trigger memory must not be reported as a pair, got pair=${JSON.stringify(broadInPairs)}`
+  );
+
+  // The broad-trigger memory must appear in `broadTriggers` envelope key.
+  assert.ok(
+    Array.isArray(result.broadTriggers),
+    `broadTriggers must be an array, got ${typeof result.broadTriggers}`
+  );
+  const entry = result.broadTriggers.find((e) => e.name === 'too-broad-ci');
+  assert.ok(
+    entry,
+    `expected broadTriggers entry for too-broad-ci, got broadTriggers=${JSON.stringify(result.broadTriggers)}`
+  );
+  assert.equal(entry.rule, 'too-broad-trigger', `rule field must be 'too-broad-trigger', got ${entry.rule}`);
+  assert.equal(entry.severity, 'medium', `severity must be 'medium', got ${entry.severity}`);
+  assert.ok(
+    typeof entry.reason === 'string' && entry.reason.length > 0,
+    `entry.reason must be a non-empty string, got ${JSON.stringify(entry.reason)}`
+  );
+
+  // Exit code is unaffected (medium, never high).
+  const r = runLint([`--cwd=${cwd}`, '--scope=all', '--json'], { env: { HOME: home } });
+  assert.equal(r.status, 0, `expected exit 0 (broad-trigger is medium, never high), got ${r.status}. stderr=${r.stderr}`);
+  const env = parseJson(r.stdout);
+  assert.ok(env, `stdout was not parseable JSON:\n${r.stdout}`);
+  const cliEntry = env.broadTriggers.find((e) => e.name === 'too-broad-ci');
+  assert.ok(
+    cliEntry,
+    `CLI JSON envelope must include too-broad-ci in broadTriggers, got broadTriggers=${JSON.stringify(env.broadTriggers)}`
+  );
+  assert.equal(cliEntry.severity, 'medium', `CLI broad entry severity must be 'medium', got ${cliEntry.severity}`);
+});
+
 test('Exit code is non-zero only when at least one high-severity pair exists (AC-G7)', () => {
   // With --overlap-threshold=0.99, no pair should reach the `high` cutoff
   // → no high pairs → exit code 0, but pairs are still listed.
