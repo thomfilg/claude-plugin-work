@@ -172,6 +172,23 @@ function signal2_emptyFailedLog(runId, jobId, exec) {
  * @param {string[]} prDiffFiles - Files changed by the PR.
  * @returns {{ fired: boolean, evidence: object }}
  */
+function stemsOverlap(testStem, ds) {
+  return (
+    testStem === ds ||
+    testStem.startsWith(ds + '/') ||
+    ds.startsWith(testStem + '/') ||
+    testStem.includes(ds) ||
+    ds.includes(testStem)
+  );
+}
+
+function findOverlappingDiffStem(testStem, diffStems) {
+  for (const ds of diffStems) {
+    if (stemsOverlap(testStem, ds)) return ds;
+  }
+  return null;
+}
+
 function signal3_unrelatedFailures(failedTests, prDiffFiles) {
   const tests = Array.isArray(failedTests) ? failedTests : [];
   const diff = Array.isArray(prDiffFiles) ? prDiffFiles : [];
@@ -182,17 +199,9 @@ function signal3_unrelatedFailures(failedTests, prDiffFiles) {
   const overlapping = [];
   for (const t of tests) {
     const testStem = t.replace(/\.(test|spec)\.[jt]sx?$/i, '').replace(/\.[a-z]+$/i, '');
-    for (const ds of diffStems) {
-      if (
-        testStem === ds ||
-        testStem.startsWith(ds + '/') ||
-        ds.startsWith(testStem + '/') ||
-        testStem.includes(ds) ||
-        ds.includes(testStem)
-      ) {
-        overlapping.push({ test: t, diffFile: ds });
-        break;
-      }
+    const matched = findOverlappingDiffStem(testStem, diffStems);
+    if (matched !== null) {
+      overlapping.push({ test: t, diffFile: matched });
     }
   }
   if (overlapping.length === 0) {
