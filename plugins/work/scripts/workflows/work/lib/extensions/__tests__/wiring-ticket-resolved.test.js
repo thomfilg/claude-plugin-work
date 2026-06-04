@@ -30,7 +30,7 @@ describe('steps/ticket.js — OnTicketResolved wiring (Task 6)', () => {
     assert.equal(typeof mod.fireTicketResolved, 'function');
   });
 
-  it('dispatches OnTicketResolved with {ticketId, resolution, tasksDir} payload on resolved transition', () => {
+  it('OnTicketResolved dispatch invokes registered handler with payload', () => {
     const mod = loadTicketStep();
     const calls = [];
     const injected = [];
