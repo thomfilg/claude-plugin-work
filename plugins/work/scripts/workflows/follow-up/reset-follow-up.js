@@ -146,6 +146,18 @@ function run(argv) {
   const ticketDir = path.join(TASKS_BASE, ticket);
   assertContained(ticketDir, TASKS_BASE);
 
+  // Preserve the saved PR number across reset so follow-up re-entry can
+  // still reach the PR after a cap-blocked cycle (GH-531).
+  let preservedPrNumber = null;
+  try {
+    const statePath = path.join(ticketDir, '.follow-up-state.json');
+    const raw = fs.readFileSync(statePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.prNumber != null) preservedPrNumber = parsed.prNumber;
+  } catch {
+    // ENOENT or parse error — nothing to preserve.
+  }
+
   const removed = [];
   for (const name of STATE_FILES) {
     const p = path.join(ticketDir, name);
@@ -164,9 +176,9 @@ function run(argv) {
     return 0;
   }
 
-  // Re-initialize fresh state via Task 1's helper.
+  // Re-initialize fresh state via Task 1's helper, preserving any prior PR number.
   const { initFreshState } = require(path.join(__dirname, 'follow-up-next.js'));
-  initFreshState(ticket);
+  initFreshState(ticket, { prNumber: preservedPrNumber });
 
   // Provenance row.
   appendProvenance(ticketDir, ticket);

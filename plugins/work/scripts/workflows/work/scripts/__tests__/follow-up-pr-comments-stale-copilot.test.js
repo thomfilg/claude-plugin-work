@@ -1,9 +1,8 @@
 'use strict';
 
-const { describe, it, beforeEach, afterEach, mock } = require('node:test');
+const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const Module = require('node:module');
 
 const SCRIPT_PATH = path.join(__dirname, '..', 'follow-up-pr-comments.js');
 const GIT_HUNK_REQUEST_PATH = path.resolve(

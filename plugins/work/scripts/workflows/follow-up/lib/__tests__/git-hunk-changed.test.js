@@ -8,7 +8,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Module = require('node:module');
 
 const MODULE_PATH = require.resolve('../git-hunk-changed.js');
 

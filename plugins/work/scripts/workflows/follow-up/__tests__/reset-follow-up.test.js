@@ -164,4 +164,24 @@ describe('reset-follow-up', () => {
       assert.equal(fresh.status, 'in_progress');
     });
   });
+
+  describe('reset-follow-up preserves saved PR number across reset', () => {
+    it('reads prNumber from existing state and re-applies it to the fresh state', () => {
+      const ticketId = 'GH-553';
+      const dir = path.join(TASKS_BASE, ticketId);
+      fs.mkdirSync(dir, { recursive: true });
+      const statePath = path.join(dir, '.follow-up-state.json');
+      fs.writeFileSync(
+        statePath,
+        JSON.stringify({ ticketId, status: 'blocked', attempt: 40, prNumber: 553 }, null, 2)
+      );
+
+      const result = runReset([ticketId, '--yes']);
+      assert.equal(result.status, 0, `exit 0 expected, got ${result.status}: ${result.stderr}`);
+
+      const fresh = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      assert.equal(fresh.ticketId, ticketId);
+      assert.equal(fresh.prNumber, 553, 'prNumber preserved across reset');
+    });
+  });
 });

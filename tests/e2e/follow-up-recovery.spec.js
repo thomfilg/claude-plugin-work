@@ -21,12 +21,12 @@
  *   - "Existing follow-up state files remain compatible after deploy"
  */
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const RESET_SCRIPT = path.join(
@@ -36,7 +36,7 @@ const RESET_SCRIPT = path.join(
   'scripts',
   'workflows',
   'follow-up',
-  'reset-follow-up.js',
+  'reset-follow-up.js'
 );
 const ENGINE_SCRIPT = path.join(
   REPO_ROOT,
@@ -45,16 +45,7 @@ const ENGINE_SCRIPT = path.join(
   'scripts',
   'workflows',
   'lib',
-  'workflow-engine.js',
-);
-const FOLLOW_UP_NEXT = path.join(
-  REPO_ROOT,
-  'plugins',
-  'work',
-  'scripts',
-  'workflows',
-  'follow-up',
-  'follow-up-next.js',
+  'workflow-engine.js'
 );
 const PUSH_RETRY = path.join(
   REPO_ROOT,
@@ -65,7 +56,7 @@ const PUSH_RETRY = path.join(
   'follow-up',
   'lib',
   'steps',
-  'push-retry.js',
+  'push-retry.js'
 );
 
 const TICKET = 'GH-999931';
@@ -158,7 +149,7 @@ describe('GH-531 e2e — Operator recovers from cap-exhausted dead-end via reset
         currentStep: 'push-retry',
         _pushRetryCount: 40,
         maxAttempts: 40,
-      }),
+      })
     );
     fs.writeFileSync(commentsFile, JSON.stringify({ comments: [] }));
 
@@ -173,18 +164,18 @@ describe('GH-531 e2e — Operator recovers from cap-exhausted dead-end via reset
         maxAttempts: 40,
         _pushRetryCount: 39,
       },
-      { worktreeDir: ticketDir },
+      { worktreeDir: ticketDir }
     );
     assert.equal(blocked.action, 'blocked', 'expected blocked action at cap');
     assert.ok(
-      typeof blocked.instruction === 'string'
-        && blocked.instruction.includes('reset-follow-up'),
-      'expected instruction referencing reset-follow-up',
+      typeof blocked.instruction === 'string' && blocked.instruction.includes('reset-follow-up'),
+      'expected instruction referencing reset-follow-up'
     );
     assert.ok(blocked.instruction.includes(TICKET), 'instruction must include ticket');
     assert.equal(blocked.nextAction.command, 'workflow-engine');
     assert.equal(blocked.nextAction.subcommand, 'reset-follow-up');
-    assert.deepEqual(blocked.nextAction.args, [TICKET]);
+    assert.deepEqual(blocked.nextAction.args, [TICKET, '--yes']);
+    assert.ok(blocked.instruction.includes('--yes'), 'instruction must include --yes');
 
     // 2) Run reset via workflow-engine dispatcher (so we exercise the EXEMPT
     //    route used in production — not just the module directly).
@@ -196,11 +187,11 @@ describe('GH-531 e2e — Operator recovers from cap-exhausted dead-end via reset
     assert.equal(resetPayload.reinit, true);
     assert.ok(
       resetPayload.removed.includes('.follow-up-state.json'),
-      'expected .follow-up-state.json in removed list',
+      'expected .follow-up-state.json in removed list'
     );
     assert.ok(
       resetPayload.removed.includes('follow-up-comments.json'),
-      'expected follow-up-comments.json in removed list',
+      'expected follow-up-comments.json in removed list'
     );
 
     // 3) Old comments file removed; fresh state file re-initialized.
@@ -216,12 +207,12 @@ describe('GH-531 e2e — Operator recovers from cap-exhausted dead-end via reset
     assert.equal(
       fresh._pushRetryCount,
       0,
-      `fresh state must explicitly reset _pushRetryCount to 0, got ${fresh._pushRetryCount}`,
+      `fresh state must explicitly reset _pushRetryCount to 0, got ${fresh._pushRetryCount}`
     );
     assert.equal(
       fresh.currentStep,
       'monitor',
-      'fresh state must re-enter the monitor step on next invocation',
+      'fresh state must re-enter the monitor step on next invocation'
     );
 
     // 4) Provenance row appended.
@@ -244,7 +235,7 @@ describe('GH-531 e2e — Operator recovers from cap-exhausted dead-end via reset
         maxAttempts: 40,
         _pushRetryCount: fresh._pushRetryCount || 0,
       },
-      { worktreeDir: ticketDir },
+      { worktreeDir: ticketDir }
     );
     // Either it loops to monitor (null/no-op) or it returns an execute payload,
     // but it MUST NOT immediately re-block at cap.
@@ -252,7 +243,7 @@ describe('GH-531 e2e — Operator recovers from cap-exhausted dead-end via reset
       assert.notEqual(
         reEntered.action,
         'blocked',
-        'post-reset push-retry must not re-block immediately',
+        'post-reset push-retry must not re-block immediately'
       );
     }
   });
@@ -285,7 +276,13 @@ describe('GH-531 e2e — Existing follow-up state files remain compatible after 
     // push-retry must respect the prior _pushRetryCount semantics for non-
     // Copilot causes: increment by 1 on a fresh entry (dispatched !== 'push-retry').
     const pushRetry = loadPushRetry();
-    const state = { ...loaded, currentStep: 'push-retry', dispatched: null, attempt: 0, maxAttempts: 40 };
+    const state = {
+      ...loaded,
+      currentStep: 'push-retry',
+      dispatched: null,
+      attempt: 0,
+      maxAttempts: 40,
+    };
     // We don't run the full step (it would shell out to git); we just assert
     // that the cap logic uses the prior counter as the floor.
     state._pushRetryCount = 39; // one shy of cap
@@ -310,7 +307,7 @@ describe('GH-531 e2e — Existing follow-up state files remain compatible after 
     assert.notEqual(
       after._pushRetryCount,
       7,
-      'fresh init must overwrite the legacy _pushRetryCount value',
+      'fresh init must overwrite the legacy _pushRetryCount value'
     );
   });
 });

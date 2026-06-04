@@ -155,10 +155,13 @@ function initState(ticketId, prNumber) {
  * exhaustion (GH-531).
  *
  * @param {string} ticketId — sanitized ticket id (e.g. `GH-999`).
+ * @param {object} [opts] — optional overrides.
+ * @param {number|null} [opts.prNumber] — preserve an existing PR number across reset.
  * @returns {object} the freshly-initialized state object.
  */
-function initFreshState(ticketId) {
-  const state = initState(ticketId, null);
+function initFreshState(ticketId, opts) {
+  const prNumber = opts && opts.prNumber != null ? opts.prNumber : null;
+  const state = initState(ticketId, prNumber);
   saveState(ticketId, state);
   return state;
 }

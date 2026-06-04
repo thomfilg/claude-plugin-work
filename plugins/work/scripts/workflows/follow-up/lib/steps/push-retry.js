@@ -22,7 +22,7 @@ module.exports = function registerPushRetry(register) {
     const maxAttempts = state.maxAttempts || 40;
     if (state._pushRetryCount >= maxAttempts) {
       const ticketId = state.ticketId;
-      const instruction = `Run: workflow-engine reset-follow-up ${ticketId}`;
+      const instruction = `Run: workflow-engine reset-follow-up ${ticketId} --yes`;
       return {
         type: 'follow_up_instruction',
         action: 'blocked',
@@ -31,7 +31,7 @@ module.exports = function registerPushRetry(register) {
         nextAction: {
           command: 'workflow-engine',
           subcommand: 'reset-follow-up',
-          args: [ticketId],
+          args: [ticketId, '--yes'],
         },
       };
     }
