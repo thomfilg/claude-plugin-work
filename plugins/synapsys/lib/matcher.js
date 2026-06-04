@@ -1,5 +1,15 @@
 'use strict';
 
+const excludes = require('./matcher-excludes');
+const content = require('./matcher-content');
+
+const extractMultiEditContent = content.extractMultiEditContent;
+const extractPretoolContent = content.extractPretoolContent;
+const evaluatePretoolContent = content.evaluatePretoolContent;
+const findContentMatch = content.findContentMatch;
+const hasNegativeContentPatterns = content.hasNegativeContentPatterns;
+const evaluatePretoolContentNot = content.evaluatePretoolContentNot;
+
 /**
  * @typedef {Object} Matched
  * @property {string} [prompt_token]      The matched alternative arm of trigger_prompt.
@@ -49,32 +59,32 @@ function makeMatched(fields) {
   return matched;
 }
 
+// Find which top-level alternative arm of trigger_prompt matched. Falls back
+// to the full pattern when no individual arm hits (naive split — spec assumes
+// human-authored simple alternation).
+function _resolvePromptToken(triggerPrompt, prompt) {
+  const arms = splitTopLevelAlternation(triggerPrompt);
+  for (const arm of arms) {
+    const armRe = safeRegex(arm);
+    if (armRe && armRe.test(prompt)) return arm;
+  }
+  return triggerPrompt;
+}
+
 function matchPrompt(memory, prompt) {
   const gate = gateMemory(memory, 'UserPromptSubmit');
   if (gate) return { fired: false, reason: gate };
   if (!memory.triggerPrompt) return { fired: false, reason: 'no-prompt-match' };
   const re = safeRegex(memory.triggerPrompt);
   if (!re) return { fired: false, reason: 'no-prompt-match' };
-  const m = re.exec(prompt || '');
+  const promptText = prompt || '';
+  const m = re.exec(promptText);
   if (!m) return { fired: false, reason: 'no-prompt-match' };
-
-  // Determine which top-level alternative arm matched. Split memory.triggerPrompt
-  // by top-level `|` (naive, but trigger_prompt regex is human-authored simple
-  // alternation per the spec). Pick the first arm whose own regex matches.
-  const arms = splitTopLevelAlternation(memory.triggerPrompt);
-  let prompt_token = memory.triggerPrompt;
-  for (const arm of arms) {
-    const armRe = safeRegex(arm);
-    if (armRe && armRe.test(prompt || '')) {
-      prompt_token = arm;
-      break;
-    }
-  }
 
   // Locked evaluation order (GH-510): trigger → exclude. After a positive
   // trigger_prompt match, evaluate the merged exclude list. Any hit suppresses
   // the fire and returns reason 'exclude-matched' with the offending pattern.
-  const excluded = evaluateExcludePrompt(memory, prompt || '');
+  const excluded = evaluateExcludePrompt(memory, promptText);
   if (excluded.excluded) {
     return {
       fired: false,
@@ -83,6 +93,7 @@ function matchPrompt(memory, prompt) {
     };
   }
 
+  const prompt_token = _resolvePromptToken(memory.triggerPrompt, promptText);
   return {
     fired: true,
     matched: makeMatched({ prompt_token, prompt_substring: m[0] }),
@@ -200,6 +211,26 @@ function _evaluatePreToolMatch(memory, payload) {
  * inputs the trigger considered. Reordering would silently flip which reason
  * surfaces to memory authors, breaking the explainer contract.
  */
+// Stage 4 helper: evaluate exclude_pretool + exclude_prompt against the
+// pre-tool payload. Returns an exclude-matched verdict if any pattern hits,
+// otherwise null. Extracted from matchPreTool to keep cyclomatic complexity
+// of the locked stage ladder under the quality gate.
+function _evaluatePreToolExcludes(memory, payload) {
+  const argBlob = JSON.stringify(payload?.tool_input || {});
+  const toolName = payload?.tool_name || '';
+  const excluded = evaluateExcludePretool(memory, toolName, argBlob);
+  if (excluded.excluded) {
+    return makeMatched({ excluded_pattern: excluded.pattern });
+  }
+  // R11 OR composition: exclude_prompt patterns apply to any input the
+  // trigger saw, matching the prompt-side semantics consistently.
+  const excludedByPrompt = evaluateExcludePrompt(memory, argBlob);
+  if (excludedByPrompt.excluded) {
+    return makeMatched({ excluded_pattern: excludedByPrompt.pattern });
+  }
+  return null;
+}
+
 function matchPreTool(memory, payload) {
   const gate = gateMemory(memory, 'PreToolUse');
   if (gate) return { fired: false, reason: gate };
@@ -210,26 +241,9 @@ function matchPreTool(memory, payload) {
   if (result.matched) {
     // Stage 4: exclude evaluation runs AFTER positive + content stages so
     // negative-excludes retains priority over exclude-matched (locked order).
-    const argBlob = JSON.stringify(payload?.tool_input || {});
-    const toolName = payload?.tool_name || '';
-    const excluded = evaluateExcludePretool(memory, toolName, argBlob);
-    if (excluded.excluded) {
-      return {
-        fired: false,
-        reason: 'exclude-matched',
-        matched: makeMatched({ excluded_pattern: excluded.pattern }),
-      };
-    }
-    // Also evaluate exclude_prompt against the argBlob to honor R11 OR
-    // composition — exclude_prompt patterns apply to any input the trigger
-    // saw (matching the prompt-side semantics consistently).
-    const excludedByPrompt = evaluateExcludePrompt(memory, argBlob);
-    if (excludedByPrompt.excluded) {
-      return {
-        fired: false,
-        reason: 'exclude-matched',
-        matched: makeMatched({ excluded_pattern: excludedByPrompt.pattern }),
-      };
+    const excludedMatched = _evaluatePreToolExcludes(memory, payload);
+    if (excludedMatched) {
+      return { fired: false, reason: 'exclude-matched', matched: excludedMatched };
     }
     return {
       fired: true,
@@ -254,81 +268,9 @@ function matchPreTool(memory, payload) {
   return { fired: false, reason: 'no-content-match' };
 }
 
-function extractMultiEditContent(edits) {
-  if (!Array.isArray(edits)) return null;
-  const strings = edits
-    .map((e) => (e && typeof e.new_string === 'string' ? e.new_string : null))
-    .filter((s) => s !== null);
-  if (strings.length === 0) return null;
-  return strings.join('\n');
-}
-
-const PRETOOL_CONTENT_EXTRACTORS = {
-  Edit: (i) => (typeof i.new_string === 'string' ? i.new_string : null),
-  Write: (i) => (typeof i.content === 'string' ? i.content : null),
-  MultiEdit: (i) => extractMultiEditContent(i.edits),
-  NotebookEdit: (i) => (typeof i.new_source === 'string' ? i.new_source : null),
-};
-
-function extractPretoolContent(toolName, toolInput) {
-  if (!toolInput || typeof toolInput !== 'object') return null;
-  const extractor = PRETOOL_CONTENT_EXTRACTORS[toolName];
-  return extractor ? extractor(toolInput) : null;
-}
-
-function evaluatePretoolContent(memory, contentString) {
-  return findContentMatch(memory, contentString) !== null;
-}
-
-function findContentMatch(memory, contentString) {
-  const patterns = memory.triggerPretoolContent;
-  if (!Array.isArray(patterns) || patterns.length === 0) return null;
-  let hit = null;
-  for (const pat of patterns) {
-    let re;
-    try {
-      re = new RegExp(pat, 'im');
-    } catch (err) {
-      process.stderr.write(
-        `[synapsys] memory ${memory.name}: invalid trigger_pretool_content regex "${pat}": ${err.message}\n`
-      );
-      continue;
-    }
-    const m = re.exec(contentString);
-    if (m && hit === null) {
-      hit = { pattern: pat, substring: m[0] };
-    }
-  }
-  return hit;
-}
-
-function hasNegativeContentPatterns(memory) {
-  return (
-    Array.isArray(memory.triggerPretoolContentNot) && memory.triggerPretoolContentNot.length > 0
-  );
-}
-
-function evaluatePretoolContentNot(memory, contentString) {
-  const patterns = memory.triggerPretoolContentNot;
-  if (!Array.isArray(patterns) || patterns.length === 0) {
-    return { excluded: false, pattern: null };
-  }
-  for (const pat of patterns) {
-    let re;
-    try {
-      re = new RegExp(pat, 'im');
-    } catch (err) {
-      process.stderr.write(
-        `[synapsys] memory ${memory.name}: invalid trigger_pretool_content_not regex "${pat}": ${err.message}\n`
-      );
-      continue;
-    }
-    if (re.test(contentString)) {
-      return { excluded: true, pattern: pat };
-    }
-  }
-  return { excluded: false, pattern: null };
-}
+// Content helpers (extract*, evaluate*Content*, findContentMatch) live in
+// matcher-content.js and are re-bound at the top of this file so the public
+// matcher API stays stable for memory-store.js and the explainer CLI.
 
 /**
  * True iff the memory carries any resolved exclude pattern (either inline
@@ -338,98 +280,16 @@ function evaluatePretoolContentNot(memory, contentString) {
  * @param {object} memory
  * @returns {boolean}
  */
-function hasExcludePatterns(memory) {
-  const resolved = Array.isArray(memory.excludeResolved) && memory.excludeResolved.length > 0;
-  const pretool = Array.isArray(memory.excludePretool) && memory.excludePretool.length > 0;
-  return resolved || pretool;
-}
-
-/**
- * Evaluate the resolved exclude list (inline `exclude_prompt` + flattened
- * `exclude_preset` bodies, in `memory.excludeResolved`) against an input
- * string (typically a user prompt or a stringified tool_input blob).
- * Invalid regex entries are skipped with a stderr warning so a single bad
- * pattern cannot abort the matcher (fail-closed / R15).
- *
- * @param {object} memory
- * @param {string} input
- * @returns {{ excluded: boolean, pattern: string|null }}
- */
-function evaluateExcludePrompt(memory, input) {
-  const patterns = memory.excludeResolved;
-  if (!Array.isArray(patterns) || patterns.length === 0) {
-    return { excluded: false, pattern: null };
-  }
-  const text = input || '';
-  // Two-pass evaluation:
-  //   pass 1 — compile every pattern, emit stderr warnings for invalid ones
-  //            so memory authors are told about all bad regex even when an
-  //            earlier valid one matches (fail-closed / R15).
-  //   pass 2 — return on the first valid regex that matches.
-  const compiled = [];
-  for (const pat of patterns) {
-    const re = safeRegex(pat);
-    if (!re) {
-      process.stderr.write(
-        `[synapsys] memory ${memory.name}: invalid exclude regex "${pat}"\n`
-      );
-      continue;
-    }
-    compiled.push({ pat, re });
-  }
-  for (const { pat, re } of compiled) {
-    if (re.test(text)) return { excluded: true, pattern: pat };
-  }
-  return { excluded: false, pattern: null };
-}
-
-/**
- * Evaluate `memory.excludePretool` (array of `tool:pattern` specs sharing the
- * shape of `trigger_pretool`) against a candidate (toolName, argBlob). Reuses
- * `parsePretoolSpec` / `pretoolSpecMatches` so the spec grammar stays in one
- * place. Invalid regex inside a spec is fail-closed (no exclude fires).
- *
- * @param {object} memory
- * @param {string} toolName
- * @param {string} argBlob
- * @returns {{ excluded: boolean, pattern: string|null }}
- */
+// Stage-4 exclude evaluators are implemented in matcher-excludes.js. These
+// thin wrappers bind matcher.js's pretool spec helpers so call-sites here
+// stay parameter-free and the public API surface is unchanged.
+const hasExcludePatterns = excludes.hasExcludePatterns;
+const evaluateExcludePrompt = excludes.evaluateExcludePrompt;
 function evaluateExcludePretool(memory, toolName, argBlob) {
-  const specs = memory.excludePretool;
-  if (!Array.isArray(specs) || specs.length === 0) {
-    return { excluded: false, pattern: null };
-  }
-  // Two-pass evaluation mirrors evaluateExcludePrompt (R15 fail-closed):
-  //   pass 1 — pre-validate each spec's regex and emit stderr warnings for
-  //            invalid patterns so authors learn about every bad regex,
-  //            even when an earlier valid spec matches.
-  //   pass 2 — return on the first valid spec that matches.
-  // `pretoolSpecMatches` calls `safeRegex` which silently returns null on
-  // invalid input, so without this validation a bad pattern would be a
-  // silent no-op rather than a documented warn+skip.
-  const valid = [];
-  for (const spec of specs) {
-    const { pat } = parsePretoolSpec(spec);
-    if (pat && !safeRegex(pat)) {
-      process.stderr.write(
-        `[synapsys] memory ${memory.name}: invalid exclude_pretool spec "${spec}"\n`
-      );
-      continue;
-    }
-    valid.push(spec);
-  }
-  for (const spec of valid) {
-    try {
-      if (pretoolSpecMatches(spec, toolName, argBlob || '')) {
-        return { excluded: true, pattern: spec };
-      }
-    } catch (err) {
-      process.stderr.write(
-        `[synapsys] memory ${memory.name}: invalid exclude_pretool spec "${spec}": ${err.message}\n`
-      );
-    }
-  }
-  return { excluded: false, pattern: null };
+  return excludes.evaluateExcludePretool(memory, toolName, argBlob, {
+    parsePretoolSpec,
+    pretoolSpecMatches,
+  });
 }
 
 // matchPreToolResult — object-mode wrapper around matchPreTool.

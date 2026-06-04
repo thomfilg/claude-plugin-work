@@ -212,6 +212,23 @@ function resolvePreset(name) {
   return null;
 }
 
+// Resolve all exclude_preset names through the preset map and concatenate
+// the raw exclude_prompt regex (if any). Skips presets that fail to resolve;
+// resolvePreset already emits its own stderr warning.
+function _buildExcludeResolved(excludePreset, excludePrompt) {
+  const resolved = [];
+  for (const presetName of excludePreset) {
+    const r = resolvePreset(presetName);
+    if (r) resolved.push(r);
+  }
+  if (excludePrompt) resolved.push(excludePrompt);
+  return resolved;
+}
+
+function _truthy(value) {
+  return value === true || value === 'true';
+}
+
 function readMemoryFile(store, name) {
   if (!name.endsWith('.md') || SKIP_FILES.has(name)) return null;
   const file = path.join(store.dir, name);
@@ -226,12 +243,7 @@ function readMemoryFile(store, name) {
   const excludePrompt = meta.exclude_prompt || '';
   const excludePretool = toList(meta.exclude_pretool);
   const excludePreset = toList(meta.exclude_preset);
-  const excludeResolved = [];
-  for (const presetName of excludePreset) {
-    const resolved = resolvePreset(presetName);
-    if (resolved) excludeResolved.push(resolved);
-  }
-  if (excludePrompt) excludeResolved.push(excludePrompt);
+  const excludeResolved = _buildExcludeResolved(excludePreset, excludePrompt);
   return {
     store,
     file,
@@ -242,10 +254,10 @@ function readMemoryFile(store, name) {
     triggerPretool: toList(meta.trigger_pretool),
     triggerPretoolContent: toList(meta.trigger_pretool_content),
     triggerPretoolContentNot: toList(meta.trigger_pretool_content_not),
-    triggerSession: meta.trigger_session === true || meta.trigger_session === 'true',
+    triggerSession: _truthy(meta.trigger_session),
     domain: toList(meta.domain),
     inject: meta.inject === 'full' ? 'full' : 'summary',
-    disabled: meta.disabled === true || meta.disabled === 'true',
+    disabled: _truthy(meta.disabled),
     expired: parseExpired(meta.expires),
     fireMode: parseFireMode(meta.fire_mode, memoryName),
     fireCadence: parseFireCadence(meta.fire_cadence, memoryName),
