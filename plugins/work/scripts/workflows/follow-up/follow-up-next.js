@@ -90,6 +90,7 @@ try {
 
 // ─── Step registry ──────────────────────────────────────────────────────────
 const { runStep, STEPS } = require(path.join(__dirname, 'lib', 'step-registry'));
+const { isInfraFailure, isStale } = require(path.join(__dirname, 'lib', 'infra-patterns'));
 
 // ─── State management ───────────────────────────────────────────────────────
 
@@ -195,6 +196,23 @@ function getNextInstruction(ticketId, prNumber) {
       }
       saveState(ticketId, state);
       return { type: 'follow_up_instruction', action: 'complete', summary: 'Already complete.' };
+    }
+
+    // Auto-clear stale infra-failure cache before ANY step runs (GH-536 #551
+    // round-2 fix). The monitor step's own clearStaleInfraCache only fires
+    // when the workflow re-enters monitor — but triage blocks on exitCode 2
+    // without advancing, so subsequent runs only re-execute triage and the
+    // cache is never invalidated. Lifting the check here ensures downstream
+    // steps (triage, fix-ci, report) also benefit and route the flow back
+    // to monitor for a fresh execution.
+    const cached = state.lastMonitorResult;
+    if (cached && isInfraFailure(cached.output || '') && isStale(state.lastMonitorAt)) {
+      delete state.lastMonitorResult;
+      delete state.lastMonitorAt;
+      state.currentStep = STEPS[0];
+      state.dispatched = null;
+      saveState(ticketId, state);
+      continue;
     }
 
     const stepIdx = STEPS.indexOf(state.currentStep);
