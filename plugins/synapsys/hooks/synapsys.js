@@ -149,28 +149,40 @@ function classifyForUserPrompt(ctx) {
   return { activeDomains };
 }
 
+// SessionStart has no prompt/tool signal yet; Stop/PreToolUse can produce an
+// empty merged set. In either case, returning an empty `activeDomains` would
+// hard-gate every domain-tagged memory (an empty set matches nothing in
+// `isDomainMismatch`). Fail-open with `undefined` so unrelated triggers
+// (trigger_session, trigger_pretool) still fire.
+function passiveActiveDomains(event, payload, registry, stickyState, sessionId) {
+  if (event === 'SessionStart') return undefined;
+  const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
+  const recentToolCalls = getRecentToolCalls(event, payload);
+  const rawActive = classifyActiveDomains({ prompt, recentToolCalls, registry });
+  const activeDomains = mergeStickyActive(rawActive, stickyState, sessionId);
+  if (!activeDomains || activeDomains.size === 0) return undefined;
+  return { activeDomains };
+}
+
 function buildActiveDomainsForPayload(event, payload) {
   try {
     const registry = loadDomainRegistry();
     if (!registry || !registry.roots || registry.roots.size === 0) return undefined;
 
-    const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
-    const recentToolCalls = getRecentToolCalls(event, payload);
     const sessionId = payload.session_id || payload.sessionId || 'default';
     const stickyState = loadStickyState();
 
     if (event === 'UserPromptSubmit') {
       return classifyForUserPrompt({
-        prompt,
-        recentToolCalls,
+        prompt: typeof payload.prompt === 'string' ? payload.prompt : '',
+        recentToolCalls: getRecentToolCalls(event, payload),
         registry,
         stickyState,
         sessionId,
       });
     }
 
-    const rawActive = classifyActiveDomains({ prompt, recentToolCalls, registry });
-    return { activeDomains: mergeStickyActive(rawActive, stickyState, sessionId) };
+    return passiveActiveDomains(event, payload, registry, stickyState, sessionId);
   } catch {
     return undefined;
   }
