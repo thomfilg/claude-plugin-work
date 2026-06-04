@@ -46,10 +46,7 @@ function maybeAutoBootstrap(taskId) {
   try {
     const tmuxMod = require('./tmux');
     const activeSessions = tmuxMod.listSessions ? tmuxMod.listSessions() : [];
-    if (manifest.poolFullForTask(taskId, activeSessions)) {
-      alerts.log(`AUTO-BOOTSTRAP skipped for ${taskId}: owning manifest at slot cap`);
-      return false;
-    }
+    if (manifest.poolFullForTask(taskId, activeSessions)) return false;
   } catch {}
   const res = spawnSync('bash', [BOOTSTRAP_SCRIPT, taskId], {
     stdio: 'ignore',

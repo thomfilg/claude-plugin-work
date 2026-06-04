@@ -9,7 +9,7 @@
  * operator can't tell the daemon is still observing. Compromise: count the
  * cycles and emit a single log line every 10th cycle.
  */
-const LOG_EVERY = 10;
+const LOG_EVERY = parseInt(process.env.WAIT_MUTE_LOG_EVERY || '60', 10);
 
 function noteWaitingForUser({ session, phase, state, alerts }) {
   const m = state.read(session, 'wait-mute') || { count: 0 };
