@@ -103,16 +103,26 @@ function discoverStores(cwd) {
   return out;
 }
 
-function coerceFrontmatterValue(raw) {
+// Frontmatter keys whose `[...]` value should be parsed as a YAML-style list.
+// All other keys keep `[...]` as a literal string so regex character classes
+// like `[a-z0-9]` in `trigger_prompt` aren't mis-coerced into arrays.
+const BRACKET_LIST_KEYS = new Set([
+  'domain',
+  'events',
+  'trigger_pretool',
+  'trigger_pretool_content',
+  'trigger_pretool_content_not',
+]);
+
+function coerceFrontmatterValue(raw, key) {
   const val = raw.trim();
   if (val === '') return '';
   if (val === 'true') return true;
   if (val === 'false') return false;
-  // Bracket-array form: treat `[…]` as a list when the contents look like an
-  // identifier list (letters/digits/colons/dots/dashes/underscores, optional
-  // quotes, comma-separated). Regex character classes like `[a-z]` contain a
-  // range character `-` between alphas with no separator and are kept as string.
-  if (/^\[[\s\w:.,\-_"']*\]$/.test(val) && !/^\[[a-zA-Z]-[a-zA-Z]\]$/.test(val)) {
+  // Bracket-array form: only treat `[…]` as a list for known list-typed keys.
+  // Regex character classes (e.g. `[a-z0-9]` in `trigger_prompt`) must stay as
+  // strings, so we gate by key rather than by content shape.
+  if (BRACKET_LIST_KEYS.has(key) && /^\[[\s\S]*\]$/.test(val)) {
     return val
       .slice(1, -1)
       .split(',')
@@ -132,7 +142,7 @@ function parseFrontmatter(content) {
     if (!line || line.startsWith('#')) continue;
     const km = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/);
     if (!km) continue;
-    meta[km[1]] = coerceFrontmatterValue(km[2]);
+    meta[km[1]] = coerceFrontmatterValue(km[2], km[1]);
   }
   return { meta, body: m[2] || '' };
 }

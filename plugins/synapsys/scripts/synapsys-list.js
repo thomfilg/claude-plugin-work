@@ -36,7 +36,28 @@ function formatDomainLine(domain, palette) {
   return `    ${dim('domain:')}  ${magenta(domain.join(', '))}`;
 }
 
-module.exports = { formatDomainLine };
+/**
+ * Print the verbose detail lines for a single memory (trigger regexes + file path).
+ * Extracted to a helper so the per-memory render loop stays shallow (avoids
+ * max-depth violations from nesting if-chains inside two for-loops).
+ *
+ * @param {object} m - memory record
+ * @param {object} C - color palette
+ */
+function printVerboseDetails(m, C) {
+  if (m.triggerPrompt) {
+    console.log(`    ${C.dim('prompt:')}  ${C.magenta('/' + m.triggerPrompt + '/i')}`);
+  }
+  if (m.triggerPretool.length) {
+    console.log(`    ${C.dim('pretool:')} ${C.magenta(m.triggerPretool.join(', '))}`);
+  }
+  if (m.triggerSession) {
+    console.log(`    ${C.dim('session:')} ${C.magenta('yes')}`);
+  }
+  console.log(`    ${C.dim('file:')}    ${C.dim(m.file)}`);
+}
+
+module.exports = { formatDomainLine, printVerboseDetails };
 
 // When required (e.g. from tests), skip the CLI side-effects.
 if (require.main === module) {
@@ -161,14 +182,7 @@ if (require.main === module) {
       const domainLine = formatDomainLine(m.domain, C);
       if (domainLine) console.log(domainLine);
 
-      if (verbose) {
-        if (m.triggerPrompt)
-          console.log(`    ${C.dim('prompt:')}  ${C.magenta('/' + m.triggerPrompt + '/i')}`);
-        if (m.triggerPretool.length)
-          console.log(`    ${C.dim('pretool:')} ${C.magenta(m.triggerPretool.join(', '))}`);
-        if (m.triggerSession) console.log(`    ${C.dim('session:')} ${C.magenta('yes')}`);
-        console.log(`    ${C.dim('file:')}    ${C.dim(m.file)}`);
-      }
+      if (verbose) printVerboseDetails(m, C);
       console.log('');
     }
   }

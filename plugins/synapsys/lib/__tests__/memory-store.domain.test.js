@@ -109,6 +109,42 @@ test('readMemoryFile: leaf+colon leaf value normalizes to single entry', () => {
   assert.deepEqual(m.domain, ['e2e:flake-triage']);
 });
 
+test('readMemoryFile: `trigger_prompt: [a-z0-9]` stays a string (regex char class, not a list)', () => {
+  const { storeDir } = makeTempStore();
+  writeMemory(storeDir, 'tp-class.md', {
+    name: 'tp-class',
+    description: 'd',
+    trigger_prompt: '[a-z0-9]',
+  });
+  const m = readOne(storeDir, 'tp-class.md');
+  assert.ok(m);
+  assert.equal(m.triggerPrompt, '[a-z0-9]');
+});
+
+test('readMemoryFile: `trigger_prompt: [0-9]` stays a string (digit char class, not a list)', () => {
+  const { storeDir } = makeTempStore();
+  writeMemory(storeDir, 'tp-digits.md', {
+    name: 'tp-digits',
+    description: 'd',
+    trigger_prompt: '[0-9]',
+  });
+  const m = readOne(storeDir, 'tp-digits.md');
+  assert.ok(m);
+  assert.equal(m.triggerPrompt, '[0-9]');
+});
+
+test('readMemoryFile: `domain: [git]` still normalizes to ["git"] (no regression on list-typed keys)', () => {
+  const { storeDir } = makeTempStore();
+  writeMemory(storeDir, 'dom-git.md', {
+    name: 'dom-git',
+    description: 'd',
+    domain: '[git]',
+  });
+  const m = readOne(storeDir, 'dom-git.md');
+  assert.ok(m);
+  assert.deepEqual(m.domain, ['git']);
+});
+
 test('readMemoryFile: backward-compat — memory without `domain:` round-trips with all other fields intact', () => {
   const { storeDir } = makeTempStore();
   writeMemory(storeDir, 'compat.md', {
