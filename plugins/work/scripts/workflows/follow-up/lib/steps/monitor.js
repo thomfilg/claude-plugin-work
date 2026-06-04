@@ -445,10 +445,25 @@ module.exports = function registerMonitor(register) {
       state._ciFailedLogs = '';
     }
 
-    if (exitCode === 0) state.currentStep = 'report';
+    if (exitCode === 0) state.currentStep = computeNextStepOnGreen(state);
     return null;
   });
 };
+
+/**
+ * R15 (GH-508): when CI turns green after an infra-flake rerun, route through
+ * infra-retry so maybeHandleRetrySuccess can mark the pending attempt
+ * `succeeded` and emit the canonical retry-success log. Otherwise proceed
+ * straight to report.
+ */
+function computeNextStepOnGreen(state) {
+  const attempts = state && state.infraRetry && state.infraRetry.attempts;
+  if (Array.isArray(attempts) && attempts.length > 0) {
+    const last = attempts[attempts.length - 1];
+    if (last && last.outcome === 'pending') return 'infra-retry';
+  }
+  return 'report';
+}
 
 // test-only escape hatch — not public API. Exposes pure + shell-out helpers
 // so monitor.test.js can exercise each one in isolation.
@@ -461,4 +476,5 @@ module.exports.__test__ = {
   buildInitialFailedJobs,
   mapCiStatus,
   fetchClassifierContext,
+  computeNextStepOnGreen,
 };
