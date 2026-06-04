@@ -399,7 +399,26 @@ function evaluateExcludePretool(memory, toolName, argBlob) {
   if (!Array.isArray(specs) || specs.length === 0) {
     return { excluded: false, pattern: null };
   }
+  // Two-pass evaluation mirrors evaluateExcludePrompt (R15 fail-closed):
+  //   pass 1 — pre-validate each spec's regex and emit stderr warnings for
+  //            invalid patterns so authors learn about every bad regex,
+  //            even when an earlier valid spec matches.
+  //   pass 2 — return on the first valid spec that matches.
+  // `pretoolSpecMatches` calls `safeRegex` which silently returns null on
+  // invalid input, so without this validation a bad pattern would be a
+  // silent no-op rather than a documented warn+skip.
+  const valid = [];
   for (const spec of specs) {
+    const { pat } = parsePretoolSpec(spec);
+    if (pat && !safeRegex(pat)) {
+      process.stderr.write(
+        `[synapsys] memory ${memory.name}: invalid exclude_pretool spec "${spec}"\n`
+      );
+      continue;
+    }
+    valid.push(spec);
+  }
+  for (const spec of valid) {
     try {
       if (pretoolSpecMatches(spec, toolName, argBlob || '')) {
         return { excluded: true, pattern: spec };
