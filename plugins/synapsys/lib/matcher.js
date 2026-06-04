@@ -3,12 +3,9 @@
 const excludes = require('./matcher-excludes');
 const content = require('./matcher-content');
 
-const extractMultiEditContent = content.extractMultiEditContent;
 const extractPretoolContent = content.extractPretoolContent;
-const evaluatePretoolContent = content.evaluatePretoolContent;
 const findContentMatch = content.findContentMatch;
 const hasNegativeContentPatterns = content.hasNegativeContentPatterns;
-const evaluatePretoolContentNot = content.evaluatePretoolContentNot;
 
 /**
  * @typedef {Object} Matched
@@ -416,8 +413,8 @@ module.exports = {
   safeRegex,
   splitTopLevelAlternation,
   extractPretoolContent,
-  evaluatePretoolContent,
-  evaluatePretoolContentNot,
+  evaluatePretoolContent: content.evaluatePretoolContent,
+  evaluatePretoolContentNot: content.evaluatePretoolContentNot,
   hasNegativeContentPatterns,
   isDomainMismatch,
   evaluateExcludePrompt,
