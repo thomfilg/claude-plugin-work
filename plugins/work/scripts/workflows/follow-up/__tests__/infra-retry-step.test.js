@@ -111,7 +111,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
     evidence: { signal1: {}, signal2: {}, signal3: {}, signal4: { jobCount: 0 } },
   });
 
-  it('case 5: attempt 0 → 1 — records attempt, currentStep=monitor, delegate calls `gh run rerun --failed`', () => {
+  it('case 5: attempt 0 → 1 — records attempt, currentStep=monitor, delegate calls `gh run rerun <id> --failed`', () => {
     const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
     const state = {
       ticketId: 'GH-508',
@@ -132,7 +132,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
     assert.equal(state.currentStep, 'monitor', 'loops back to monitor');
     assert.match(
       result.delegate && result.delegate.command,
-      /gh run rerun --failed 12345/,
+      /gh run rerun 12345 --failed/,
       'delegate runs `gh run rerun --failed <runId>`'
     );
   });
@@ -264,7 +264,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
     assert.equal(result.action, 'execute');
     assert.match(
       result.delegate && result.delegate.command,
-      /gh run rerun --failed 987654/,
+      /gh run rerun 987654 --failed/,
       'delegate must use runId from _ciFailedJobs[0]'
     );
     assert.equal(state.infraRetry.attempts[0].runId, '987654');

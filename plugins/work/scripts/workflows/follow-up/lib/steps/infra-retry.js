@@ -115,7 +115,7 @@ function buildRetryDelegate(state, runId, attemptNumber) {
   const useEmptyCommit = fallback === 'empty-commit';
   const command = useEmptyCommit
     ? 'git commit --allow-empty -m "ci: retry infra flake" && git push'
-    : `gh run rerun --failed ${runId}`;
+    : `gh run rerun ${runId} --failed`;
   return {
     type: 'follow_up_instruction',
     action: 'execute',
