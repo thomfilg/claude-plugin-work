@@ -50,6 +50,82 @@ function getFollowUpPr() {
 
 const getConfig = require('../../lib/get-config');
 const { getCurrentTaskId } = require('../../lib/scripts/get-ticket-id');
+const { gitHunkChangedSince } = require('../../follow-up/lib/git-hunk-changed');
+
+const COPILOT_AUTHORS = new Set([
+  'copilot-pull-request-reviewer',
+  'copilot-pull-request-reviewer[bot]',
+  'github-copilot[bot]',
+  'copilot',
+]);
+
+function isCopilotAuthor(login) {
+  if (!login) return false;
+  return COPILOT_AUTHORS.has(String(login).toLowerCase());
+}
+
+/**
+ * Classify a Copilot review thread that GitHub marks as outdated
+ * (line === null, position === null but original_position !== null,
+ * and/or position_outdated === true).
+ *
+ * Returns { status, resolution } where:
+ *   - status === 'resolved' when `gitHunkChangedSince` confirms the
+ *     originally-commented line actually changed since `created_at`
+ *     (R1 — Copilot stale-thread heuristic);
+ *   - status === 'unsolved', resolution null when the hunk has NOT
+ *     changed since `created_at` (AC5 — no false positives).
+ *
+ * For non-Copilot threads the heuristic is NOT applied — callers fall
+ * back to the existing "Outdated (code changed since comment)" path.
+ *
+ * `previousStatus` lets us preserve any prior recorded state (so a
+ * thread the user already marked solved/skipped stays that way).
+ *
+ * @param {object} cm GitHub PR review comment payload.
+ * @param {{ previousStatus?: {status:string,resolution:string,commitSha?:string}|null, logger?: (msg:string)=>void }} [opts]
+ * @returns {{ status: 'resolved'|'unsolved', resolution: string|null, applied: boolean }}
+ */
+function classifyOutdatedCopilotThread(cm, opts = {}) {
+  const { previousStatus = null, logger = console.error } = opts;
+  if (previousStatus && previousStatus.status) {
+    return {
+      status: previousStatus.status,
+      resolution: previousStatus.resolution || null,
+      applied: false,
+    };
+  }
+  const author = cm?.user?.login || '';
+  if (!isCopilotAuthor(author)) {
+    return { status: 'resolved', resolution: null, applied: false };
+  }
+  const filePath = cm?.path || null;
+  const originalLine = cm?.original_line || null;
+  const createdAt = cm?.created_at || null;
+  if (!filePath || !originalLine || !createdAt) {
+    return { status: 'unsolved', resolution: null, applied: false };
+  }
+  let changed = false;
+  try {
+    changed = gitHunkChangedSince(filePath, originalLine, createdAt, {});
+  } catch (err) {
+    logger(
+      `[follow-up-pr-comments] gitHunkChangedSince failed for ${filePath}:${originalLine} — ${err.message}`
+    );
+    return { status: 'unsolved', resolution: null, applied: false };
+  }
+  if (changed) {
+    logger(
+      `[follow-up-pr-comments] Copilot stale-thread heuristic fired for comment ${cm.id} (${filePath}:${originalLine})`
+    );
+    return {
+      status: 'resolved',
+      resolution: 'Outdated (Copilot stale-thread heuristic — code changed since created_at)',
+      applied: true,
+    };
+  }
+  return { status: 'unsolved', resolution: null, applied: false };
+}
 
 // ── Deprecation warnings (Task 3, GH-537) ────────────────────────────────────
 // Legacy flag aliases keep working for a 2-3 release window but must emit

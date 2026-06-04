@@ -138,6 +138,25 @@ function initState(ticketId, prNumber) {
   };
 }
 
+/**
+ * Build a fresh /follow-up state object for `ticketId`, persist it to the
+ * canonical state-file path (`TASKS_BASE/<ticket>/.follow-up-state.json`),
+ * and return the new state.
+ *
+ * Idempotent: calling twice overwrites the on-disk state with a fresh one.
+ * Used both by the existing init code path in this module and by the
+ * `/reset-follow-up` command (Task 2) to re-initialize after push-retry
+ * exhaustion (GH-531).
+ *
+ * @param {string} ticketId — sanitized ticket id (e.g. `GH-999`).
+ * @returns {object} the freshly-initialized state object.
+ */
+function initFreshState(ticketId) {
+  const state = initState(ticketId, null);
+  saveState(ticketId, state);
+  return state;
+}
+
 // ─── Core orchestrator loop ─────────────────────────────────────────────────
 
 function getNextInstruction(ticketId, prNumber) {
@@ -378,6 +397,7 @@ if (require.main === module) main();
 module.exports = {
   getNextInstruction,
   initState,
+  initFreshState,
   dispatchStepResult,
   __test__: {
     initState,
