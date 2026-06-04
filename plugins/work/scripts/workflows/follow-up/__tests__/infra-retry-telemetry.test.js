@@ -174,7 +174,10 @@ describe('infra-retry — Task 7 telemetry / retry-success log / gh-actions outa
       classifyImpl: () => ({
         classification: 'infra-suspected',
         signals: ['signal4'],
-        evidence: { signal4: { fired: true, jobCount: 2 } },
+        // Realistic classifier shape: `signals` lists fired signals; per-signal
+        // evidence holds only collector-provided fields (no redundant `fired`
+        // flag). jobCount comes from the failing-jobs propagation in classify().
+        evidence: { signal4: { patterns: ['cache-miss', 'fallback-install-failed'], jobCount: 2 } },
       }),
       ghActionsStatusImpl: () => ({ degraded: true }),
     });

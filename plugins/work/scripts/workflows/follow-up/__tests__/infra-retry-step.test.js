@@ -102,3 +102,149 @@ describe('infra-retry step — short-circuits and bypasses (RED 3.1.1)', () => {
     assert.equal(classifyCalls.length, 1, 'classifier must be consulted exactly once');
   });
 });
+
+describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
+  const infraSuspected = () => ({
+    classification: 'infra-suspected',
+    signals: ['signal1', 'signal2'],
+    evidence: { signal1: {}, signal2: {}, signal3: {}, signal4: { jobCount: 0 } },
+  });
+
+  it('case 5: attempt 0 → 1 — records attempt, currentStep=monitor, delegate calls `gh run rerun --failed`', () => {
+    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const state = {
+      ticketId: 'GH-508',
+      failureCategory: 'ci_failure',
+      runId: '12345',
+      infraRetry: { count: 0, attempts: [] },
+    };
+    const result = handler(state, {});
+    assert.ok(result, 'expected a delegate instruction');
+    assert.equal(result.action, 'execute', 'dispatches delegate');
+    assert.equal(state.infraRetry.count, 1, 'count incremented');
+    assert.equal(state.infraRetry.attempts.length, 1, 'one attempt recorded');
+    assert.equal(state.infraRetry.attempts[0].attemptNumber, 1);
+    assert.equal(state.infraRetry.attempts[0].runId, '12345');
+    assert.equal(state.infraRetry.attempts[0].retryMethod, 'rerun-failed');
+    assert.equal(state.infraRetry.attempts[0].outcome, 'pending');
+    assert.ok(state.infraRetry.attempts[0].timestamp, 'attempt has timestamp');
+    assert.equal(state.currentStep, 'monitor', 'loops back to monitor');
+    assert.match(
+      result.delegate && result.delegate.command,
+      /gh run rerun --failed 12345/,
+      'delegate runs `gh run rerun --failed <runId>`'
+    );
+  });
+
+  it('case 6: attempt 1 → 2', () => {
+    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const state = {
+      ticketId: 'GH-508',
+      failureCategory: 'ci_failure',
+      runId: '22222',
+      infraRetry: {
+        count: 1,
+        attempts: [
+          {
+            attemptNumber: 1,
+            timestamp: '2026-01-01T00:00:00.000Z',
+            runId: '11111',
+            signals: ['signal1', 'signal2'],
+            retryMethod: 'rerun-failed',
+            outcome: 'pending',
+          },
+        ],
+      },
+    };
+    const result = handler(state, {});
+    assert.ok(result);
+    assert.equal(state.infraRetry.count, 2);
+    assert.equal(state.infraRetry.attempts.length, 2);
+    assert.equal(state.infraRetry.attempts[1].attemptNumber, 2);
+    assert.equal(state.currentStep, 'monitor');
+  });
+
+  it('case 7: attempt 2 → 3', () => {
+    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const state = {
+      ticketId: 'GH-508',
+      failureCategory: 'ci_failure',
+      runId: '33333',
+      infraRetry: {
+        count: 2,
+        attempts: [
+          { attemptNumber: 1, timestamp: 't1', runId: '1', signals: [], retryMethod: 'rerun-failed', outcome: 'pending' },
+          { attemptNumber: 2, timestamp: 't2', runId: '2', signals: [], retryMethod: 'rerun-failed', outcome: 'pending' },
+        ],
+      },
+    };
+    const result = handler(state, {});
+    assert.ok(result);
+    assert.equal(state.infraRetry.count, 3);
+    assert.equal(state.infraRetry.attempts.length, 3);
+    assert.equal(state.infraRetry.attempts[2].attemptNumber, 3);
+  });
+
+  it('case 8: attempt 3 → exhausted (surface + failureCategory=infra-stuck, no fix-ci)', () => {
+    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const state = {
+      ticketId: 'GH-508',
+      failureCategory: 'ci_failure',
+      runId: '44444',
+      infraRetry: {
+        count: 3,
+        attempts: [
+          { attemptNumber: 1, timestamp: 't1', runId: '1', signals: [], retryMethod: 'rerun-failed', outcome: 'pending' },
+          { attemptNumber: 2, timestamp: 't2', runId: '2', signals: [], retryMethod: 'rerun-failed', outcome: 'pending' },
+          { attemptNumber: 3, timestamp: 't3', runId: '3', signals: [], retryMethod: 'rerun-failed', outcome: 'pending' },
+        ],
+      },
+    };
+    const result = handler(state, {});
+    assert.ok(result, 'must surface');
+    assert.equal(result.action, 'surface');
+    assert.equal(state.failureCategory, 'infra-stuck', 'failureCategory updated');
+    assert.equal(state.infraRetry.exhausted, true, 'exhausted flag set');
+    assert.equal(state.infraRetry.count, 3, 'count NOT incremented past the cap');
+    assert.equal(state.infraRetry.attempts.length, 3, 'no new attempt appended');
+    assert.equal(result.reason, 'infra-stuck-exhausted');
+    assert.notEqual(result.action, 'execute', 'fix-ci must NOT be dispatched on infra-stuck');
+  });
+
+  it('case 9: prior retry succeeded → marks last attempt outcome=succeeded and advances normally', () => {
+    const { handler, classifyCalls } = loadStep({
+      envFlag: 'true',
+      classifyImpl: infraSuspected,
+    });
+    const state = {
+      ticketId: 'GH-508',
+      failureCategory: 'ci_failure',
+      runId: '55555',
+      infraRetry: {
+        count: 1,
+        attempts: [
+          {
+            attemptNumber: 1,
+            timestamp: '2026-01-01T00:00:00.000Z',
+            runId: '11111',
+            signals: ['signal1', 'signal2'],
+            retryMethod: 'rerun-failed',
+            outcome: 'pending',
+          },
+        ],
+      },
+    };
+    const result = handler(state, { ciStatus: 'success' });
+    assert.equal(result, null, 'success branch returns null (advance normally)');
+    assert.equal(
+      state.infraRetry.attempts[0].outcome,
+      'succeeded',
+      'last attempt marked succeeded'
+    );
+    assert.equal(
+      classifyCalls.length,
+      0,
+      'retry-success short-circuit must NOT consult classifier again'
+    );
+  });
+});

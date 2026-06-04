@@ -252,13 +252,24 @@ function signal4_setupArtifacts(rawLogs) {
 function classify(state, ctx) {
   const s = state || {};
   const c = ctx || {};
+  const failedJobs = Array.isArray(s._ciFailedJobs) ? s._ciFailedJobs : [];
+  const signal4Raw = signal4_setupArtifacts(c.rawLogs || '');
+  // Propagate jobCount (R16): when Signal 4 fires we attach the number of
+  // failing jobs so the step can decide whether to cross-check githubstatus.
+  // We approximate "jobs with setup evidence" by the failing-jobs count —
+  // signal4 fires off raw aggregated logs, not per-job, so this is the best
+  // available proxy without re-fetching per-job logs.
+  const signal4 = {
+    fired: signal4Raw.fired,
+    evidence: { ...signal4Raw.evidence, jobCount: failedJobs.length },
+  };
   const results = {
-    signal1: signal1_shardAsymmetry(s._ciFailedJobs || [], c.allJobs || []),
+    signal1: signal1_shardAsymmetry(failedJobs, c.allJobs || []),
     signal2: c.exec
       ? signal2_emptyFailedLog(s.runId, c.jobId, c.exec)
       : { fired: false, evidence: { reason: 'no exec provided' } },
     signal3: signal3_unrelatedFailures(s.failedTests || [], c.prDiffFiles || []),
-    signal4: signal4_setupArtifacts(c.rawLogs || ''),
+    signal4,
   };
   const firedSignals = Object.entries(results)
     .filter(([, r]) => r.fired)

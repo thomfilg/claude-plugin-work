@@ -19,6 +19,8 @@ const { classify } = require('../infra-classifier');
 const { checkActionsStatus } = require('../gh-actions-status');
 
 const RETRY_SUCCESS_LOG = 'auto-retry: infra flake confirmed';
+const MAX_INFRA_RETRIES = 3;
+const NUMERIC_RUN_ID = /^\d+$/;
 
 /**
  * Decide whether the infra-retry step should short-circuit without touching
@@ -76,10 +78,47 @@ function maybeHandleRetrySuccess(state, ctx) {
  * justifies a githubstatus.com cross-check (R16).
  */
 function shouldCheckGhActions(result) {
-  if (!result || !result.evidence || !result.evidence.signal4) return false;
-  const s4 = result.evidence.signal4;
-  if (!s4.fired) return false;
-  return Number(s4.jobCount || 0) >= 2;
+  if (!result || !Array.isArray(result.signals)) return false;
+  if (!result.signals.includes('signal4')) return false;
+  const s4Evidence = (result.evidence && result.evidence.signal4) || {};
+  return Number(s4Evidence.jobCount || 0) >= 2;
+}
+
+/**
+ * Build the delegate that retries CI for the current run via
+ * `gh run rerun --failed <RUN_ID>`. Validates `runId` against `/^\d+$/`
+ * (R17 — no shell injection via state-derived IDs).
+ *
+ * When `WORK_INFRA_RETRY_FALLBACK=empty-commit` is set, the delegate uses
+ * an empty-commit push instead — for environments where `--failed` is
+ * unsupported (older gh, forks without write access to the run).
+ */
+function buildRetryDelegate(state, runId, attemptNumber) {
+  if (!NUMERIC_RUN_ID.test(String(runId || ''))) {
+    throw new TypeError(
+      `infra-retry: runId must match /^\\d+$/, got: ${runId} (refusing to dispatch retry)`
+    );
+  }
+  const fallback = getConfig('WORK_INFRA_RETRY_FALLBACK');
+  const useEmptyCommit = fallback === 'empty-commit';
+  const command = useEmptyCommit
+    ? 'git commit --allow-empty -m "ci: retry infra flake" && git push'
+    : `gh run rerun --failed ${runId}`;
+  return {
+    type: 'follow_up_instruction',
+    action: 'execute',
+    state: {
+      ticket: state && state.ticketId,
+      currentStep: 'monitor',
+      attempt: attemptNumber,
+    },
+    continue: true,
+    delegate: {
+      type: 'bash',
+      description: `Retry infra-flake CI (attempt ${attemptNumber}/${MAX_INFRA_RETRIES})`,
+      command,
+    },
+  };
 }
 
 module.exports = function registerInfraRetry(register) {
@@ -124,10 +163,41 @@ module.exports = function registerInfraRetry(register) {
       }
     }
 
-    // Deliverables 3.2 / 3.3 layer attempt-recording and surface-on-exhaust
-    // on top of this scaffold. For Task 7's tests we only need the telemetry,
-    // success-log, and outage-surface paths above.
-    return null;
+    // R2/R3/R4: retry state machine.
+    //  - cap at MAX_INFRA_RETRIES (3); on exhaust, set failureCategory and
+    //    surface for human handling — DO NOT dispatch fix-ci (the failure is
+    //    infra, not code).
+    //  - otherwise increment count, record an attempt, and dispatch a delegate
+    //    that re-runs the failed jobs.
+    const retry = state.infraRetry;
+    if (retry.count >= MAX_INFRA_RETRIES) {
+      state.failureCategory = 'infra-stuck';
+      retry.exhausted = true;
+      return {
+        action: 'surface',
+        reason: 'infra-stuck-exhausted',
+        signals: result.signals,
+        attempts: retry.attempts,
+      };
+    }
+
+    const attemptNumber = retry.count + 1;
+    const runId = state.runId;
+    // Validate before mutating state so a bad runId doesn't consume a retry.
+    const delegate = buildRetryDelegate(state, runId, attemptNumber);
+    retry.count = attemptNumber;
+    retry.attempts.push({
+      attemptNumber,
+      timestamp: new Date().toISOString(),
+      runId: String(runId),
+      signals: Array.isArray(result.signals) ? result.signals.slice() : [],
+      retryMethod: getConfig('WORK_INFRA_RETRY_FALLBACK') === 'empty-commit'
+        ? 'empty-commit'
+        : 'rerun-failed',
+      outcome: 'pending',
+    });
+    state.currentStep = 'monitor';
+    return delegate;
   });
 };
 
