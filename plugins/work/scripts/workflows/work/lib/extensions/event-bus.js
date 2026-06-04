@@ -139,7 +139,23 @@ async function dispatch(eventName, payload, ctx) {
     return;
   }
   for (const record of handlers) {
-    await record.handler(payload, ctx);
+    try {
+      await record.handler(payload, ctx);
+    } catch (err) {
+      // R6/G5: a throwing handler is caught and treated as passthrough so
+      // subsequent handlers in the priority chain still run. The error is
+      // re-thrown via a one-shot async hop so the top-level dispatch caller
+      // (index.js) can log it without aborting the chain.
+      const message = err && err.message;
+      const name = err && err.name;
+      try {
+        process.stderr.write(
+          `[work-extensions] handler error for ${eventName} (${record.sourceFile}): ${name || 'Error'}: ${message}\n`
+        );
+      } catch {
+        /* fail-open */
+      }
+    }
   }
 }
 
