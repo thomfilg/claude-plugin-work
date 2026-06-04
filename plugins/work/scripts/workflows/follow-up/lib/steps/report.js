@@ -53,11 +53,56 @@ function buildGenericSurface(state) {
   };
 }
 
+// Bug 542-11: derive repo owner/name from git remote when state didn't carry
+// them — production state never sets repoOwner/repoName, so URLs used to fall
+// back to `OWNER`/`REPO` placeholders. Tries `gh repo view` first, then parses
+// `git remote get-url origin`. Cached per-process.
+const cp = require('node:child_process');
+let _repoSlug = null;
+function detectRepoSlug(worktreeDir) {
+  if (_repoSlug !== null) return _repoSlug;
+  const runQuiet = (cmd) => {
+    try {
+      return cp
+        .execSync(cmd, {
+          cwd: worktreeDir,
+          encoding: 'utf8',
+          timeout: 8000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        .trim();
+    } catch {
+      return '';
+    }
+  };
+  const json = runQuiet('gh repo view --json owner,name');
+  if (json) {
+    try {
+      const parsed = JSON.parse(json);
+      if (parsed && parsed.owner && parsed.name) {
+        _repoSlug = { owner: parsed.owner.login || parsed.owner, name: parsed.name };
+        return _repoSlug;
+      }
+    } catch {
+      /* fall through to git remote parse */
+    }
+  }
+  const url = runQuiet('git remote get-url origin');
+  const m = url.match(/[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/);
+  if (m) {
+    _repoSlug = { owner: m[1], name: m[2] };
+    return _repoSlug;
+  }
+  _repoSlug = { owner: null, name: null };
+  return _repoSlug;
+}
+
 /** R11: infra-stuck diagnostic bundle. */
-function buildInfraStuckSurface(state) {
+function buildInfraStuckSurface(state, ctx) {
   const attempts = (state.infraRetry && state.infraRetry.attempts) || [];
-  const owner = state.repoOwner || 'OWNER';
-  const repo = state.repoName || 'REPO';
+  const slug = detectRepoSlug(ctx && ctx.worktreeDir);
+  const owner = state.repoOwner || (slug && slug.owner) || 'OWNER';
+  const repo = state.repoName || (slug && slug.name) || 'REPO';
   const repoUrl = `https://github.com/${owner}/${repo}`;
   const header = `## Infra-stuck after ${attempts.length} retries`;
   const lines = attempts.map((a) => formatAttemptLine(a, repoUrl));
@@ -92,7 +137,7 @@ module.exports = function registerReport(register) {
     }
 
     if (state.failureCategory === 'infra-stuck') {
-      return buildInfraStuckSurface(state);
+      return buildInfraStuckSurface(state, ctx);
     }
 
     // Write accountability report if it doesn't exist
