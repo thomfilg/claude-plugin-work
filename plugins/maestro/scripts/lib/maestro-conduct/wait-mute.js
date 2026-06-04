@@ -7,7 +7,8 @@
  * paused on a human action (merge, decision). Emitting phase-stall on every
  * tick during that wait is pure noise — but emitting nothing means the
  * operator can't tell the daemon is still observing. Compromise: count the
- * cycles and emit a single log line every 10th cycle.
+ * cycles and emit a single log line every Nth cycle. N defaults to 60
+ * (~1h at a 60s tick) and is tunable via WAIT_MUTE_LOG_EVERY.
  */
 const LOG_EVERY = parseInt(process.env.WAIT_MUTE_LOG_EVERY || '60', 10);
 
