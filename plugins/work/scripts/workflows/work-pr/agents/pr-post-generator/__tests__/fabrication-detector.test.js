@@ -142,6 +142,74 @@ test('Unsourced row with synonym status (ok/passed/green) trips a violation', ()
   }
 });
 
+test('Verdict in Notes column with pending Status still trips a violation', () => {
+  // Smuggling: Status=pending but Notes contains "PASS in CI" or similar.
+  const dir = makeTaskDir({ 'tests.check.md': 'unrelated content\n' });
+  const cases = ['PASS in CI', 'works in prod', 'verified manually', 'green', 'OK on staging'];
+  for (const notes of cases) {
+    const prBody = [
+      '## Test Results',
+      '',
+      '| Test | Status | Notes |',
+      '| --- | --- | --- |',
+      `| feature Y | pending | ${notes} |`,
+      '',
+    ].join('\n');
+    const { violations } = detectFabrication(prBody, dir);
+    const row = violations.find((v) => v.reason === 'unsourced-test-row');
+    assert.ok(row, `expected violation for pending row with notes="${notes}"`);
+  }
+});
+
+test('Plain pending row with non-verdict Notes does not trip', () => {
+  const dir = makeTaskDir();
+  const prBody = [
+    '## Test Results',
+    '',
+    '| Test | Status | Notes |',
+    '| --- | --- | --- |',
+    '| modal opens | pending | awaiting tests.check.md |',
+    '| login flow | pending | follow-up next sprint |',
+    '',
+  ].join('\n');
+  const { violations } = detectFabrication(prBody, dir);
+  assert.equal(violations.length, 0);
+});
+
+test('Sourcing requires word-boundary match, not naive substring', () => {
+  // `login` as a substring of `loginflow` / `logins` must NOT count as evidence.
+  const dir = makeTaskDir({
+    'tests.check.md': 'See logins table and loginflow utility for context.\n',
+  });
+  const prBody = [
+    '## Test Results',
+    '',
+    '| Test | Status | Notes |',
+    '| --- | --- | --- |',
+    '| login | PASS | smoke |',
+    '',
+  ].join('\n');
+  const { violations } = detectFabrication(prBody, dir);
+  const row = violations.find((v) => v.reason === 'unsourced-test-row');
+  assert.ok(row, 'expected violation — "login" inside "loginflow"/"logins" should not source the claim');
+});
+
+test('Whole-word sourcing in tests.check.md clears the claim', () => {
+  const dir = makeTaskDir({
+    'tests.check.md': '- login: verified via smoke run in CI.\n',
+  });
+  const prBody = [
+    '## Test Results',
+    '',
+    '| Test | Status | Notes |',
+    '| --- | --- | --- |',
+    '| login | PASS | smoke |',
+    '',
+  ].join('\n');
+  const { violations } = detectFabrication(prBody, dir);
+  assert.equal(violations.length, 0);
+});
+
 test('Unsourced PASS row under Test Results', () => {
   const dir = makeTaskDir({
     'tests.check.md': 'No matching content here.\n',
