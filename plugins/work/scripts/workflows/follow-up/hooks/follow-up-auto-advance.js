@@ -110,4 +110,4 @@ function main() {
   process.exit(0);
 }
 
-main();
+if (require.main === module && !process.env.NODE_TEST_CONTEXT) main();

@@ -77,20 +77,27 @@ function writeMarker(ticket) {
   );
 }
 
-function runStagedHook(hookData, env = {}) {
+function runHook(hookData, env = {}) {
   try {
-    const stdout = execFileSync(process.execPath, [STAGED_HOOK_PATH], {
+    const stdout = execFileSync(process.execPath, [HOOK_PATH], {
       input: JSON.stringify(hookData),
       encoding: 'utf8',
       timeout: 20000,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        CLAUDE_CODE_SESSION_ID: 'sess-test',
-        WORKTREES_BASE,
-        TASKS_BASE,
-        ...env,
-      },
+      env: (() => {
+        const e = { ...process.env };
+        // Hook guards itself with NODE_TEST_CONTEXT to avoid auto-run under
+        // `node --test`; scrub it for the child so main() executes.
+        delete e.NODE_TEST_CONTEXT;
+        return {
+          ...e,
+          CLAUDE_CODE_SESSION_ID: 'sess-test',
+          WORKTREES_BASE,
+          TASKS_BASE,
+          FOLLOW_UP_NEXT_PATH: STUB_NEXT_PATH,
+          ...env,
+        };
+      })(),
     });
     return { exitCode: 0, stdout };
   } catch (err) {
@@ -103,29 +110,22 @@ function runStagedHook(hookData, env = {}) {
 }
 
 describe('follow-up-auto-advance hook — surface action (Task 6.2)', () => {
-  let stageRoot;
-
   afterEach(() => {
-    if (stageRoot) {
-      fs.rmSync(stageRoot, { recursive: true, force: true });
-      stageRoot = null;
-    }
-    if (TASKS_BASE && fs.existsSync(TASKS_BASE)) {
-      // TASKS_BASE lives under a separate tmp; remove its parent.
-      const parent = path.dirname(TASKS_BASE);
-      fs.rmSync(parent, { recursive: true, force: true });
+    if (TMP_ROOT && fs.existsSync(TMP_ROOT)) {
+      fs.rmSync(TMP_ROOT, { recursive: true, force: true });
+      TMP_ROOT = null;
     }
   });
 
   it('treats action:surface as terminal and emits a user-visible message', () => {
-    ({ stageRoot } = setupStagedHook({
+    setupStub({
       action: 'surface',
       payload: { reason: 'infra-stuck' },
       summary: 'Surface: infra-stuck after 3 retries',
-    }));
+    });
     writeMarker('GH-508');
 
-    const r = runStagedHook({
+    const r = runHook({
       tool_name: 'Task',
       transcript_path: '/tmp/t.jsonl',
       session_id: 'sess-test',
