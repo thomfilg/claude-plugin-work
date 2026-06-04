@@ -139,3 +139,44 @@ test('synapsys:stats honors --last 30d window', () => {
     fx.cleanup();
   }
 });
+
+// PR #524 cursor[bot] Medium — Stop-only memories must NOT appear in Noise candidates
+// even when they hit fired >= 10 with cited == 0 (they fire on every assistant turn
+// by design; the "tighten triggers" advice does not apply).
+test('synapsys:stats excludes Stop-only memories from Noise candidates', () => {
+  assert.ok(helpers, 'synapsys-stats.js must export pure helpers');
+  const { parseWindow, aggregate, formatSections } = helpers;
+
+  const fx = makeFixture();
+  try {
+    // Stop-only memory — declares only the Stop event.
+    fs.writeFileSync(
+      path.join(fx.storeDir, 'stop-only-mem.md'),
+      ['---', 'name: stop-only-mem', 'description: x', 'events: Stop',
+       'trigger_session: true', '---', ''].join('\n')
+    );
+    // Multi-event noise memory — fires on UserPromptSubmit AND Stop.
+    fs.writeFileSync(
+      path.join(fx.storeDir, 'real-noise.md'),
+      ['---', 'name: real-noise', 'description: x', 'events: [UserPromptSubmit, Stop]',
+       'trigger_prompt: x', '---', ''].join('\n')
+    );
+
+    const now = Date.now();
+    const lines = [];
+    for (let i = 0; i < 15; i++) {
+      lines.push({ ts: new Date(now - 1000 * i).toISOString(), memory: 'stop-only-mem', event: 'fired' });
+      lines.push({ ts: new Date(now - 1000 * i).toISOString(), memory: 'real-noise', event: 'fired' });
+    }
+    writeJsonl(path.join(fx.telDir, 'session-1.jsonl'), lines);
+
+    const stats = aggregate(fx.cwd, { windowMs: parseWindow('7d') });
+    const out = formatSections(stats, { color: false });
+
+    const noiseSection = out.split(/Noise candidates/)[1].split(/Never-fired/)[0];
+    assert.ok(!/stop-only-mem/.test(noiseSection), 'stop-only-mem must NOT appear in Noise candidates');
+    assert.ok(/real-noise/.test(noiseSection), 'real-noise (multi-event) should still be flagged');
+  } finally {
+    fx.cleanup();
+  }
+});

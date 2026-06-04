@@ -78,6 +78,21 @@ function collectKnownMemoryNames(stores) {
   return known;
 }
 
+// Memories whose only event is Stop fire on every assistant turn by design,
+// so they would otherwise dominate Noise candidates even when working as
+// intended. Build a Set of their names so the noise filter can skip them.
+function collectStopOnlyMemoryNames(stores) {
+  const stopOnly = new Set();
+  for (const store of stores) {
+    for (const mem of listMemoriesFromStore(store)) {
+      if (!mem || !mem.name || !Array.isArray(mem.events)) continue;
+      const events = mem.events.filter((e) => typeof e === 'string' && e.length > 0);
+      if (events.length === 1 && events[0] === 'Stop') stopOnly.add(mem.name);
+    }
+  }
+  return stopOnly;
+}
+
 function tallyEvent(counts, ev) {
   if (!ev || !ev.memory || !ev.event) return;
   const c = counts.get(ev.memory) || { fired: 0, cited: 0 };
@@ -88,7 +103,9 @@ function tallyEvent(counts, ev) {
 
 function aggregate(cwd, { windowMs }) {
   const cutoff = Date.now() - windowMs;
-  const known = collectKnownMemoryNames(discoverStores(cwd));
+  const stores = discoverStores(cwd);
+  const known = collectKnownMemoryNames(stores);
+  const stopOnly = collectStopOnlyMemoryNames(stores);
   const counts = new Map(); // name → { fired, cited }
 
   for (const file of listJsonlFiles(telemetryDir())) {
@@ -105,6 +122,7 @@ function aggregate(cwd, { windowMs }) {
     fired: c.fired,
     cited: c.cited,
     known: known.has(name),
+    stopOnly: stopOnly.has(name),
   }));
 
   return { perMemory, known: Array.from(known) };
@@ -120,8 +138,11 @@ function formatSections(stats, { color = false } = {}) {
       return b.fired * b.cited - a.fired * a.cited;
     });
 
+  // Stop-only memories fire on every assistant turn by design; the
+  // "tighten triggers" advice does not apply to them, so they're excluded
+  // from noise classification regardless of fired count.
   const noise = perMemory
-    .filter((m) => m.fired >= NOISE_FIRED_THRESHOLD && m.cited === 0)
+    .filter((m) => !m.stopOnly && m.fired >= NOISE_FIRED_THRESHOLD && m.cited === 0)
     .sort((a, b) => b.fired - a.fired);
 
   const never = perMemory
