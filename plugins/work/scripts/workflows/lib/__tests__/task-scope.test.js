@@ -131,7 +131,7 @@ describe('validateCrossTaskDepsOwnership', () => {
     assert.match(errors[0], /no other task lists it in/);
   });
 
-  it('accepts a crossTaskDep that literally appears in another task\'s scope', () => {
+  it("accepts a crossTaskDep that literally appears in another task's scope", () => {
     const tasks = [
       { num: 1, filesInScope: ['src/a.ts'], crossTaskDeps: ['src/shared/schema.ts'] },
       { num: 2, filesInScope: ['src/shared/schema.ts', 'src/b.ts'] },
@@ -139,7 +139,7 @@ describe('validateCrossTaskDepsOwnership', () => {
     assert.deepEqual(ts.validateCrossTaskDepsOwnership(tasks), []);
   });
 
-  it('accepts a crossTaskDep covered by another task\'s glob scope', () => {
+  it("accepts a crossTaskDep covered by another task's glob scope", () => {
     const tasks = [
       { num: 1, filesInScope: ['src/a.ts'], crossTaskDeps: ['src/shared/schema.ts'] },
       { num: 2, filesInScope: ['src/shared/**'] },
@@ -754,5 +754,97 @@ describe('findTask', () => {
   it('returns null for bad input', () => {
     assert.equal(ts.findTask(null, 1), null);
     assert.equal(ts.findTask([{ num: 1 }], 'nope'), null);
+  });
+});
+
+describe('validateIntraTicketScope joint in-scope ownership (GH-515)', () => {
+  it('rejects two peer tasks listing the same literal path under Files in scope', () => {
+    const result = ts.validateAll([
+      { num: 1, filesInScope: ['components/X.tsx'], filesOutOfScope: [] },
+      { num: 2, filesInScope: ['components/X.tsx'], filesOutOfScope: [] },
+    ]);
+    assert.equal(result.valid, false);
+    const jointErrors = result.errors.filter((e) => /joint ownership/i.test(e));
+    assert.equal(
+      jointErrors.length,
+      1,
+      `expected exactly one joint-ownership error, got: ${result.errors.join(' | ')}`
+    );
+    const err = jointErrors[0];
+    assert.match(err, /components\/X\.tsx/);
+    assert.match(err, /Task 1/);
+    assert.match(err, /Task 2/);
+    assert.match(err, /scope-sections\.md/);
+  });
+
+  it('rejects glob-vs-literal symmetric overlap with exactly one joint-ownership error', () => {
+    const result = ts.validateAll([
+      { num: 1, filesInScope: ['lib/foo/**'], filesOutOfScope: [] },
+      { num: 2, filesInScope: ['lib/foo/bar.ts'], filesOutOfScope: [] },
+    ]);
+    assert.equal(result.valid, false);
+    const jointErrors = result.errors.filter((e) => /joint ownership/i.test(e));
+    assert.equal(
+      jointErrors.length,
+      1,
+      `expected exactly one joint-ownership error, got: ${result.errors.join(' | ')}`
+    );
+    const err = jointErrors[0];
+    assert.match(err, /Task 1/);
+    assert.match(err, /Task 2/);
+    assert.ok(
+      /lib\/foo\/\*\*/.test(err) || /lib\/foo\/bar\.ts/.test(err),
+      `error should mention one of the overlapping entries; got: ${err}`
+    );
+  });
+
+  it('three peer tasks all list the same path under Files in scope', () => {
+    const result = ts.validateAll([
+      { num: 1, filesInScope: ['lib/shared.ts'], filesOutOfScope: [] },
+      { num: 2, filesInScope: ['lib/shared.ts'], filesOutOfScope: [] },
+      { num: 3, filesInScope: ['lib/shared.ts'], filesOutOfScope: [] },
+    ]);
+    assert.equal(result.valid, false);
+    const jointErrors = result.errors.filter((e) => /joint ownership/i.test(e));
+    assert.equal(
+      jointErrors.length,
+      3,
+      `expected C(3,2)=3 joint-ownership errors, got: ${result.errors.join(' | ')}`
+    );
+    for (const e of jointErrors) {
+      assert.match(e, /lib\/shared\.ts/);
+    }
+  });
+
+  it('single-owner-per-path shape produces zero joint-ownership false positives', () => {
+    const result = ts.validateAll([
+      { num: 1, filesInScope: ['a.ts'], filesOutOfScope: [] },
+      { num: 2, filesInScope: ['b.ts'], filesOutOfScope: ['a.ts'] },
+    ]);
+    const jointErrors = result.errors.filter((e) => /joint ownership/i.test(e));
+    assert.equal(jointErrors.length, 0, `unexpected joint errors: ${jointErrors.join(' | ')}`);
+  });
+
+  it('cross-ticket sibling-owned in-scope paths do not conflict across tickets', () => {
+    // Validator operates ONLY on the tasks array argument it receives.
+    // A path owned by a sibling ticket's task must NOT trigger a joint-ownership
+    // error here, because that sibling task is not in the passed array.
+    const ticketATasks = [
+      { num: 1, filesInScope: ['ticketA/only.ts'], filesOutOfScope: [] },
+      { num: 2, filesInScope: ['ticketA/other.ts'], filesOutOfScope: [] },
+    ];
+    const result = ts.validateAll(ticketATasks);
+    const jointErrors = result.errors.filter((e) => /joint ownership/i.test(e));
+    assert.equal(
+      jointErrors.length,
+      0,
+      `validator must not reach across tickets; got: ${jointErrors.join(' | ')}`
+    );
+    // Even if a sibling ticket also owns one of the same paths, the validator
+    // run on ticketA alone must not emit a joint-ownership error for it.
+    const ticketBTasks = [{ num: 1, filesInScope: ['ticketA/only.ts'], filesOutOfScope: [] }];
+    const isolated = ts.validateAll(ticketBTasks);
+    const isolatedJoint = isolated.errors.filter((e) => /joint ownership/i.test(e));
+    assert.equal(isolatedJoint.length, 0);
   });
 });

@@ -1,5 +1,6 @@
 /**
- * Integration tests for `validateIntraTicketScope` (Task 1 of GH-485).
+ * Integration tests for `validateIntraTicketScope` (Task 1 of GH-485,
+ * extended in GH-515 for joint in-scope ownership).
  *
  * Scenarios covered (verbatim titles required by task-next.js RED gate):
  *   - validator rejects tasks.md where a file is in-scope for one task and
@@ -7,6 +8,18 @@
  *   - validator accepts tasks.md after intra-ticket conflict is removed
  *   - validator preserves cross-ticket sibling-owned out-of-scope semantics
  *   - glob in-scope entry conflicts with literal out-of-scope entry in a peer task
+ *
+ * GH-515 Task 2 — joint in-scope ownership scenarios:
+ *   - two peer tasks list the same literal path under Files in scope
+ *   - glob in-scope entry overlaps a literal in-scope entry in a peer task
+ *   - single owner per file remains valid (no regression)
+ *   - pre-existing intra-ticket cross-section conflict is still rejected
+ *
+ * Fixtures referenced:
+ *   - fixtures/intra-ticket-scope-conflict/tasks.md (ECHO-5538 cross-section)
+ *   - fixtures/intra-ticket-scope-conflict/tasks.fixed.md
+ *   - fixtures/intra-ticket-scope-conflict/tasks.dup-in-scope.md (NEW — GH-515)
+ *   - fixtures/intra-ticket-scope-conflict/tasks.dup-in-scope.glob.md (NEW — GH-515)
  *
  * Uses node:test + node:assert/strict (project convention — see
  * plugins/work/CLAUDE.md "Node built-in test runner").
@@ -236,6 +249,97 @@ describe('validateIntraTicketScope', () => {
       err,
       /\bTask\s*2\b/i,
       `error must name Task 2 (out-of-scope declarant); got: ${err}`
+    );
+  });
+});
+
+describe('joint in-scope ownership (GH-515 — dup-in-scope)', () => {
+  beforeEach(() => setup());
+  afterEach(() => teardown());
+
+  it('two peer tasks list the same literal path under Files in scope', () => {
+    const { validateIntraTicketScope } = require(TASK_SCOPE_PATH);
+    const tasks = parseFixture('tasks.dup-in-scope.md');
+    assert.ok(
+      Array.isArray(tasks) && tasks.length >= 2,
+      `dup-in-scope fixture must parse to >=2 tasks; got ${tasks && tasks.length}`
+    );
+    const errors = validateIntraTicketScope(tasks);
+    assert.ok(Array.isArray(errors), 'validator must return an array');
+    const jointErrors = errors.filter((e) => /joint ownership/i.test(e));
+    assert.ok(
+      jointErrors.length >= 1,
+      `expected at least one joint-ownership error; got: ${JSON.stringify(errors, null, 2)}`
+    );
+    const [err] = jointErrors;
+    assert.match(
+      err,
+      /components\/X\.tsx/,
+      `joint-ownership error must name the conflicting literal path; got: ${err}`
+    );
+    assert.match(err, /\bTask\s*1\b/i, `joint error must name Task 1; got: ${err}`);
+    assert.match(err, /\bTask\s*2\b/i, `joint error must name Task 2; got: ${err}`);
+    assert.match(err, /scope-sections\.md/, `joint error must cite scope-sections.md; got: ${err}`);
+  });
+
+  it('glob in-scope entry overlaps a literal in-scope entry in a peer task', () => {
+    const { validateIntraTicketScope } = require(TASK_SCOPE_PATH);
+    const tasks = parseFixture('tasks.dup-in-scope.glob.md');
+    assert.ok(
+      Array.isArray(tasks) && tasks.length >= 2,
+      `dup-in-scope.glob fixture must parse to >=2 tasks; got ${tasks && tasks.length}`
+    );
+    const errors = validateIntraTicketScope(tasks);
+    const jointErrors = errors.filter((e) => /joint ownership/i.test(e));
+    assert.equal(
+      jointErrors.length,
+      1,
+      `glob+literal joint-ownership must yield exactly one error; got ${jointErrors.length}: ${JSON.stringify(errors, null, 2)}`
+    );
+    const [err] = jointErrors;
+    assert.match(
+      err,
+      /lib\/foo\/(\*\*|bar\.ts)/,
+      `joint-ownership error must name one of the overlapping entries; got: ${err}`
+    );
+    assert.match(err, /\bTask\s*1\b/i, `joint error must name Task 1; got: ${err}`);
+    assert.match(err, /\bTask\s*2\b/i, `joint error must name Task 2; got: ${err}`);
+  });
+
+  it('single owner per file remains valid (no regression)', () => {
+    const { validateIntraTicketScope } = require(TASK_SCOPE_PATH);
+    const tasks = parseFixture('tasks.fixed.md');
+    const errors = validateIntraTicketScope(tasks);
+    assert.deepEqual(
+      errors,
+      [],
+      `single-owner fixture must produce zero intra-ticket errors (incl. joint-ownership); got: ${JSON.stringify(errors, null, 2)}`
+    );
+    const jointFalsePositives = errors.filter((e) => /joint ownership/i.test(e));
+    assert.deepEqual(
+      jointFalsePositives,
+      [],
+      `single-owner fixture must produce zero joint-ownership errors; got: ${JSON.stringify(jointFalsePositives, null, 2)}`
+    );
+  });
+
+  it('pre-existing intra-ticket cross-section conflict is still rejected', () => {
+    const { validateIntraTicketScope } = require(TASK_SCOPE_PATH);
+    const tasks = parseFixture('tasks.md');
+    const errors = validateIntraTicketScope(tasks);
+    const crossSectionErrors = errors.filter(
+      (e) => /\bFiles explicitly out of scope\b/.test(e) && !/joint ownership/i.test(e)
+    );
+    assert.equal(
+      crossSectionErrors.length,
+      3,
+      `ECHO-5538 cross-section fixture must still produce exactly 3 cross-section errors; got ${crossSectionErrors.length}: ${JSON.stringify(errors, null, 2)}`
+    );
+    const jointFalsePositives = errors.filter((e) => /joint ownership/i.test(e));
+    assert.deepEqual(
+      jointFalsePositives,
+      [],
+      `ECHO-5538 fixture must NOT produce joint-ownership false positives; got: ${JSON.stringify(jointFalsePositives, null, 2)}`
     );
   });
 });

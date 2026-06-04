@@ -77,9 +77,109 @@ CHANGED_FILES="components/X.test.tsx" eval "$TEST_UNIT_COMMAND"
 \`\`\`
 `;
 
+// Joint in-scope ownership fixture: both Task 1 and Task 2 list the SAME
+// `components/X.tsx` path under `### Files in scope` (no cross-section
+// out-of-scope reference). This exercises the joint-ownership branch of
+// validateIntraTicketScope (Task 1 of GH-515) and the tasks-gate routing
+// regression for it (Task 3 — this test file).
+const JOINT_OWNERSHIP_TASKS_MD = `# Tasks (hand-crafted invalid for joint in-scope ownership)
+
+## Task 1 — Build component X (variant A)
+
+### Type
+fullstack
+
+### Files in scope
+- \`components/X.tsx\`
+
+### Deliverables
+- [ ] 1.1 **GREEN:** render X
+  - Test: \`<X />\` renders
+
+### Test Command
+\`\`\`bash
+CHANGED_FILES="components/X.test.tsx" eval "$TEST_UNIT_COMMAND"
+\`\`\`
+
+---
+
+## Task 2 — Build component X (variant B)
+
+### Type
+fullstack
+
+### Files in scope
+- \`components/X.tsx\`
+
+### Deliverables
+- [ ] 2.1 **GREEN:** wire X variant B
+  - Test: \`<X variant="b" />\` renders
+
+### Test Command
+\`\`\`bash
+CHANGED_FILES="components/X.test.tsx" eval "$TEST_UNIT_COMMAND"
+\`\`\`
+`;
+
 describe('tasks-gate intra-ticket scope routing', () => {
   beforeEach(() => setup());
   afterEach(() => teardown());
+
+  it('tasks-gate hard-fails and routes to split-in-tasks on joint ownership', () => {
+    // Task 3 RED — proves that when two peer tasks both list the same path
+    // under `### Files in scope` (joint in-scope ownership, not cross-section
+    // overlap), tasks-gate routes RUN /work-workflow:split-in-tasks with the
+    // conflicting path AND both task numbers surfaced in the routing `reason`.
+    fs.writeFileSync(path.join(tmpDir, 'tasks.md'), JOINT_OWNERSHIP_TASKS_MD, 'utf8');
+
+    const tasksGateStep = require('../steps/tasks-gate');
+    const STEPS = { tasks_gate: 'tasks_gate' };
+    const calls = [];
+    const add = (step, decision, agent, reason, opts) =>
+      calls.push({ step, decision, agent, reason, opts });
+
+    tasksGateStep(
+      add,
+      { hasTasks: true },
+      {
+        STEPS,
+        tasksDir: tmpDir,
+        path,
+      }
+    );
+
+    assert.equal(calls.length, 1, `expected exactly one add() call; got ${JSON.stringify(calls)}`);
+    const [c] = calls;
+    assert.equal(c.step, 'tasks_gate');
+    assert.equal(
+      c.decision,
+      'RUN',
+      `gate must RUN split-in-tasks on joint ownership, not DEFER; got ${JSON.stringify(c)}`
+    );
+    assert.equal(c.agent, '/work-workflow:split-in-tasks');
+    assert.match(
+      c.reason,
+      /components\/X\.tsx/,
+      `RUN reason must surface the joint-ownership conflicting file path; got: ${c.reason}`
+    );
+    assert.match(
+      c.reason,
+      /\bTask\s*1\b/i,
+      `RUN reason must reference Task 1 as a joint owner; got: ${c.reason}`
+    );
+    assert.match(
+      c.reason,
+      /\bTask\s*2\b/i,
+      `RUN reason must reference Task 2 as a joint owner; got: ${c.reason}`
+    );
+    // Confirm this is the joint-ownership branch (not a cross-section error)
+    // by matching the joint-ownership marker emitted by validateIntraTicketScope.
+    assert.match(
+      c.reason,
+      /joint|both list|in scope/i,
+      `RUN reason must indicate the joint in-scope ownership error class; got: ${c.reason}`
+    );
+  });
 
   it('tasksGateStep (real step function) routes to RUN split-in-tasks with intra-ticket error', () => {
     // Drives the actual `tasksGateStep` function the workflow engine invokes
@@ -94,16 +194,24 @@ describe('tasks-gate intra-ticket scope routing', () => {
     const add = (step, decision, agent, reason, opts) =>
       calls.push({ step, decision, agent, reason, opts });
 
-    tasksGateStep(add, { hasTasks: true }, {
-      STEPS,
-      tasksDir: tmpDir,
-      path,
-    });
+    tasksGateStep(
+      add,
+      { hasTasks: true },
+      {
+        STEPS,
+        tasksDir: tmpDir,
+        path,
+      }
+    );
 
     assert.equal(calls.length, 1, `expected exactly one add() call; got ${JSON.stringify(calls)}`);
     const [c] = calls;
     assert.equal(c.step, 'tasks_gate');
-    assert.equal(c.decision, 'RUN', `gate must RUN split-in-tasks, not DEFER; got ${JSON.stringify(c)}`);
+    assert.equal(
+      c.decision,
+      'RUN',
+      `gate must RUN split-in-tasks, not DEFER; got ${JSON.stringify(c)}`
+    );
     assert.equal(c.agent, '/work-workflow:split-in-tasks');
     assert.match(
       c.reason,

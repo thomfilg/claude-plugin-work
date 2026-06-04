@@ -32,7 +32,37 @@ filesOutOfScope = siblingTicketOwnedFiles − ∪(otherTasks[*].filesInScope)
 
 That is: start from the surfaces owned by **other tickets** (sibling-ticket boundary), then subtract every path that any peer task within the **same ticket** lists under `### Files in scope`. The remainder is what may appear under `### Files explicitly out of scope`. The `validateIntraTicketScope` validator in `plugins/work/scripts/workflows/lib/task-scope.js` enforces this and hard-fails `tasks-gate` on any violation.
 
-**Worked example (ECHO-5538 four-task shape):** Task 3 owns `components/X.tsx` under its `### Files in scope`. Tasks 1, 2, and 4 — peers within the same ticket — MUST NOT list `components/X.tsx` under ANY scope section (neither `### Files in scope` nor `### Files explicitly out of scope`). The exclusion list is reserved for files owned by other tickets entirely.
+**Worked example (ECHO-5538 four-task shape):** Task 3 owns `components/X.tsx` under its `### Files in scope`. Tasks 1, 2, and 4 — peers within the same ticket — MUST NOT list `components/X.tsx` under ANY scope section (neither `### Files in scope` nor `### Files explicitly out of scope`). The exclusion list is reserved for files owned by other tickets entirely. See also: the [duplicate Files-in-scope worked example](#intra-ticket-joint-in-scope-ownership-duplicate-files-in-scope-also-hard-failed) below for the symmetric failure mode where two peers each list the same path.
+
+## Intra-ticket joint in-scope ownership (duplicate Files in scope — also hard-failed)
+
+The exclusion rule above covers the case where Task A lists Task B's owned file under `### Files explicitly out of scope`. The symmetric failure mode is **duplicate joint ownership**: two (or more) peer tasks within the same ticket each list the **same** path under their own `### Files in scope` sections. This is also a structural error and is hard-failed by `validateIntraTicketScope` in `plugins/work/scripts/workflows/lib/task-scope.js`.
+
+**Worked example (duplicate-in-scope shape):** Suppose `tasks.md` declares:
+
+```markdown
+## Task 1 — Add header
+
+### Files in scope
+- `components/X.tsx`
+
+## Task 2 — Add footer
+
+### Files in scope
+- `components/X.tsx`
+```
+
+Both Task 1 and Task 2 list `components/X.tsx` under `### Files in scope`. `validateIntraTicketScope` walks every unordered peer pair `(i, j)` with `i < j` and emits **exactly one error per unordered peer pair** naming both task numbers and the shared path:
+
+```
+Tasks 1 and 2 both list `components/X.tsx` under `### Files in scope`
+(see plugins/work/skills/split-in-tasks/docs/scope-sections.md
+ § "Intra-ticket joint in-scope ownership"). Exactly one peer task may own a path.
+```
+
+If three peers (Tasks 1, 2, and 3) all duplicate the same path, the validator emits three errors — one per unordered pair `(1,2)`, `(1,3)`, `(2,3)` — never more, never fewer. The error message cites this very doc section so the author can read the rule alongside the failure.
+
+**How to fix:** pick exactly one task to own the path under `### Files in scope` and remove the duplicate entries from the other peers. Peers needing to coordinate around a single file should sequence their work via dependencies, not via co-ownership.
 
 ## Unique-ownership rule (hard-failed at `tasks-gate`)
 
