@@ -332,6 +332,22 @@ function getNextInstruction(ticketId, prNumber) {
         if (surfaceReason) {
           state.failureCategory = surfaceReason;
         }
+        // Bug 542-10: build the diagnostic summary BEFORE returning so the
+        // auto-advance hook (which treats `surface` as terminal) shows the
+        // per-attempt GitHub Actions URLs without requiring a second
+        // /follow-up invocation.
+        try {
+          const reportResult = runStep('report', state, ctx);
+          const summary =
+            (reportResult &&
+              (reportResult.summary || (reportResult.payload && reportResult.payload.summary))) ||
+            null;
+          if (summary) {
+            result.payload = Object.assign({}, result.payload || {}, { summary });
+          }
+        } catch (_e) {
+          /* fail open — surface still terminal; user can re-run /follow-up */
+        }
         saveState(ticketId, state);
         return result;
       }
