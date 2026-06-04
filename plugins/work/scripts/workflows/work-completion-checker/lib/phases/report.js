@@ -78,7 +78,7 @@ function renderVerificationBlock(verdict) {
   lines.push(`- ok: ${verdict.ok}`);
   lines.push(`- verdictAt: ${verdict.verdictAt}`);
   lines.push(
-    `- summary: reuseChecked=${verdict.summary.reuseChecked || 0}, scopeChecked=${verdict.summary.scopeChecked || 0}, testsChecked=${verdict.summary.testsChecked || 0}`,
+    `- summary: reuseChecked=${verdict.summary.reuseChecked || 0}, scopeChecked=${verdict.summary.scopeChecked || 0}, testsChecked=${verdict.summary.testsChecked || 0}`
   );
   if (verdict.failures.length === 0) {
     lines.push('- failures: none');
@@ -86,7 +86,7 @@ function renderVerificationBlock(verdict) {
     lines.push('- failures:');
     for (const f of verdict.failures) {
       lines.push(
-        `  - ${f.requirementId} [${f.checkType}] expected: ${f.expected}; observed: ${f.observed}`,
+        `  - ${f.requirementId} [${f.checkType}] expected: ${f.expected}; observed: ${f.observed}`
       );
     }
   }
@@ -112,7 +112,7 @@ function persistVerdict(ctx) {
   try {
     fs.writeFileSync(
       path.join(ctx.tasksDir, 'completion-verdict.json'),
-      `${JSON.stringify(verdict, null, 2)}\n`,
+      `${JSON.stringify(verdict, null, 2)}\n`
     );
   } catch {
     /* hook-gated */
@@ -127,10 +127,36 @@ function persistVerdict(ctx) {
       /* hook-gated */
     }
   }
+  return verdict;
+}
+
+function summarizeVerdictFailures(verdict) {
+  const counts = new Map();
+  for (const f of verdict.failures) {
+    counts.set(f.checkType, (counts.get(f.checkType) || 0) + 1);
+  }
+  const parts = [];
+  for (const [k, n] of counts) parts.push(`${k}=${n}`);
+  return parts.join(', ');
 }
 
 function validate(ctx) {
-  persistVerdict(ctx);
+  const verdict = persistVerdict(ctx);
+  // Review feedback: previously the report phase only checked that
+  // completion.check.md had the right shape. If an earlier enforcement phase
+  // (reuse_audit / suggested_scope / test_pass) wrote failures to the store
+  // and `writeState` then silently failed downstream, the pipeline could
+  // still advance even though `completion-verdict.json` said `ok: false`.
+  // The verdict is now the source of truth: if it has any failure records,
+  // report fails closed with a summary referencing the persisted JSON.
+  if (verdict && verdict.ok === false) {
+    return {
+      ok: false,
+      errors: [
+        `completion-verdict.json reports ${verdict.failures.length} unresolved failure(s) [${summarizeVerdictFailures(verdict)}]. Resolve them before advancing.`,
+      ],
+    };
+  }
   const p = path.join(ctx.tasksDir, 'completion.check.md');
   const text = readFile(p);
   if (!text) {
