@@ -60,6 +60,26 @@ test('case C: PASS row supported by tests.check.md substring yields zero violati
   assert.equal(violations.length, 0);
 });
 
+test('empty stability artifact does NOT suppress stability-claim violation', () => {
+  // An empty (or whitespace-only) stability.log placeholder must not pass as
+  // evidence — otherwise the guard is bypassable by `touch stability.log`.
+  const dir = makeTaskDir({ 'stability.log': '   \n\n' });
+  const prBody = 'Verified with 10/10 stability run on CI.';
+  const { violations } = detectFabrication(prBody, dir);
+  const stab = violations.find((v) => v.reason === 'stability-claim');
+  assert.ok(stab, 'expected stability-claim violation despite empty artifact');
+});
+
+test('substantive stability artifact suppresses stability-claim violation', () => {
+  const dir = makeTaskDir({
+    'stability.log': 'iter 1 ok\niter 2 ok\niter 3 ok\niter 4 ok\niter 5 ok\n',
+  });
+  const prBody = 'Verified with 10/10 stability run on CI.';
+  const { violations } = detectFabrication(prBody, dir);
+  const stab = violations.find((v) => v.reason === 'stability-claim');
+  assert.ok(!stab, 'expected no stability-claim violation when artifact has content');
+});
+
 test('Unsourced PASS row under Test Results', () => {
   const dir = makeTaskDir({
     'tests.check.md': 'No matching content here.\n',

@@ -55,11 +55,19 @@ function safeReaddir(dirPath) {
   }
 }
 
+// Minimum non-whitespace bytes required for a stability artifact to count as
+// real evidence. An empty or whitespace-only placeholder file must not
+// suppress the violation — that would make the guard trivially bypassable by
+// dropping `touch stability.log` in the task folder.
+const STABILITY_ARTIFACT_MIN_BYTES = 16;
+
 function hasStabilityArtifact(taskDir, claimText) {
   if (!taskDir) return false;
   const entries = safeReaddir(taskDir);
   for (const entry of entries) {
-    if (STABILITY_ARTIFACT_PATTERNS.some((re) => re.test(entry))) return true;
+    if (!STABILITY_ARTIFACT_PATTERNS.some((re) => re.test(entry))) continue;
+    const content = safeReadFile(path.join(taskDir, entry));
+    if (content && content.trim().length >= STABILITY_ARTIFACT_MIN_BYTES) return true;
   }
   // tests.check.md containing the literal claim text also counts as evidence.
   const checks = safeReadFile(path.join(taskDir, 'tests.check.md'));
