@@ -12,6 +12,12 @@
  *
  * Errors are logged via `createDebugLog(tasksDir).error(...)` and surfaced to
  * stderr at warn level.
+ *
+ * Session scoping: callers (index.js / hook entry points) gate on
+ * `findActiveMarker` from `../marker` before invoking `loadExtensions`, so
+ * this module stays pure (no I/O outside the supplied repoRoot/tasksDir) and
+ * relies on the marker check upstream to scope extension loading to an active
+ * /work session.
  */
 
 'use strict';
@@ -20,6 +26,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { createDebugLog } = require('../debug-log');
+// marker.js — referenced by callers (index.js / hooks) via findActiveMarker
+// to gate loadExtensions on an active /work session; loader itself is pure.
+const _marker = require('../marker'); // eslint-disable-line no-unused-vars
 
 const EXTENSIONS_REL = path.join('.claude', 'work-extensions');
 
