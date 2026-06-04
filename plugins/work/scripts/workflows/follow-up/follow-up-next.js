@@ -112,8 +112,26 @@ function initState(ticketId, prNumber) {
     maxAttempts: 40,
     lastMonitorResult: null,
     failureCategory: null,
+    // Infra-retry telemetry (GH-508 Task 4). `count` tracks how many
+    // infra-retry attempts have been performed for the current PR; `attempts`
+    // records per-attempt diagnostics for the report step (Task 6).
+    infraRetry: { count: 0, attempts: [] },
     startTime: new Date().toISOString(),
   };
+}
+
+// Dispatch a step result and decide whether the orchestrator loop terminates.
+// Exported for testability (Task 4: action:'surface' is a terminal instruction
+// that stops the loop without marking state.status='complete' — see spec's
+// "API/Interface Changes" section for the surface contract).
+function dispatchStepResult(state, result) {
+  if (result && result.action === 'surface') {
+    return { terminate: true, instruction: result };
+  }
+  if (result && result.action === 'blocked') {
+    return { terminate: true, instruction: result };
+  }
+  return { terminate: false, instruction: result || null };
 }
 
 // ─── Core orchestrator loop ─────────────────────────────────────────────────
@@ -189,6 +207,14 @@ function getNextInstruction(ticketId, prNumber) {
     const result = runStep(state.currentStep, state, ctx);
 
     if (result) {
+      // action:'surface' is terminal (spec API/Interface Changes — GH-508).
+      // Stop the loop without marking status='complete' so the next /follow-up
+      // invocation can resume from a live re-evaluation rather than the cache.
+      if (result.action === 'surface') {
+        state.currentStep = 'report';
+        saveState(ticketId, state);
+        return result;
+      }
       saveState(ticketId, state);
       return result;
     }
@@ -297,4 +323,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { getNextInstruction };
+module.exports = { getNextInstruction, initState, dispatchStepResult };

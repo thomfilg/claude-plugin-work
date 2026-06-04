@@ -7,6 +7,25 @@
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Format a single infra-retry attempt into a human-readable diagnostic line.
+ * Includes the GitHub Actions run URL so the surfaced bundle is clickable.
+ * @param {{attemptNumber:number, timestamp:string, runId:string|number, signals:string[], retryMethod:string}} attempt
+ * @param {string} repoUrl - https://github.com/<owner>/<repo>
+ */
+function formatAttemptLine(attempt, repoUrl) {
+  const signals = Array.isArray(attempt.signals) ? attempt.signals.join(',') : '';
+  const runUrl = `${repoUrl}/actions/runs/${attempt.runId}`;
+  return [
+    `- attemptNumber=${attempt.attemptNumber}`,
+    `timestamp=${attempt.timestamp}`,
+    `runId=${attempt.runId}`,
+    `signals=[${signals}]`,
+    `retryMethod=${attempt.retryMethod}`,
+    `url=${runUrl}`,
+  ].join(' ');
+}
+
 module.exports = function registerReport(register) {
   register('report', (state, ctx) => {
     // Final safety net: never mark complete while the latest monitor cycle
@@ -19,6 +38,34 @@ module.exports = function registerReport(register) {
       state.failureCategory = 'conflict';
       state.currentStep = 'fix-ci';
       return null;
+    }
+
+    // R11: infra-stuck branch — surface the diagnostic bundle (run IDs as
+    // GitHub Actions URLs, signal IDs, attempt timestamps) and require
+    // manual intervention. Mirrors auto-advance's 'surface' terminal action.
+    if (state.failureCategory === 'infra-stuck') {
+      const attempts = (state.infraRetry && state.infraRetry.attempts) || [];
+      const owner = state.repoOwner || 'OWNER';
+      const repo = state.repoName || 'REPO';
+      const repoUrl = `https://github.com/${owner}/${repo}`;
+      const header = `## Infra-stuck after ${attempts.length} retries`;
+      const lines = attempts.map((a) => formatAttemptLine(a, repoUrl));
+      const body = [header, ...lines].join('\n');
+      return {
+        type: 'follow_up_instruction',
+        action: 'surface',
+        payload: {
+          reason: 'infra-stuck',
+          attempts,
+          repoUrl,
+        },
+        state: {
+          ticket: state.ticketId,
+          currentStep: 'report',
+          attempt: state.attempt,
+        },
+        summary: body,
+      };
     }
 
     // Write accountability report if it doesn't exist

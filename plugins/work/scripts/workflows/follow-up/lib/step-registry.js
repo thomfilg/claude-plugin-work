@@ -22,11 +22,12 @@ function runStep(stepName, state, ctx) {
   return fn(state, ctx);
 }
 
-const STEPS = ['monitor', 'triage', 'fix-ci', 'fix-reviews', 'push-retry', 'report'];
+const STEPS = ['monitor', 'triage', 'infra-retry', 'fix-ci', 'fix-reviews', 'push-retry', 'report'];
 
 // --- Register steps ---
 require('./steps/monitor')(registerStep);
 require('./steps/triage')(registerStep);
+require('./steps/infra-retry')(registerStep);
 require('./steps/fix-ci')(registerStep);
 require('./steps/fix-reviews')(registerStep);
 require('./steps/push-retry')(registerStep);
