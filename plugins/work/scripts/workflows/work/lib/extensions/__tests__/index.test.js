@@ -165,4 +165,35 @@ module.exports = {
     const b = initExtensions({ repoRoot: r2.root, tasksDir: r2.tasksDir });
     assert.notEqual(a, b);
   });
+
+  it('dispatch is a safe no-op for an event name with no registered handlers', async () => {
+    const { initExtensions } = loadIndex();
+    const { root, tasksDir } = freshRepo();
+    const extDir = makeExtensionsDir(root);
+    writeExt(
+      extDir,
+      'only-session.js',
+      `module.exports = { events: ['OnSessionStart'], handler: () => {} };`
+    );
+    const api = initExtensions({ repoRoot: root, tasksDir });
+    // Dispatching an event nobody subscribed to must not throw (R6/R8).
+    await api.dispatch('OnTicketResolved', { ticketId: 'GH-522' });
+  });
+
+  it('isolates a throwing handler from the dispatch caller (R6)', async () => {
+    const { initExtensions } = loadIndex();
+    const { root, tasksDir } = freshRepo();
+    const extDir = makeExtensionsDir(root);
+    writeExt(
+      extDir,
+      'boom.js',
+      `module.exports = {
+        events: ['OnTicketResolved'],
+        handler: () => { throw new Error('boom'); },
+      };`
+    );
+    const api = initExtensions({ repoRoot: root, tasksDir });
+    // event-bus catches handler errors and logs — dispatch must resolve.
+    await api.dispatch('OnTicketResolved', { ticketId: 'GH-522' });
+  });
 });
