@@ -81,17 +81,23 @@ function extractAddedLines(diffOutput) {
 // B3 fix: extract just the added-line text from `git diff -U0` output so
 // reuse checks only count lines this PR actually added. Comments, unchanged
 // imports, and incidental mentions in untouched code no longer pass the gate.
-// Returns '' if git fails — callers treat empty addedLines as "no signal" and
-// fall back to whole-file content (keeping behavior fail-closed-but-soft when
-// git is unavailable; the soft fallback is logged on the failure record).
-function readAddedLines(ctx) {
+//
+// Scoped to `changedFiles` (from readChangedFiles / pr-context.json) so a
+// symbol that appears only on added lines of an out-of-list file cannot
+// satisfy the reuse audit — review feedback: an unscoped repo-wide scan let
+// stray matches in unrelated files pass the gate.
+//
+// Returns '' if git fails OR there are no changed files — callers treat
+// empty addedLines as "no signal" and fall back to whole-file content.
+function readAddedLines(ctx, changedFiles) {
+  if (!Array.isArray(changedFiles) || changedFiles.length === 0) return '';
   const root = ctx.worktreeRoot || process.cwd();
   for (const base of config.getDiffBaseCandidates({ cwd: root })) {
-    const r = childProcess.spawnSync('git', ['diff', '-U0', `${base}...HEAD`], {
-      cwd: root,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const r = childProcess.spawnSync(
+      'git',
+      ['diff', '-U0', `${base}...HEAD`, '--', ...changedFiles],
+      { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
+    );
     if (r && r.status === 0) return extractAddedLines(r.stdout);
   }
   return '';
@@ -197,7 +203,7 @@ function validate(ctx) {
     const changed = readChangedFiles(ctx) || [];
     const blobs = loadChangedContents(ctx, changed);
     const joined = blobs.map((b) => b.content).join('\n');
-    const addedLines = readAddedLines(ctx);
+    const addedLines = readAddedLines(ctx, changed);
     const { mustChecked, mustMissing } = checkMustReuseEntries(
       entries,
       blobs,
