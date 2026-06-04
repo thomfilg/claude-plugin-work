@@ -168,10 +168,14 @@ function signal2_emptyFailedLog(runId, jobId, exec) {
   }
   const result = exec(`gh run view ${runId} --job ${jobId} --log-failed`);
   const stdout = (result && result.stdout) || '';
+  const stderr = (result && result.stderr) || '';
   const stripped = filterLogs(stdout).trim();
   // Treat as "empty" when no error/assertion lines survive the filter AND
-  // the raw stdout has no error markers either.
-  const hasErrorMarker = /error|fail|assert|expect|✗|✕/i.test(stdout);
+  // neither raw stream has error markers. stderr is checked too: a failed
+  // `gh run view` typically writes its diagnostic to stderr with empty stdout,
+  // which must NOT be misclassified as a flake's empty failed log.
+  const markerRe = /error|fail|assert|expect|✗|✕/i;
+  const hasErrorMarker = markerRe.test(stdout) || markerRe.test(stderr);
   if (!hasErrorMarker && stripped.length === 0) {
     return {
       fired: true,
@@ -180,7 +184,7 @@ function signal2_emptyFailedLog(runId, jobId, exec) {
   }
   return {
     fired: false,
-    evidence: { runId, jobId, rawLength: stdout.length },
+    evidence: { runId, jobId, rawLength: stdout.length, stderrLength: stderr.length },
   };
 }
 
