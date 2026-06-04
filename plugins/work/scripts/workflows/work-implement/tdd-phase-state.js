@@ -356,7 +356,6 @@ function runTestCommandWithOutput(cmd) {
 // GH-532 — RED load-failure heuristic. Shared with future
 // `enforce-tdd-on-stop.js` consumer via `lib/red-load-failure.js`.
 const {
-  RED_LOAD_FAILURE_PATTERNS,
   detectRedLoadFailure,
   extractLoadFailureSnippet,
 } = require('./lib/red-load-failure');

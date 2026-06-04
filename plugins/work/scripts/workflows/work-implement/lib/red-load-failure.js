@@ -24,17 +24,50 @@ const RED_LOAD_FAILURE_PATTERNS = Object.freeze([
 ]);
 
 /**
+ * Returns true if `line` closes a `details:` block opened at `baseIndent`.
+ * A details block ends on a blank line, on the YAML doc-end `...`, or when
+ * indentation returns to the heading column or earlier.
+ *
+ * @param {string} line raw output line
+ * @param {number} baseIndent column of the opening `details:` heading
+ * @returns {boolean}
+ */
+function closesDetailsBlock(line, baseIndent) {
+  const trimmed = line.trim();
+  if (trimmed === '' || trimmed === '...') return true;
+  const indentMatch = line.match(/^(\s*)\S/);
+  const indent = indentMatch ? indentMatch[1].length : -1;
+  return indent <= baseIndent;
+}
+
+/**
+ * Scan a single line against every RED-load-failure pattern.
+ *
+ * @param {string} line raw output line
+ * @returns {{ matched: boolean, signature: string|null }}
+ */
+function matchLoadFailureSignature(line) {
+  for (const pattern of RED_LOAD_FAILURE_PATTERNS) {
+    if (pattern.regex.test(line)) {
+      return { matched: true, signature: pattern.name };
+    }
+  }
+  return { matched: false, signature: null };
+}
+
+/**
  * Scan combined stdout+stderr line-by-line for a RED-load-failure signature.
  *
  * Lines ignored:
  *   - stack frames matching /^\s+at\s/ — a `ReferenceError:` thrown inside
  *     a passing test's `assert.throws` reports the type name on a stack
  *     frame; we don't want that to count as a top-level load failure.
- *   - lines inside a contiguous `details:` block — node:test prints the
- *     expected/actual values of a failing `assert.throws` under a
- *     `details:` heading; the block ends when indentation returns to the
- *     heading column or earlier, on the YAML doc-end `...`, or on a blank
- *     line.
+ *   - lines inside any node:test YAML diagnostic block, bracketed by `---`
+ *     (open) and `...` (close). A failing test's `error: |-` payload may
+ *     literally include `ReferenceError:` (when the test body raised one);
+ *     that is a real RED, not a load failure.
+ *   - lines inside a contiguous `details:` block — kept as a defensive
+ *     fallback for runners that emit `details:` outside the YAML envelope.
  *
  * Fail-closed: if the scan throws unexpectedly, return a match with
  * signature `'scan-error'` so the recorder rejects rather than silently
@@ -49,15 +82,22 @@ function detectRedLoadFailure(output) {
       return { matched: false, signature: null };
     }
     const lines = output.split(/\r?\n/);
+    let inYamlBlock = false;
     let inDetailsBlock = false;
     let detailsBaseIndent = -1;
     for (const line of lines) {
       if (/^\s+at\s/.test(line)) continue;
       const trimmed = line.trim();
+      if (inYamlBlock) {
+        if (trimmed === '...') inYamlBlock = false;
+        continue;
+      }
+      if (trimmed === '---') {
+        inYamlBlock = true;
+        continue;
+      }
       if (inDetailsBlock) {
-        const indentMatch = line.match(/^(\s*)\S/);
-        const indent = indentMatch ? indentMatch[1].length : -1;
-        if (trimmed === '' || trimmed === '...' || indent <= detailsBaseIndent) {
+        if (closesDetailsBlock(line, detailsBaseIndent)) {
           inDetailsBlock = false;
           detailsBaseIndent = -1;
         } else {
@@ -66,15 +106,11 @@ function detectRedLoadFailure(output) {
       }
       if (/^\s*details:\s*$/.test(line)) {
         inDetailsBlock = true;
-        const headIndent = line.match(/^(\s*)/)[1].length;
-        detailsBaseIndent = headIndent;
+        detailsBaseIndent = line.match(/^(\s*)/)[1].length;
         continue;
       }
-      for (const pattern of RED_LOAD_FAILURE_PATTERNS) {
-        if (pattern.regex.test(line)) {
-          return { matched: true, signature: pattern.name };
-        }
-      }
+      const hit = matchLoadFailureSignature(line);
+      if (hit.matched) return hit;
     }
     return { matched: false, signature: null };
   } catch {

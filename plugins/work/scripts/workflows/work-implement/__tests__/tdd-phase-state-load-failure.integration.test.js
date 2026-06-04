@@ -369,4 +369,64 @@ describe('tdd-phase-state record-red — load-failure rejection (GH-532)', () =>
     const cycle = state.cycles.find((c) => c.cycle === state.currentCycle);
     assert.ok(cycle && cycle.red, 'record.red must be persisted (R5 / AC9)');
   });
+
+  it('Runtime ReferenceError inside node:test YAML error block is accepted', () => {
+    // Cursor Bugbot (GH-532 PR #550): when a failing test's body throws an
+    // error whose multi-line message contains the literal text
+    // `ReferenceError:`, node:test's TAP reporter emits it under
+    // `error: |-` inside a `---`/`...` YAML diagnostic block. The detector
+    // must NOT treat that line as a top-level load failure — it is a real
+    // RED.
+    //
+    // The fixture below is the verbatim TAP output emitted by
+    // `node --test --test-reporter=tap` for a test that does
+    // `throw new ReferenceError('multi\\nline\\nReferenceError: synthesized')`.
+    // We don't shell out to `node --test` here because the outer test
+    // process is already a node:test runner; nested `node --test` detects
+    // the recursion and skips the run.
+    runCli('init GH-532-YAML', homeDir);
+    const tap =
+      'TAP version 13\n' +
+      '# Subtest: runtime ref error\n' +
+      'not ok 1 - runtime ref error\n' +
+      '  ---\n' +
+      '  duration_ms: 0.95\n' +
+      "  type: 'test'\n" +
+      "  location: '/tmp/runtime-ref.test.js:2:1'\n" +
+      "  failureType: 'testCodeFailure'\n" +
+      '  error: |-\n' +
+      '    multi\n' +
+      '    line\n' +
+      '    ReferenceError: synthesized\n' +
+      "  code: 'ERR_TEST_FAILURE'\n" +
+      "  name: 'ReferenceError'\n" +
+      '  stack: |-\n' +
+      '    TestContext.<anonymous> (/tmp/runtime-ref.test.js:4:9)\n' +
+      '    Test.runInAsyncScope (node:async_hooks:228:14)\n' +
+      '  ...\n' +
+      '1..1\n' +
+      '# tests 1\n' +
+      '# pass 0\n' +
+      '# fail 1\n';
+    const script = createOutputScript(scriptDir, 'yaml-runtime-ref', {
+      stdout: tap,
+      exitCode: 1,
+    });
+    const { exitCode, stdout, stderr } = runCli(
+      `record-red GH-532-YAML --cmd "${script}"`,
+      homeDir,
+      repo
+    );
+    assert.strictEqual(
+      exitCode,
+      0,
+      `runtime ReferenceError inside YAML error block must be accepted as RED, got stderr: ${stderr}`
+    );
+    const result = JSON.parse(stdout);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.phase, 'red');
+    const state = readState(homeDir, 'GH-532-YAML');
+    const cycle = state.cycles.find((c) => c.cycle === state.currentCycle);
+    assert.ok(cycle && cycle.red, 'record.red must be persisted for runtime RED');
+  });
 });
