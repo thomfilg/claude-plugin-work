@@ -455,6 +455,21 @@ function recordEvidence(phase, ticket, taskNum, cmd, cwd, scope, opts = {}) {
     if (opts && opts.docsExempt === true && phase === TDD_PHASES.green) {
       recordArgs.push('--docs-exempt');
     }
+    // Task 4 (GH-528): RED-side parity — the existing RED docs-exempt
+    // fallback (line ~911) calls recordEvidence without opts when scope
+    // contains zero test files (the documented docs-exempt/visual-only
+    // shape). The recorder's `record-red` "No test files changed" guard
+    // would otherwise reject. Auto-forward `--docs-exempt` for that exact
+    // shape so the recorder accepts the documentation-task RED evidence.
+    // This is a recordEvidence-internal heuristic and does NOT modify the
+    // sibling-owned RED branch call site at line ~911.
+    if (
+      phase === TDD_PHASES.red &&
+      Array.isArray(scope) &&
+      filterToTestFiles(scope).length === 0
+    ) {
+      recordArgs.push('--docs-exempt');
+    }
     return spawnSync(process.execPath, recordArgs, {
       cwd,
       stdio: 'pipe',
@@ -1062,6 +1077,13 @@ module.exports = {
   parseSuggestedScope,
 };
 
-if (require.main === module) {
+// Main guard: skip CLI dispatch when node:test loaded this file as a test
+// target with no CLI args (it would otherwise print usage and fail the suite
+// with zero test() blocks). Child spawns of this script always pass a ticket
+// + task arg, so they keep running main() — NODE_TEST_CONTEXT propagation
+// via inherited env is harmless when argv carries the real CLI args.
+const _isBareTestLoad =
+  process.env.NODE_TEST_CONTEXT && process.argv.length <= 2;
+if (require.main === module && !_isBareTestLoad) {
   main();
 }

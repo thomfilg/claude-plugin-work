@@ -555,7 +555,14 @@ function cmdRecordRed(ticketId, args) {
   }
   const testFiles = allChanged.filter((f) => isTestFile(f));
 
-  if (testFiles.length === 0) {
+  // Task 4 (GH-528): RED docs-exempt fallback. Documentation-only tasks
+  // have no testable code surface — their "scope" is a .md file and there
+  // are no test files to author. The orchestrator (task-next.js RED block)
+  // already gates this on isDocsExempt/isVisualOnlyTask and forwards
+  // `--docs-exempt`; we relax the "No test files changed" guard for that
+  // explicit opt-in. RC-D semantics still apply to record-green.
+  const docsExempt = Array.isArray(args) && args.includes('--docs-exempt');
+  if (testFiles.length === 0 && !docsExempt) {
     errorExit('No test files changed. RED phase requires modified .test or .spec files.');
   }
 

@@ -192,7 +192,7 @@ describe('task-next.js GREEN docs-exempt fallback', () => {
     const TICKET = 'TEST-GDE-1';
     const TASK_NUM = 1;
     fs.mkdirSync(path.join(tasksBase, TICKET), { recursive: true });
-    writeDocsExemptTasksMd(path.join(tasksBase, TICKET), TASK_NUM);
+    writeDocsExemptTasksMd(path.join(tasksBase, TICKET), repo, TASK_NUM);
 
     const init = runTddInit(tasksBase, repo, TICKET, TASK_NUM);
     assert.equal(init.exitCode, 0, 'init failed: ' + init.stderr);
@@ -202,6 +202,14 @@ describe('task-next.js GREEN docs-exempt fallback', () => {
     // for docs-exempt, the existing RED docs-exempt block accepts it).
     // After this, state advances to GREEN.
     const r1 = runTaskNext(tasksBase, repo, TICKET, TASK_NUM);
+
+    // Author the marker that the GREEN verifier greps for (setup mirrors
+    // the fixture docstring: "then we write the marker and the GREEN
+    // verifier exits 0 silently").
+    fs.writeFileSync(
+      path.join(repo, 'docs', 'README.md'),
+      'placeholder DOCS_MARKER\n'
+    );
 
     // Invocation 2: GREEN. Same silent `true` cmd exits 0. Without the
     // GREEN docs-exempt fallback, recordEvidence forwards no flag and
