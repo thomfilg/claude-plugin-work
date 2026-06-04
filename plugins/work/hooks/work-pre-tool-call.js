@@ -50,7 +50,7 @@ function resolveBases() {
   }
 }
 
-function main() {
+async function main() {
   const hookData = readHookData();
   if (!hookData) process.exit(0);
 
@@ -67,7 +67,9 @@ function main() {
     // /work orchestrator when we only want the exported firePreToolCall.
     process.env.WORK_HOOK_NO_MAIN = '1';
     const { firePreToolCall } = require(path.join(__dirname, 'work-hook'));
-    firePreToolCall({
+    // Await so async extension handlers complete before the hook process
+    // terminates (was fire-and-forget; would silently cut off long chains).
+    await firePreToolCall({
       toolName: hookData.tool_name,
       toolInput: hookData.tool_input,
       tasksBase: bases.TASKS_BASE,

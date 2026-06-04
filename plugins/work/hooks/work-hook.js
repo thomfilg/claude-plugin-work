@@ -198,7 +198,7 @@ function formatPlan(plan) {
  * }} [deps]
  * @returns {void}
  */
-function firePreToolCall(args, deps) {
+async function firePreToolCall(args, deps) {
   const { toolName, toolInput, tasksBase, tasksDir, repoRoot } = args || {};
   // Bug fix: findActiveMarker needs TASKS_BASE (parent of all per-ticket
   // tasksDirs), not a single per-ticket tasksDir. Accept `tasksBase` and fall
@@ -222,8 +222,12 @@ function firePreToolCall(args, deps) {
       require(path.join(__dirname, '..', 'scripts', 'workflows', 'work', 'lib', 'extensions'))
         .initExtensions;
     const resolvedTasksDir = marker.tasksDir || tasksDir;
-    const api = init({ repoRoot, tasksDir: resolvedTasksDir });
-    api.dispatch('OnPreToolCall', { toolName, toolInput });
+    const resolvedRepoRoot = marker.worktreeRoot || repoRoot;
+    const api = init({ repoRoot: resolvedRepoRoot, tasksDir: resolvedTasksDir });
+    // Await the dispatch so async extension handlers complete before the
+    // PreToolUse hook process exits. Fail-open: dispatch errors are caught
+    // by the surrounding try/catch.
+    await api.dispatch('OnPreToolCall', { toolName, toolInput });
   } catch {
     /* fail-open — extension dispatch errors must never crash the hook */
   }
