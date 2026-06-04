@@ -111,9 +111,14 @@ function shouldCheckGhActions(result) {
  * set it explicitly.
  */
 function resolveRunId(state) {
+  // Bug 542-20: scan ALL failed jobs for a runId — the first listed failure
+  // may lack one while a later entry has it. Falls back to state.runId for
+  // tests/callers that set it directly.
   const failedJobs = Array.isArray(state && state._ciFailedJobs) ? state._ciFailedJobs : [];
-  const firstFailedRunId = failedJobs.length > 0 ? failedJobs[0].runId : null;
-  return firstFailedRunId || (state && state.runId) || null;
+  for (const job of failedJobs) {
+    if (job && job.runId) return job.runId;
+  }
+  return (state && state.runId) || null;
 }
 
 function buildRetryDelegate(state, runId, attemptNumber) {
