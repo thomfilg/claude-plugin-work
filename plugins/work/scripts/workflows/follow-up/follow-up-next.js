@@ -243,16 +243,21 @@ function getNextInstruction(ticketId, prNumber) {
   const candidateWorktree = path.join(WORKTREES_BASE, `${MAIN_WORKTREE_FOLDER}-${ticketId}`);
   const worktreeDir = fs.existsSync(candidateWorktree) ? candidateWorktree : process.cwd();
 
-  const ctx = {
+  // PR #542 cursor[bot]: monitor mutates state._ciAllJobs / _ciFailedLogs /
+  // _ciStatus mid-loop, so a ctx built once before the loop hands a stale
+  // snapshot to a later step (e.g. infra-retry). Rebuild ctx fresh on every
+  // iteration so subsequent steps observe the post-monitor state.
+  const freshCtx = () => ({
     tasksDir,
     worktreeDir,
     TASKS_BASE,
     workScriptsDir: path.join(__dirname, '..', 'work', 'scripts'),
     ...buildClassifierCtx(state, worktreeDir),
-  };
+  });
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    const ctx = freshCtx();
     if (state.status === 'complete' || !STEPS.includes(state.currentStep)) {
       // Re-verify against GitHub before honoring a saved "complete". The
       // saved state is a cache of a prior run's decision; if anything has

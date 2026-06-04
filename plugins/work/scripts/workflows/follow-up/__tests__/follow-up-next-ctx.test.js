@@ -153,4 +153,71 @@ describe('follow-up-next.js — ctx wiring (Bug 2)', () => {
 
     delete process.env.WORK_AUTO_RETRY_INFRA;
   });
+
+  it('PR #542: rebuilds ctx inside the loop so a step that mutates state._ciStatus is visible to the next step', () => {
+    delete require.cache[FOLLOW_UP_NEXT_PATH];
+    delete require.cache[STEP_REGISTRY_PATH];
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fu-next-ctx-loop-'));
+    const tasksBase = path.join(tmp, 'tasks');
+    fs.mkdirSync(path.join(tasksBase, 'GH-LOOP'), { recursive: true });
+
+    const state = {
+      ticketId: 'GH-LOOP',
+      prNumber: 542,
+      currentStep: 'monitor',
+      status: 'in_progress',
+      attempt: 1,
+      maxAttempts: 40,
+      _ciStatus: 'failing',
+      _ciAllJobs: [],
+      _ciFailedLogs: '',
+      failureCategory: null,
+    };
+    fs.writeFileSync(
+      path.join(tasksBase, 'GH-LOOP', '.' + 'follow-up' + '-state.json'),
+      JSON.stringify(state, null, 2)
+    );
+    process.env.TASKS_BASE = tasksBase;
+    process.env.WORKTREES_BASE = tmp;
+
+    const observed = [];
+    require.cache[STEP_REGISTRY_PATH] = {
+      id: STEP_REGISTRY_PATH,
+      filename: STEP_REGISTRY_PATH,
+      loaded: true,
+      exports: {
+        STEPS: ['monitor', 'infra-retry'],
+        runStep: (stepName, st, ctx) => {
+          observed.push({ stepName, ciStatus: ctx.ciStatus, rawLogs: ctx.rawLogs });
+          if (stepName === 'monitor') {
+            // Simulate monitor refreshing CI state mid-loop.
+            st._ciStatus = 'success';
+            st._ciFailedLogs = 'cache HIT\n';
+            return null; // advance to next step
+          }
+          // Terminal so the loop exits.
+          return { type: 'follow_up_instruction', action: 'blocked', reason: 'captured' };
+        },
+      },
+    };
+
+    const mod = require(FOLLOW_UP_NEXT_PATH);
+    mod.getNextInstruction('GH-LOOP', 542);
+
+    assert.equal(observed.length, 2, 'both steps must run in one invocation');
+    assert.equal(observed[0].stepName, 'monitor');
+    assert.equal(observed[0].ciStatus, 'failing', 'monitor sees the pre-mutation snapshot');
+    assert.equal(observed[1].stepName, 'infra-retry');
+    assert.equal(
+      observed[1].ciStatus,
+      'success',
+      'infra-retry must see the post-monitor _ciStatus, not the snapshot taken before the loop'
+    );
+    assert.match(
+      observed[1].rawLogs,
+      /cache HIT/,
+      'infra-retry must see the post-monitor _ciFailedLogs'
+    );
+  });
 });
