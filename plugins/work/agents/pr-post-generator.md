@@ -60,7 +60,9 @@ Use this exact wording in the PR SECTION FORMAT:
 ```
 
 Acceptable `Status` values when no artifact is present: `pending`, `not run`,
-`skipped`, `n/a`, `—`. If every row is `pending`, that is correct and the
+`skipped`, `n/a`. Blank or dash placeholders (`—`, `-`, `""`) are NOT
+accepted — the validator treats them as verdict claims and will block. If
+every row is `pending`, that is correct and the
 validator will allow it. Inventing a `PASS`/`FAIL` to "fill the table" is
 fabrication and the `pr-post-generator-validator` will block the PR with exit
 code 2.
