@@ -670,6 +670,24 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
 }
 
 /**
+ * Resolve a single review thread on GitHub via GraphQL mutation.
+ * Used by `follow-up-pr-comments.js --also-resolve-on-github` (GH-537 / Task 5).
+ *
+ * Reuses the same mutation as `resolveOutdatedThreads` but for a single
+ * threadId so the CLI can target the specific thread being marked solved.
+ *
+ * @param {string} threadId - The GraphQL PRT_… id of the review thread.
+ * @param {Function} [execFn=ghExec] - Injected exec function for testability.
+ * @returns {*} The raw response from execFn (e.g. `{ data: { resolveReviewThread: ... } }`).
+ * @throws {Error} Re-throws any error from `execFn` so callers can classify
+ *   auth-scope failures (per Task 6) and exit gracefully.
+ */
+function resolveThreadOnGitHub(threadId, execFn = ghExec) {
+  const mutation = `mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}`;
+  return execFn(['api', 'graphql', '-f', `query=${mutation}`, '-f', `threadId=${threadId}`]);
+}
+
+/**
  * Resolve outdated review threads on GitHub via GraphQL mutation.
  * Only called when ENABLE_RESOLVE_OUTDATED_COMMENTS=true.
  */
@@ -1888,6 +1906,7 @@ module.exports = {
   isBlockingPriority,
   getResolvedCommentIds,
   resolveOutdatedThreads,
+  resolveThreadOnGitHub,
   decideNextAction,
   getEffectivePendingBots,
   getAdaptiveInterval,

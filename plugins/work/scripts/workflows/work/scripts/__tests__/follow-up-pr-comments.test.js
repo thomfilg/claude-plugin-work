@@ -727,6 +727,87 @@ describe('follow-up-pr-comments CLI', () => {
       const comment = state.comments.find((c) => c.id === 200);
       assert.equal(comment.status, 'skipped');
     });
+
+    it('--also-resolve-on-github exits 1 when threadId is missing from snapshot', () => {
+      writeExecMock();
+      // Comment without a threadId (older snapshot before Task 4)
+      const comments = [makeComment({ id: 300, threadId: null })];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--mark-locally-solved', '300', 'abc1234', 'fix', '--also-resolve-on-github'],
+        { ...envFor(ctx.tmpDir), FOLLOW_UP_PR_EXEC_MOCK_PATH: mockFile },
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(result.status, 1, `expected exit 1, got ${result.status}; stderr=${result.stderr}`);
+      assert.match(
+        result.stderr,
+        /re-run --snapshot/i,
+        `expected stderr to hint "re-run --snapshot", got: ${result.stderr}`
+      );
+
+      // No mutation should have been invoked
+      const calls = fs.existsSync(sidecarFile)
+        ? JSON.parse(fs.readFileSync(sidecarFile, 'utf8'))
+        : [];
+      assert.equal(calls.length, 0, `expected zero execFn calls, got ${calls.length}`);
+    });
+  });
+
+  // ── Task 6: graceful auth-scope error handling ───────────────────────────
+
+  describe('--also-resolve-on-github auth-scope error (Task 6)', () => {
+    let ctx;
+    let mockFile;
+
+    afterEach(() => {
+      ctx?.cleanup();
+      if (mockFile && fs.existsSync(mockFile)) fs.unlinkSync(mockFile);
+      mockFile = undefined;
+    });
+
+    /** Mock that throws an auth-scope-shaped error so the script must classify it. */
+    function writeThrowingExecMock(message) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fup-mock-throw-'));
+      mockFile = path.join(dir, 'mock-exec.js');
+      const src = `
+        module.exports = function execFn(_args) {
+          const err = new Error(${JSON.stringify(message)});
+          throw err;
+        };
+      `;
+      fs.writeFileSync(mockFile, src);
+    }
+
+    it('--also-resolve-on-github exits gracefully when auth scope insufficient', () => {
+      writeThrowingExecMock('Resource not accessible; must have admin scope repo');
+      const comments = [makeComment({ id: 100, threadId: 'PRT_kwDOABCD123' })];
+      ctx = createTempState(makeState(comments));
+      const result = run(
+        ['--mark-locally-solved', '100', 'abc1234', 'fixed null', '--also-resolve-on-github'],
+        { ...envFor(ctx.tmpDir), FOLLOW_UP_PR_EXEC_MOCK_PATH: mockFile },
+        { cwd: cwdFor(ctx) }
+      );
+
+      // Non-zero exit code
+      assert.notEqual(result.status, 0, `expected non-zero exit; stderr=${result.stderr}`);
+
+      // Memory hint literal appears in stderr
+      assert.match(
+        result.stderr,
+        /\[\[follow-up-stuck-means-human-blocker\]\]/,
+        `expected memory hint in stderr, got: ${result.stderr}`
+      );
+
+      // No Node stack-trace frames (no "at " lines)
+      const stackFrameLines = result.stderr
+        .split('\n')
+        .filter((l) => /^\s*at\s/.test(l));
+      assert.equal(
+        stackFrameLines.length,
+        0,
+        `expected zero stack frame lines in stderr, got: ${stackFrameLines.join('\n')}`
+      );
+    });
   });
 
   // ── Task 3: deprecation warnings on legacy flags ─────────────────────────

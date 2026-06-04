@@ -52,6 +52,14 @@ const DEPRECATION_SKIP_MSG =
   'warning: --skip-comment is renamed to --mark-locally-skipped ' +
   '(no GitHub thread is resolved). Skips are local-only audit trail.';
 
+// ── Auth-scope error classification (Task 6, GH-537) ─────────────────────────
+// gh CLI surfaces insufficient OAuth scope through a variety of phrasings.
+// See the memory note [[follow-up-stuck-means-human-blocker]] — when this
+// pattern matches the thrown error from `resolveReviewThread`, the operator
+// almost certainly needs a human with admin/repo scope (or a re-auth) and
+// the script should exit non-zero WITHOUT a Node stack trace.
+const AUTH_SCOPE_ERROR_PATTERN = /scope|Resource not accessible|must have admin/i;
+
 // ── Config & Paths ───────────────────────────────────────────────────────────
 
 let _safeTicketId;
@@ -492,7 +500,7 @@ function skipLocally(commentId, reason) {
 
 // ── Subcommand: --solve-comment ──────────────────────────────────────────────
 
-function handleSolveComment(rawId, rawSha, rawDesc) {
+function handleSolveComment(rawId, rawSha, rawDesc, opts = {}) {
   const commentId = validateCommentId(rawId);
   if (commentId === null) {
     console.error('Error: Invalid comment ID. Must be a non-empty value.');
@@ -516,12 +524,50 @@ function handleSolveComment(rawId, rawSha, rawDesc) {
   }
 
   console.log(JSON.stringify(payload));
+
+  // GH-537 / Task 5: optional opt-in GitHub thread resolution.
+  if (opts.alsoResolveOnGitHub) {
+    const state = loadState();
+    const comment = state.comments.find((c) => String(c.id) === String(commentId));
+    const threadId = comment && comment.threadId;
+    if (!threadId) {
+      console.error(
+        'Error: comment.threadId missing from snapshot — re-run --snapshot to populate threadId before using --also-resolve-on-github.'
+      );
+      process.exit(1);
+    }
+    const execFn = loadExecFn();
+    const { resolveThreadOnGitHub } = getFollowUpPr();
+    // GH-537 / Task 6: classify auth-scope failures and print a stack-trace-free
+    // hint pointing at the memory note [[follow-up-stuck-means-human-blocker]].
+    try {
+      resolveThreadOnGitHub(threadId, execFn);
+    } catch (err) {
+      const msg = (err && err.message) || String(err);
+      if (AUTH_SCOPE_ERROR_PATTERN.test(msg)) {
+        console.error(
+          `Error: --also-resolve-on-github failed due to insufficient gh CLI auth scope: ${msg}`
+        );
+        console.error(
+          'Hint: see memory note [[follow-up-stuck-means-human-blocker]] — a human with admin/repo scope must resolve this thread, or re-auth gh with the needed scopes.'
+        );
+      } else {
+        console.error(`Error: --also-resolve-on-github failed: ${msg}`);
+        console.error(
+          'Hint: see memory note [[follow-up-stuck-means-human-blocker]].'
+        );
+      }
+      process.exit(1);
+    }
+    console.log(JSON.stringify({ githubResolved: true, threadId }));
+  }
+
   process.exit(0);
 }
 
 // ── Subcommand: --skip-comment ───────────────────────────────────────────────
 
-function handleSkipComment(rawId, rawReason) {
+function handleSkipComment(rawId, rawReason, opts = {}) {
   const commentId = validateCommentId(rawId);
   if (commentId === null) {
     console.error('Error: Invalid comment ID. Must be a non-empty value.');
@@ -539,7 +585,42 @@ function handleSkipComment(rawId, rawReason) {
   }
 
   console.log(JSON.stringify(payload));
+
+  // GH-537 / Task 5: --also-resolve-on-github paired with --mark-locally-skipped
+  // is intentionally a no-op (skips are local-only audit trail).
+  if (opts.alsoResolveOnGitHub) {
+    console.error(
+      'warning: --also-resolve-on-github is a no-op with --mark-locally-skipped — skips are local-only audit trail and never resolve the GitHub thread.'
+    );
+  }
+
   process.exit(0);
+}
+
+// ── --also-resolve-on-github helpers (GH-537 / Task 5) ───────────────────────
+
+/**
+ * Scan argv for the opt-in `--also-resolve-on-github` flag.
+ * @param {string[]} argv
+ * @returns {boolean}
+ */
+function hasAlsoResolveFlag(argv) {
+  return argv.includes('--also-resolve-on-github');
+}
+
+/**
+ * Load the exec function used by resolveThreadOnGitHub. By default this is
+ * the production `ghExec`, but tests inject a mock via
+ * FOLLOW_UP_PR_EXEC_MOCK_PATH (absolute path to a CommonJS module that
+ * exports a function).
+ * @returns {Function}
+ */
+function loadExecFn() {
+  const mockPath = process.env.FOLLOW_UP_PR_EXEC_MOCK_PATH;
+  if (mockPath) {
+    return require(mockPath);
+  }
+  return getFollowUpPr().ghExec;
 }
 
 // ── Subcommand: --status ─────────────────────────────────────────────────────
@@ -635,7 +716,9 @@ function main() {
       if (subcommand === '--solve-comment') {
         console.error(DEPRECATION_SOLVE_MSG);
       }
-      handleSolveComment(argv[1], argv[2], argv[3]);
+      handleSolveComment(argv[1], argv[2], argv[3], {
+        alsoResolveOnGitHub: hasAlsoResolveFlag(argv),
+      });
       break;
     }
 
@@ -649,7 +732,9 @@ function main() {
       if (subcommand === '--skip-comment') {
         console.error(DEPRECATION_SKIP_MSG);
       }
-      handleSkipComment(argv[1], argv[2]);
+      handleSkipComment(argv[1], argv[2], {
+        alsoResolveOnGitHub: hasAlsoResolveFlag(argv),
+      });
       break;
     }
 

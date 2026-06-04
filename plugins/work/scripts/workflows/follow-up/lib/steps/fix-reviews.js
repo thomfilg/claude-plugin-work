@@ -10,7 +10,7 @@
  *   1. Snapshot comments (first call)
  *   2. Get next unsolved comment
  *   3. Return instruction showing exactly ONE comment
- *   4. Agent addresses it using --solve-comment or --skip-comment
+ *   4. Agent addresses it using --mark-locally-solved or --mark-locally-skipped
  *   5. Re-enter → get next → repeat until done
  *   6. If any skipped → block for user review
  */
@@ -177,9 +177,12 @@ module.exports = function registerFixReviews(register) {
     const commentId = comment.id;
     const fileRef = line ? `${filePath}:${line}` : filePath;
 
-    // Build the solve/skip commands the agent must use
-    const solveCmd = `node "${commentsScript}" --solve-comment "${commentId}" "<COMMIT_SHA>" "<description of what you fixed>"`;
-    const skipCmd = `node "${commentsScript}" --skip-comment "${commentId}" "<reason>"`;
+    // Build the solve/skip commands the agent must use.
+    // The new flag names (GH-537) make the local-only scope explicit; the
+    // legacy aliases still work but emit a deprecation warning.
+    const solveCmd = `node "${commentsScript}" --mark-locally-solved "${commentId}" "<COMMIT_SHA>" "<description of what you fixed>"`;
+    const skipCmd = `node "${commentsScript}" --mark-locally-skipped "${commentId}" "<reason>"`;
+    const solveAndResolveCmd = `node "${commentsScript}" --mark-locally-solved "${commentId}" "<COMMIT_SHA>" "<description>" --also-resolve-on-github`;
     const nextCmd = `node "${path.join(__dirname, '..', '..', 'follow-up-next.js')}" "${state.ticketId}"${state.prNumber ? ` --pr ${state.prNumber}` : ''}`;
 
     return {
@@ -206,9 +209,13 @@ module.exports = function registerFixReviews(register) {
           '### Option A — Fix the code:',
           '1. Fix the issue in the specified file',
           '2. Stage and commit: `git add <files> && git commit -m "fix(review): <what you fixed>"`',
-          '3. Then mark as addressed:',
+          '3. Then mark as addressed locally:',
           '```',
           solveCmd,
+          '```',
+          'Note: the default does NOT resolve the GitHub conversation thread — it only updates the local audit trail. To also close the thread on GitHub in one go, pass `--also-resolve-on-github`:',
+          '```',
+          solveAndResolveCmd,
           '```',
           '',
           '### Option B — Skip with reason:',
