@@ -180,3 +180,47 @@ test('synapsys:stats excludes Stop-only memories from Noise candidates', () => {
     fx.cleanup();
   }
 });
+
+// PR #524 cursor[bot] Medium — sections must restrict to memories discovered via --cwd.
+// Other-project / deleted memories must NOT appear in Top influencers or Noise candidates
+// just because their events were written to the global telemetry directory.
+test('synapsys:stats excludes unknown (other-project/deleted) memories from Top and Noise', () => {
+  assert.ok(helpers, 'synapsys-stats.js must export pure helpers');
+  const { parseWindow, aggregate, formatSections } = helpers;
+
+  const fx = makeFixture();
+  try {
+    // Only one memory is discoverable via fx.cwd's store.
+    writeMemoryFile(fx.storeDir, 'known-mem');
+
+    const now = Date.now();
+    const lines = [];
+    // Known memory: looks like a top-influencer.
+    for (let i = 0; i < 3; i++) {
+      lines.push({ ts: new Date(now - 1000 * i).toISOString(), memory: 'known-mem', event: 'fired' });
+      lines.push({ ts: new Date(now - 1000 * i).toISOString(), memory: 'known-mem', event: 'cited', match: 'x' });
+    }
+    // UNKNOWN memory (from another project): high fired + cited.
+    for (let i = 0; i < 4; i++) {
+      lines.push({ ts: new Date(now - 1000 * i).toISOString(), memory: 'other-project-influencer', event: 'fired' });
+      lines.push({ ts: new Date(now - 1000 * i).toISOString(), memory: 'other-project-influencer', event: 'cited', match: 'y' });
+    }
+    // UNKNOWN memory: high fired, zero cited — would otherwise be flagged noise.
+    for (let i = 0; i < 12; i++) {
+      lines.push({ ts: new Date(now - 1000 * i).toISOString(), memory: 'other-project-noise', event: 'fired' });
+    }
+    writeJsonl(path.join(fx.telDir, 'cross-project.jsonl'), lines);
+
+    const out = formatSections(aggregate(fx.cwd, { windowMs: parseWindow('7d') }), { color: false });
+    const topSection = out.split(/Noise candidates/)[0];
+    const noiseSection = out.split(/Noise candidates/)[1].split(/Never-fired/)[0];
+
+    assert.match(topSection, /known-mem/);
+    assert.ok(!/other-project-influencer/.test(topSection),
+      'other-project memory must NOT appear in Top influencers');
+    assert.ok(!/other-project-noise/.test(noiseSection),
+      'other-project memory must NOT appear in Noise candidates');
+  } finally {
+    fx.cleanup();
+  }
+});

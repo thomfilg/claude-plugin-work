@@ -131,8 +131,13 @@ function aggregate(cwd, { windowMs }) {
 function formatSections(stats, { color = false } = {}) {
   const { perMemory } = stats;
 
+  // All three sections must restrict to memories discovered via --cwd
+  // (`m.known`). The global ~/.claude/synapsys/.telemetry/ aggregates events
+  // from every project, so without this filter Top influencers and Noise
+  // candidates would surface deleted or other-project memories that the
+  // current store no longer (or never) owned.
   const top = perMemory
-    .filter((m) => m.cited > 0)
+    .filter((m) => m.known && m.cited > 0)
     .sort((a, b) => {
       if (b.cited !== a.cited) return b.cited - a.cited;
       return b.fired * b.cited - a.fired * a.cited;
@@ -142,7 +147,7 @@ function formatSections(stats, { color = false } = {}) {
   // "tighten triggers" advice does not apply to them, so they're excluded
   // from noise classification regardless of fired count.
   const noise = perMemory
-    .filter((m) => !m.stopOnly && m.fired >= NOISE_FIRED_THRESHOLD && m.cited === 0)
+    .filter((m) => m.known && !m.stopOnly && m.fired >= NOISE_FIRED_THRESHOLD && m.cited === 0)
     .sort((a, b) => b.fired - a.fired);
 
   const never = perMemory
