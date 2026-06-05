@@ -13,187 +13,197 @@
  */
 
 const { discoverStores, listMemoriesFromStore, setupCli } = require('../lib/script-bootstrap');
-const { makePalette } = require('../lib/ansi-palette');
+const { resolveSessionId, loadLedger } = require('../lib/inject-ledger');
 
-/**
- * Pure renderer for the `domain:` line shown per memory in `synapsys-list`.
- *
- * Chosen rendering (per Task 9 AC): memories with a non-empty `domain` array
- * render a `domain: <values>` line (comma-joined); memories with an empty or
- * absent `domain` render NO line (returns null) — cleaner default output.
- *
- * The returned string is pre-styled with the script's dim/magenta palette so
- * callers can just println it; tests strip ANSI for assertions.
- *
- * @param {string[] | null | undefined} domain
- * @param {{ dim?: (s: string) => string, magenta?: (s: string) => string }} [palette]
- * @returns {string | null}
- */
-function formatDomainLine(domain, palette) {
-  if (!Array.isArray(domain) || domain.length === 0) return null;
-  const dim = palette && typeof palette.dim === 'function' ? palette.dim : (s) => s;
-  const magenta = palette && typeof palette.magenta === 'function' ? palette.magenta : (s) => s;
-  return `    ${dim('domain:')}  ${magenta(domain.join(', '))}`;
+const { flag } = setupCli();
+
+// fireIndicator — compact one-char marker + verbose suffix for fire_mode.
+// Compact char: A (always), o (once, default), ~ (occasionally).
+// Verbose string: `fire: <mode>[/<cadence>]   count: <n>` (cadence only when occasionally).
+function fireIndicator(memory, count) {
+  const mode = memory && memory.fireMode ? memory.fireMode : 'once';
+  let char;
+  if (mode === 'always') char = 'A';
+  else if (mode === 'occasionally') char = '~';
+  else char = 'o';
+  const cadence = mode === 'occasionally' ? `/${memory.fireCadence}` : '';
+  const verbose = `fire: ${mode}${cadence}   count: ${count}`;
+  return { char, mode, verbose };
 }
 
-/**
- * Print the verbose detail lines for a single memory (trigger regexes + file path).
- * Extracted to a helper so the per-memory render loop stays shallow (avoids
- * max-depth violations from nesting if-chains inside two for-loops).
- *
- * @param {object} m - memory record
- * @param {object} C - color palette
- */
-function printVerboseDetails(m, C) {
-  if (m.triggerPrompt) {
-    console.log(`    ${C.dim('prompt:')}  ${C.magenta('/' + m.triggerPrompt + '/i')}`);
+// Resolve session id + load ledger once per invocation (fail-open via module).
+let __ledger;
+try {
+  __ledger = loadLedger(resolveSessionId({}));
+} catch {
+  __ledger = { memories: {} };
+}
+function injectedCountFor(name) {
+  try {
+    const e = __ledger && __ledger.memories && __ledger.memories[name];
+    return e && Number.isFinite(Number(e.injectedCount)) ? Number(e.injectedCount) : 0;
+  } catch {
+    return 0;
   }
-  if (m.triggerPretool.length) {
-    console.log(`    ${C.dim('pretool:')} ${C.magenta(m.triggerPretool.join(', '))}`);
-  }
-  if (m.triggerSession) {
-    console.log(`    ${C.dim('session:')} ${C.magenta('yes')}`);
-  }
-  console.log(`    ${C.dim('file:')}    ${C.dim(m.file)}`);
 }
 
-module.exports = { formatDomainLine, printVerboseDetails };
+const cwd = flag('cwd') || process.cwd();
+const json = !!flag('json');
+const verbose = !!flag('verbose');
+const noColor = !!flag('no-color') || process.env.NO_COLOR === '1' || !process.stdout.isTTY;
+const storeFilter = typeof flag('store') === 'string' ? flag('store') : null;
+const eventFilter = typeof flag('event') === 'string' ? flag('event') : null;
 
-// When required (e.g. from tests), skip the CLI side-effects.
-if (require.main === module) {
-  const { flag } = setupCli();
+const stores = discoverStores(cwd);
+let memories = stores.flatMap(listMemoriesFromStore);
+if (storeFilter) memories = memories.filter((m) => m.store.kind === storeFilter);
+if (eventFilter) memories = memories.filter((m) => m.events.includes(eventFilter));
 
-  const cwd = flag('cwd') || process.cwd();
-  const json = !!flag('json');
-  const verbose = !!flag('verbose');
-  const noColor = !!flag('no-color') || process.env.NO_COLOR === '1' || !process.stdout.isTTY;
-  const storeFilter = typeof flag('store') === 'string' ? flag('store') : null;
-  const eventFilter = typeof flag('event') === 'string' ? flag('event') : null;
-
-  const stores = discoverStores(cwd);
-  let memories = stores.flatMap(listMemoriesFromStore);
-  if (storeFilter) memories = memories.filter((m) => m.store.kind === storeFilter);
-  if (eventFilter) memories = memories.filter((m) => m.events.includes(eventFilter));
-
-  if (json) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          stores,
-          memories: memories.map((m) => ({
-            name: m.name,
-            description: m.description,
-            events: m.events,
-            triggerPrompt: m.triggerPrompt,
-            triggerPretool: m.triggerPretool,
-            triggerSession: m.triggerSession,
-            inject: m.inject,
-            domain: Array.isArray(m.domain) ? m.domain : [],
-            store: m.store.kind,
-            file: m.file,
-          })),
-        },
-        null,
-        2
-      )}\n`
-    );
-    process.exit(0);
-  }
-
-  // ─── styling ──────────────────────────────────────────────────────────
-  const C = makePalette(noColor);
-
-  function eventCode(events) {
-    const parts = [];
-    if (events.includes('UserPromptSubmit')) parts.push('UPS');
-    if (events.includes('PreToolUse')) parts.push('PTU');
-    if (events.includes('SessionStart')) parts.push('SS');
-    return parts.join('+');
-  }
-
-  function pad(s, n) {
-    if (s.length >= n) return s.slice(0, n);
-    return s + ' '.repeat(n - s.length);
-  }
-
-  // ─── empty cases ──────────────────────────────────────────────────────
-  if (!stores.length) {
-    console.log(C.yellow('No Synapsys stores installed.'));
-    console.log(C.dim('Run /synapsys:install to create one.'));
-    process.exit(0);
-  }
-
-  if (!memories.length) {
-    for (const s of stores) {
-      console.log(`${C.cyan(s.kind.toUpperCase())} ${C.dim('·')} ${s.dir}`);
-    }
-    console.log(C.dim('\n(no memories — use /synapsys:memorize or /synapsys:crystallize)'));
-    process.exit(0);
-  }
-
-  // ─── compute counts ───────────────────────────────────────────────────
-  const byStore = new Map();
-  for (const s of stores) byStore.set(s.kind, { dir: s.dir, memories: [] });
-  for (const m of memories) {
-    const bucket = byStore.get(m.store.kind);
-    if (bucket) bucket.memories.push(m);
-  }
-
-  let total = 0;
-  let upsCount = 0;
-  let ptuCount = 0;
-  let sessionCount = 0;
-  for (const m of memories) {
-    total++;
-    if (m.events.includes('UserPromptSubmit')) upsCount++;
-    if (m.events.includes('PreToolUse')) ptuCount++;
-    if (m.events.includes('SessionStart')) sessionCount++;
-  }
-
-  // ─── render ───────────────────────────────────────────────────────────
-  const termWidth =
-    process.stdout.columns && process.stdout.columns > 80 ? process.stdout.columns : 100;
-  const longestName = Math.max(...memories.map((m) => m.name.length));
-  const nameWidth = Math.min(50, Math.max(longestName, 20));
-  const eventsWidth = 8;
-
-  for (const [kind, bucket] of byStore.entries()) {
-    if (!bucket.memories.length) continue;
-
-    // Store header
-    console.log(
-      `${C.cyan(C.bold(kind.toUpperCase()))} ${C.dim('·')} ${C.dim(bucket.dir)} ${C.dim('·')} ${bucket.memories.length} memories`
-    );
-    console.log(C.dim('─'.repeat(Math.min(termWidth, 120))));
-    console.log('');
-
-    // Rows: 2 lines per memory + blank line between
-    //   line 1: NAME    EVENTS  I
-    //   line 2:   <full description>
-    bucket.memories.sort((a, b) => a.name.localeCompare(b.name));
-    for (const m of bucket.memories) {
-      const name = pad(m.name, nameWidth);
-      const ev = pad(eventCode(m.events), eventsWidth);
-      const injChar = m.inject === 'full' ? 'F' : 's';
-      const injColored = m.inject === 'full' ? C.bold(C.red(injChar)) : C.gray(injChar);
-      console.log(`  ${C.green(name)}  ${C.yellow(ev)}  ${injColored}`);
-      console.log(`    ${m.description}`);
-
-      const domainLine = formatDomainLine(m.domain, C);
-      if (domainLine) console.log(domainLine);
-
-      if (verbose) printVerboseDetails(m, C);
-      console.log('');
-    }
-  }
-
-  // ─── summary ──────────────────────────────────────────────────────────
-  const summary = `${C.bold(`Total: ${total}`)} ${C.dim('·')} UPS: ${C.yellow(upsCount)} ${C.dim('·')} PTU: ${C.yellow(ptuCount)} ${C.dim('·')} SS: ${C.yellow(sessionCount)}`;
-  console.log(summary);
-  // Build the legend in parts so the inner red/bold "F" doesn't reset the outer
-  // dim attribute (an inner \x1b[0m clears ALL attributes on the rest of the line).
-  const legendTail = verbose ? 'verbose mode (regexes shown)' : 'pass --verbose for triggers';
-  console.log(
-    `${C.dim('Legend: ')}${C.red(C.bold('F'))}${C.dim(` = full inject · s = summary inject · ${legendTail}`)}`
+if (json) {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        stores,
+        memories: memories.map((m) => ({
+          name: m.name,
+          description: m.description,
+          events: m.events,
+          triggerPrompt: m.triggerPrompt,
+          triggerPretool: m.triggerPretool,
+          triggerSession: m.triggerSession,
+          inject: m.inject,
+          fireMode: m.fireMode || 'once',
+          fireCadence: typeof m.fireCadence === 'number' ? m.fireCadence : 5,
+          injectedCount: injectedCountFor(m.name),
+          store: m.store.kind,
+          file: m.file,
+        })),
+      },
+      null,
+      2
+    )}\n`
   );
+  process.exit(0);
 }
+
+// ─── styling ──────────────────────────────────────────────────────────
+const C = noColor
+  ? new Proxy({}, { get: () => (s) => String(s) })
+  : {
+      dim: (s) => `\x1b[2m${s}\x1b[0m`,
+      bold: (s) => `\x1b[1m${s}\x1b[0m`,
+      cyan: (s) => `\x1b[36m${s}\x1b[0m`,
+      green: (s) => `\x1b[32m${s}\x1b[0m`,
+      yellow: (s) => `\x1b[33m${s}\x1b[0m`,
+      magenta: (s) => `\x1b[35m${s}\x1b[0m`,
+      red: (s) => `\x1b[31m${s}\x1b[0m`,
+      blue: (s) => `\x1b[34m${s}\x1b[0m`,
+      gray: (s) => `\x1b[90m${s}\x1b[0m`,
+    };
+
+function eventCode(events) {
+  const parts = [];
+  if (events.includes('UserPromptSubmit')) parts.push('UPS');
+  if (events.includes('PreToolUse')) parts.push('PTU');
+  if (events.includes('SessionStart')) parts.push('SS');
+  return parts.join('+');
+}
+
+function pad(s, n) {
+  if (s.length >= n) return s.slice(0, n);
+  return s + ' '.repeat(n - s.length);
+}
+
+// ─── empty cases ──────────────────────────────────────────────────────
+if (!stores.length) {
+  console.log(C.yellow('No Synapsys stores installed.'));
+  console.log(C.dim('Run /synapsys:install to create one.'));
+  process.exit(0);
+}
+
+if (!memories.length) {
+  for (const s of stores) {
+    console.log(`${C.cyan(s.kind.toUpperCase())} ${C.dim('·')} ${s.dir}`);
+  }
+  console.log(C.dim('\n(no memories — use /synapsys:memorize or /synapsys:crystallize)'));
+  process.exit(0);
+}
+
+// ─── compute counts ───────────────────────────────────────────────────
+const byStore = new Map();
+for (const s of stores) byStore.set(s.kind, { dir: s.dir, memories: [] });
+for (const m of memories) {
+  const bucket = byStore.get(m.store.kind);
+  if (bucket) bucket.memories.push(m);
+}
+
+let total = 0;
+let upsCount = 0;
+let ptuCount = 0;
+let sessionCount = 0;
+for (const m of memories) {
+  total++;
+  if (m.events.includes('UserPromptSubmit')) upsCount++;
+  if (m.events.includes('PreToolUse')) ptuCount++;
+  if (m.events.includes('SessionStart')) sessionCount++;
+}
+
+// ─── render ───────────────────────────────────────────────────────────
+const termWidth =
+  process.stdout.columns && process.stdout.columns > 80 ? process.stdout.columns : 100;
+const longestName = Math.max(...memories.map((m) => m.name.length));
+const nameWidth = Math.min(50, Math.max(longestName, 20));
+const eventsWidth = 8;
+
+for (const [kind, bucket] of byStore.entries()) {
+  if (!bucket.memories.length) continue;
+
+  // Store header
+  console.log(
+    `${C.cyan(C.bold(kind.toUpperCase()))} ${C.dim('·')} ${C.dim(bucket.dir)} ${C.dim('·')} ${bucket.memories.length} memories`
+  );
+  console.log(C.dim('─'.repeat(Math.min(termWidth, 120))));
+  console.log('');
+
+  // Rows: 2 lines per memory + blank line between
+  //   line 1: NAME    EVENTS  I
+  //   line 2:   <full description>
+  bucket.memories.sort((a, b) => a.name.localeCompare(b.name));
+  for (const m of bucket.memories) {
+    const name = pad(m.name, nameWidth);
+    const ev = pad(eventCode(m.events), eventsWidth);
+    const injChar = m.inject === 'full' ? 'F' : 's';
+    const injColored = m.inject === 'full' ? C.bold(C.red(injChar)) : C.gray(injChar);
+    const count = injectedCountFor(m.name);
+    const fi = fireIndicator(m, count);
+    const fireColored =
+      fi.char === 'A'
+        ? C.bold(C.red(fi.char))
+        : fi.char === '~'
+          ? C.yellow(fi.char)
+          : C.gray(fi.char);
+    console.log(`  ${C.green(name)}  ${C.yellow(ev)}  ${injColored} ${fireColored}`);
+    console.log(`    ${m.description}`);
+
+    if (verbose) {
+      console.log(`    ${C.dim(fi.verbose)}`);
+      if (m.triggerPrompt)
+        console.log(`    ${C.dim('prompt:')}  ${C.magenta('/' + m.triggerPrompt + '/i')}`);
+      if (m.triggerPretool.length)
+        console.log(`    ${C.dim('pretool:')} ${C.magenta(m.triggerPretool.join(', '))}`);
+      if (m.triggerSession) console.log(`    ${C.dim('session:')} ${C.magenta('yes')}`);
+      console.log(`    ${C.dim('file:')}    ${C.dim(m.file)}`);
+    }
+    console.log('');
+  }
+}
+
+// ─── summary ──────────────────────────────────────────────────────────
+const summary = `${C.bold(`Total: ${total}`)} ${C.dim('·')} UPS: ${C.yellow(upsCount)} ${C.dim('·')} PTU: ${C.yellow(ptuCount)} ${C.dim('·')} SS: ${C.yellow(sessionCount)}`;
+console.log(summary);
+// Build the legend in parts so the inner red/bold "F" doesn't reset the outer
+// dim attribute (an inner \x1b[0m clears ALL attributes on the rest of the line).
+const legendTail = verbose ? 'verbose mode (regexes shown)' : 'pass --verbose for triggers';
+console.log(
+  `${C.dim('Legend: ')}${C.red(C.bold('F'))}${C.dim(` = full inject · s = summary inject · ${legendTail}`)}`
+);
