@@ -27,6 +27,8 @@ const path = require('node:path');
 const { makeFlag } = require(path.join(__dirname, '..', 'lib', 'cli-args'));
 const memoryStore = require(path.join(__dirname, '..', 'lib', 'memory-store'));
 const matcher = require(path.join(__dirname, '..', 'lib', 'matcher'));
+const { loadDomainRegistry } = require(path.join(__dirname, '..', 'lib', 'domains'));
+const { classifyActiveDomains } = require(path.join(__dirname, '..', 'lib', 'classifier'));
 
 const VALID_EVENTS = new Set(['UserPromptSubmit', 'PreToolUse', 'SessionStart', 'Stop']);
 
@@ -84,7 +86,13 @@ function loadMemories(stores) {
   return all;
 }
 
-function evaluateMemory(memory, event, payload) {
+function evaluateMemory(memory, event, payload, activeDomains) {
+  // Domain gate must run BEFORE per-event trigger checks, mirroring
+  // selectForEvent in the dispatcher hook. Otherwise explain reports
+  // memories as fired that the hook would skip via isDomainMismatch.
+  if (activeDomains && matcher.isDomainMismatch(memory, activeDomains)) {
+    return { fired: false, reason: 'domain-mismatch' };
+  }
   if (event === 'UserPromptSubmit') {
     return matcher.matchPrompt(memory, payload.prompt || '');
   }
@@ -98,6 +106,28 @@ function evaluateMemory(memory, event, payload) {
     return matcher.matchStop(memory);
   }
   return { fired: false, reason: 'events-exclude' };
+}
+
+// Mirror the dispatcher's UserPromptSubmit classification path so the
+// `activeDomains` set fed to evaluateMemory matches what selectForEvent
+// would use at injection time. SessionStart / Stop / PreToolUse: we
+// return undefined (fail-open), same as the hook's passive path on a
+// fresh session with no sticky state.
+function computeActiveDomainsForExplain(event, payload) {
+  if (event !== 'UserPromptSubmit') return undefined;
+  try {
+    const registry = loadDomainRegistry();
+    if (!registry || !registry.roots || registry.roots.size === 0) return undefined;
+    const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
+    const recentToolCalls = Array.isArray(payload.recentToolCalls)
+      ? payload.recentToolCalls
+      : Array.isArray(payload.recent_tool_calls)
+        ? payload.recent_tool_calls
+        : [];
+    return classifyActiveDomains({ prompt, recentToolCalls, registry });
+  } catch {
+    return undefined;
+  }
 }
 
 function truncate(str, max) {
@@ -262,9 +292,10 @@ function main() {
   const memories = applyOnlyFilter(loadMemories(stores), only);
   const payload = buildPayload(event, prompt, tool, toolInput, cwd);
 
+  const activeDomains = computeActiveDomainsForExplain(event, payload);
   const results = memories.map((memory) => ({
     memory,
-    result: evaluateMemory(memory, event, payload),
+    result: evaluateMemory(memory, event, payload, activeDomains),
   }));
 
   const rendered = verbose ? renderVerbose(results, event) : renderTable(results);
