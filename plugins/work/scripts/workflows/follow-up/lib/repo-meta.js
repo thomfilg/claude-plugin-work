@@ -14,6 +14,24 @@
 
 const cp = require('node:child_process');
 
+// Shared trimmed-stdout helper used by both detectDefaultBranch and
+// detectRepoSlug. Swallows non-zero exits / errors and returns '' so callers
+// can fall through to their next probe.
+function runQuiet(cmd, cwd) {
+  try {
+    return cp
+      .execSync(cmd, {
+        cwd,
+        encoding: 'utf8',
+        timeout: 8000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      .trim();
+  } catch {
+    return '';
+  }
+}
+
 // Bug F (GH-508): hardcoding `origin/main` broke repos with non-main default
 // branches (signal3 was scoring against an empty diff). Detect the actual
 // default branch via `gh repo view`, fall back to `git remote show origin`,
@@ -23,23 +41,12 @@ const _detectedDefaultBranch = new Map();
 function detectDefaultBranch(worktreeDir) {
   const key = worktreeDir || process.cwd();
   if (_detectedDefaultBranch.has(key)) return _detectedDefaultBranch.get(key);
-  const runQuiet = (cmd) => {
-    try {
-      return cp
-        .execSync(cmd, {
-          cwd: worktreeDir,
-          encoding: 'utf8',
-          timeout: 8000,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        .trim();
-    } catch {
-      return '';
-    }
-  };
-  let detected = runQuiet('gh repo view --json defaultBranchRef --jq .defaultBranchRef.name');
+  let detected = runQuiet(
+    'gh repo view --json defaultBranchRef --jq .defaultBranchRef.name',
+    worktreeDir
+  );
   if (!detected) {
-    const remote = runQuiet('git remote show origin');
+    const remote = runQuiet('git remote show origin', worktreeDir);
     const m = remote.match(/HEAD branch:\s*(\S+)/);
     if (m && m[1] && m[1] !== '(unknown)') detected = m[1];
   }
@@ -76,21 +83,7 @@ const _repoSlugCache = new Map();
 function detectRepoSlug(worktreeDir) {
   const key = worktreeDir || process.cwd();
   if (_repoSlugCache.has(key)) return _repoSlugCache.get(key);
-  const runQuiet = (cmd) => {
-    try {
-      return cp
-        .execSync(cmd, {
-          cwd: worktreeDir,
-          encoding: 'utf8',
-          timeout: 8000,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        .trim();
-    } catch {
-      return '';
-    }
-  };
-  const json = runQuiet('gh repo view --json owner,name');
+  const json = runQuiet('gh repo view --json owner,name', worktreeDir);
   if (json) {
     try {
       const parsed = JSON.parse(json);
@@ -103,7 +96,7 @@ function detectRepoSlug(worktreeDir) {
       /* fall through to git remote parse */
     }
   }
-  const url = runQuiet('git remote get-url origin');
+  const url = runQuiet('git remote get-url origin', worktreeDir);
   const m = url.match(/[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/);
   if (m) {
     const slug = { owner: m[1], name: m[2] };
