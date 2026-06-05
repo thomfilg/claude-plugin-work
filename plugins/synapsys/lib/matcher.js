@@ -2,6 +2,7 @@
 
 const excludes = require('./matcher-excludes');
 const content = require('./matcher-content');
+const { safeRegex } = require('./matcher-regex');
 
 const extractPretoolContent = content.extractPretoolContent;
 const findContentMatch = content.findContentMatch;
@@ -24,14 +25,6 @@ const hasNegativeContentPatterns = content.hasNegativeContentPatterns;
  * @property {('events-exclude'|'no-prompt-match'|'no-pretool-match'|'no-content-match'|'negative-excludes'|'exclude-matched'|'no-session-trigger'|'expired'|'disabled'|'domain-mismatch')} [reason]
  * @property {Matched} [matched]
  */
-
-function safeRegex(pattern, flags = 'i') {
-  try {
-    return new RegExp(pattern, flags);
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Resolve the deterministic gate ladder: events-exclude → disabled → expired.

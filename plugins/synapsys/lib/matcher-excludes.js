@@ -7,13 +7,7 @@
  * compromising the explainer contract.
  */
 
-function safeRegex(pattern, flags = 'i') {
-  try {
-    return new RegExp(pattern, flags);
-  } catch {
-    return null;
-  }
-}
+const { safeRegex } = require('./matcher-regex');
 
 /**
  * True when the memory carries any exclude signal (resolved prompt/preset
