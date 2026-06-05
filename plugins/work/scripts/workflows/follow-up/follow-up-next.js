@@ -14,9 +14,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const cp = require('child_process');
 
-const { buildChildEnv } = require('../work/scripts/gh-exec');
+const { detectDefaultBranch, loadPrDiffFiles } = require('./lib/repo-meta');
+const { buildClassifierCtx } = require('./lib/classifier-ctx');
 
 if (require.main === module) {
   process.on('uncaughtException', (err) => {
@@ -82,7 +82,9 @@ try {
 }
 
 // ─── Step registry ──────────────────────────────────────────────────────────
-const { runStep, STEPS } = require(path.join(__dirname, 'lib', 'step-registry'));
+const { runStep, STEPS, dispatchStepResult } = require(
+  path.join(__dirname, 'lib', 'step-registry')
+);
 
 // ─── State management ───────────────────────────────────────────────────────
 
@@ -121,121 +123,6 @@ function initState(ticketId, prNumber) {
     infraRetry: { count: 0, attempts: [] },
     startTime: new Date().toISOString(),
   };
-}
-
-// Bug F (GH-508): hardcoding `origin/main` broke repos with non-main default
-// branches (signal3 was scoring against an empty diff). Detect the actual
-// default branch via `gh repo view`, fall back to `git remote show origin`,
-// then to 'main'. Cached per-process — the default branch doesn't change
-// during a single follow-up run.
-const _detectedDefaultBranch = new Map();
-function detectDefaultBranch(worktreeDir) {
-  const key = worktreeDir || process.cwd();
-  if (_detectedDefaultBranch.has(key)) return _detectedDefaultBranch.get(key);
-  const runQuiet = (cmd) => {
-    try {
-      return cp
-        .execSync(cmd, {
-          cwd: worktreeDir,
-          encoding: 'utf8',
-          timeout: 8000,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        .trim();
-    } catch {
-      return '';
-    }
-  };
-  let detected = runQuiet('gh repo view --json defaultBranchRef --jq .defaultBranchRef.name');
-  if (!detected) {
-    const remote = runQuiet('git remote show origin');
-    const m = remote.match(/HEAD branch:\s*(\S+)/);
-    if (m && m[1] && m[1] !== '(unknown)') detected = m[1];
-  }
-  const resolved = detected || 'main';
-  _detectedDefaultBranch.set(key, resolved);
-  return resolved;
-}
-
-// Compute the PR diff file list (origin/<default>...HEAD). Fails open with [].
-function loadPrDiffFiles(worktreeDir) {
-  const branch = detectDefaultBranch(worktreeDir);
-  try {
-    const out = cp.execSync(`git diff --name-only origin/${branch}...HEAD`, {
-      cwd: worktreeDir,
-      encoding: 'utf8',
-      timeout: 10000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    return out.split('\n').filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-// Build a bound exec function matching the shape signal2 / classifier expect:
-//   exec(cmd) -> { stdout, stderr, status }
-function buildExecForCtx(worktreeDir) {
-  return (cmd) => {
-    try {
-      const stdout = cp.execSync(cmd, {
-        cwd: worktreeDir,
-        encoding: 'utf8',
-        timeout: 30000,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: buildChildEnv(),
-      });
-      return { stdout, stderr: '', status: 0 };
-    } catch (err) {
-      return {
-        stdout: (err && err.stdout) || '',
-        stderr: (err && err.stderr) || String((err && err.message) || ''),
-        status: err && typeof err.status === 'number' ? err.status : 1,
-      };
-    }
-  };
-}
-
-// Surface the ctx fields the infra-classifier and infra-retry step depend on.
-// monitor.js populates state._ciFailedJobs / _ciAllJobs / _ciFailedLogs /
-// _ciStatus during its poll; we surface those plus a bound exec and a cached
-// PR diff list so the classifier can run pure (no shell-outs).
-function buildClassifierCtx(state, worktreeDir) {
-  const failedJobs = Array.isArray(state._ciFailedJobs) ? state._ciFailedJobs : [];
-  const firstFailed = failedJobs[0] || {};
-  // PR #542 cursor[bot]: signal3 reads state.failedTests. monitor.js writes
-  // extracted paths to state._ciFailedTests; mirror onto state.failedTests so
-  // the classifier's existing read works without a signature change, and
-  // surface on ctx for future ctx-consumers.
-  const failedTests = Array.isArray(state._ciFailedTests) ? state._ciFailedTests : [];
-  state.failedTests = failedTests;
-  return {
-    allJobs: Array.isArray(state._ciAllJobs) ? state._ciAllJobs : [],
-    prDiffFiles: loadPrDiffFiles(worktreeDir),
-    rawLogs: typeof state._ciFailedLogs === 'string' ? state._ciFailedLogs : '',
-    failedTests,
-    exec: buildExecForCtx(worktreeDir),
-    // Bug C (GH-508): monitor.js records IDs on _ciFailedJobs only — state.runId
-    // is never populated. Read both runId and jobId from the failed-job entry so
-    // signal2's NUMERIC_ID validation receives real IDs instead of undefined.
-    runId: firstFailed.runId || null,
-    jobId: firstFailed.jobId || null,
-    ciStatus: state._ciStatus || null,
-  };
-}
-
-// Dispatch a step result and decide whether the orchestrator loop terminates.
-// Exported for testability (Task 4: action:'surface' is a terminal instruction
-// that stops the loop without marking state.status='complete' — see spec's
-// "API/Interface Changes" section for the surface contract).
-function dispatchStepResult(state, result) {
-  if (result && result.action === 'surface') {
-    return { terminate: true, instruction: result };
-  }
-  if (result && result.action === 'blocked') {
-    return { terminate: true, instruction: result };
-  }
-  return { terminate: false, instruction: result || null };
 }
 
 // ─── Core orchestrator loop ─────────────────────────────────────────────────
@@ -463,12 +350,11 @@ module.exports = {
   getNextInstruction,
   initState,
   dispatchStepResult,
-  // test-only escape hatch — exposes pure helpers for unit testing.
+  // test-only escape hatch — exposes pure helpers for legacy unit tests. Tests
+  // that need a fresh cache should invalidate the require cache for
+  // `./lib/repo-meta` rather than calling a reset method.
   __test__: {
     detectDefaultBranch,
     loadPrDiffFiles,
-    _resetDefaultBranchCache: () => {
-      _detectedDefaultBranch.clear();
-    },
   },
 };

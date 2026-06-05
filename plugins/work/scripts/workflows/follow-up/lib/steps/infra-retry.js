@@ -240,18 +240,23 @@ function needsFreshMonitorBeforeRetry(state, _ctx) {
   return true;
 }
 
-// Bug 542-14: if a prior cycle exhausted infra retries, the spec forbids
-// dispatching fix-ci even if a later classification would otherwise return
-// `code-failure`. Stay in the infra-stuck surface so the human handler
-// resolves it explicitly.
+// Bug 542-14 + 542-21: if a prior cycle exhausted infra retries, the spec
+// forbids dispatching fix-ci even if a later classification would otherwise
+// return `code-failure`. Trigger on either the `exhausted` flag OR a count
+// already at the cap — the flag is only set on infra-suspected exhaustion,
+// but reaching MAX_INFRA_RETRIES via any path counts as exhausted.
 function maybeSurfaceAlreadyExhausted(state) {
-  if (!state.infraRetry || !state.infraRetry.exhausted) return null;
+  if (!state.infraRetry) return null;
+  const retry = state.infraRetry;
+  const atCap = Number(retry.count || 0) >= MAX_INFRA_RETRIES;
+  if (!retry.exhausted && !atCap) return null;
+  retry.exhausted = true;
   state.failureCategory = 'infra-stuck';
   return {
     action: 'surface',
     payload: {
       reason: 'infra-stuck',
-      attempts: state.infraRetry.attempts,
+      attempts: retry.attempts,
       signals: [],
     },
   };

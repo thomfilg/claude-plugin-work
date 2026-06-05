@@ -53,57 +53,9 @@ function buildGenericSurface(state) {
   };
 }
 
-// Bug 542-11: derive repo owner/name from git remote when state didn't carry
-// them — production state never sets repoOwner/repoName, so URLs used to fall
-// back to `OWNER`/`REPO` placeholders. Tries `gh repo view` first, then parses
-// `git remote get-url origin`. Cached per-process.
-const cp = require('node:child_process');
-// Bug 542-13: cache MUST be keyed per-worktree — a single process can serve
-// multiple tickets across multiple worktrees, each pointing at a different
-// origin remote. The prior single-var cache leaked the first worktree's
-// owner/name into every subsequent ticket's diagnostic URLs.
-const _repoSlugCache = new Map();
-function detectRepoSlug(worktreeDir) {
-  const key = worktreeDir || process.cwd();
-  if (_repoSlugCache.has(key)) return _repoSlugCache.get(key);
-  const runQuiet = (cmd) => {
-    try {
-      return cp
-        .execSync(cmd, {
-          cwd: worktreeDir,
-          encoding: 'utf8',
-          timeout: 8000,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        .trim();
-    } catch {
-      return '';
-    }
-  };
-  const json = runQuiet('gh repo view --json owner,name');
-  if (json) {
-    try {
-      const parsed = JSON.parse(json);
-      if (parsed && parsed.owner && parsed.name) {
-        const slug = { owner: parsed.owner.login || parsed.owner, name: parsed.name };
-        _repoSlugCache.set(key, slug);
-        return slug;
-      }
-    } catch {
-      /* fall through to git remote parse */
-    }
-  }
-  const url = runQuiet('git remote get-url origin');
-  const m = url.match(/[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/);
-  if (m) {
-    const slug = { owner: m[1], name: m[2] };
-    _repoSlugCache.set(key, slug);
-    return slug;
-  }
-  const empty = { owner: null, name: null };
-  _repoSlugCache.set(key, empty);
-  return empty;
-}
+// Bug 542-11/542-13: repo owner/name derivation lives in `../repo-meta.js`
+// (shared with follow-up-next.js); per-worktree cached.
+const { detectRepoSlug } = require('../repo-meta');
 
 /** R11: infra-stuck diagnostic bundle. */
 function buildInfraStuckSurface(state, ctx) {

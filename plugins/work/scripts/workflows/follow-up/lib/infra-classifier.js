@@ -293,15 +293,12 @@ function signal4_setupArtifacts(rawLogs) {
  */
 function collectSignals(s, c, failedJobs) {
   const signal4Raw = signal4_setupArtifacts(c.rawLogs || '');
-  // Propagate jobCount (R16): when Signal 4 fires we attach the number of
-  // failing jobs so the step can decide whether to cross-check githubstatus.
-  // We approximate "jobs with setup evidence" by the failing-jobs count —
-  // signal4 fires off raw aggregated logs, not per-job, so this is the best
-  // available proxy without re-fetching per-job logs.
-  const signal4 = {
-    fired: signal4Raw.fired,
-    evidence: { ...signal4Raw.evidence, jobCount: failedJobs.length },
-  };
+  // R16: when signal4 fires, attach a conservative upper bound on
+  // setup-evidence-bearing jobs (we lack per-job logs). jobCount =
+  // min(failedJobs, distinct patterns) — fail-open cross-check.
+  const patternHits = ((signal4Raw.evidence && signal4Raw.evidence.patterns) || []).length;
+  const jobCount = signal4Raw.fired ? Math.min(failedJobs.length, Math.max(patternHits, 1)) : 0;
+  const signal4 = { fired: signal4Raw.fired, evidence: { ...signal4Raw.evidence, jobCount } };
   return {
     signal1: signal1_shardAsymmetry(failedJobs, c.allJobs || []),
     signal2: evaluateSignal2(s, c),

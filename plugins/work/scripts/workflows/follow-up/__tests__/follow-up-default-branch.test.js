@@ -15,6 +15,16 @@ const path = require('node:path');
 const cp = require('node:child_process');
 
 const NEXT_PATH = require.resolve('../follow-up-next.js');
+const REPO_META_PATH = require.resolve('../lib/repo-meta.js');
+
+function freshNext() {
+  // The default-branch + diff helpers cache per-worktree at the module level
+  // of `lib/repo-meta.js`. Drop both modules from the cache so each test gets
+  // a fresh cache (replaces the prior `_resetDefaultBranchCache` escape hatch).
+  delete require.cache[NEXT_PATH];
+  delete require.cache[REPO_META_PATH];
+  return require(NEXT_PATH);
+}
 
 let TMP;
 let WORKTREE;
@@ -55,10 +65,7 @@ describe('follow-up-next — default branch detection (Bug F)', () => {
   });
 
   it('detectDefaultBranch falls back to git remote show origin when gh is unavailable', () => {
-    // Reload module to clear the per-process cache.
-    delete require.cache[NEXT_PATH];
-    const mod = require(NEXT_PATH);
-    mod.__test__._resetDefaultBranchCache();
+    const mod = freshNext();
     const branch = mod.__test__.detectDefaultBranch(WORKTREE);
     // `gh repo view` will fail without auth in the sandbox; fallback path
     // reads `git remote show origin` → returns 'develop'. If gh somehow
@@ -69,9 +76,7 @@ describe('follow-up-next — default branch detection (Bug F)', () => {
   });
 
   it('loadPrDiffFiles uses the detected branch (returns the feature commit file)', () => {
-    delete require.cache[NEXT_PATH];
-    const mod = require(NEXT_PATH);
-    mod.__test__._resetDefaultBranchCache();
+    const mod = freshNext();
     const files = mod.__test__.loadPrDiffFiles(WORKTREE);
     // Diff between origin/develop and HEAD should include new.txt — the
     // hardcoded `origin/main` would have returned [] because no such ref exists.
@@ -87,9 +92,7 @@ describe('follow-up-next — default branch detection (Bug F)', () => {
   it('cache is keyed per worktree, not shared across worktrees', () => {
     // Bug #542-5 (GH-508): the cache used to be a single var, so a second
     // worktree in the same process would receive the first worktree's branch.
-    delete require.cache[NEXT_PATH];
-    const mod = require(NEXT_PATH);
-    mod.__test__._resetDefaultBranchCache();
+    const mod = freshNext();
 
     // Build a second sibling worktree whose origin defaults to `master`.
     const TMP2 = fs.mkdtempSync(path.join(os.tmpdir(), 'fu-default-branch-2-'));
