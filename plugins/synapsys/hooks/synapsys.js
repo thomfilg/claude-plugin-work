@@ -20,13 +20,8 @@ const { discoverStores, listMemoriesFromStore } = require(
   path.join(__dirname, '..', 'lib', 'memory-store')
 );
 const { selectForEvent } = require(path.join(__dirname, '..', 'lib', 'matcher'));
-const { loadDomainRegistry } = require(path.join(__dirname, '..', 'lib', 'domains'));
-const { classifyActiveDomains, classifyWithSticky } = require(
-  path.join(__dirname, '..', 'lib', 'classifier')
-);
-const { loadStickyState, saveStickyState } = require(
-  path.join(__dirname, '..', 'lib', 'sticky-state')
-);
+const { buildActiveDomains } = require(path.join(__dirname, '..', 'lib', 'active-domains'));
+const { saveStickyState } = require(path.join(__dirname, '..', 'lib', 'sticky-state'));
 const injectLedger = require('../lib/inject-ledger');
 const { recordFired } = require(path.join(__dirname, '..', 'lib', 'telemetry'));
 const { runCiteScan } = require(path.join(__dirname, '..', 'lib', 'cite-scan'));
@@ -183,105 +178,17 @@ function getSessionStartHint(event, stores, memories) {
   return null;
 }
 
-// Serialize the PreToolUse invoking tool (`tool_name` + `tool_input`) into a
-// single string so `signal_pretool` regexes match against the tool under
-// execution, not just historical calls. Returns null when the event is not
-// PreToolUse or no tool fields are present.
-function currentToolCallString(event, payload) {
-  if (event !== 'PreToolUse') return null;
-  const toolName = typeof payload.tool_name === 'string' ? payload.tool_name : '';
-  if (!toolName) return null;
-  let inputStr = '';
-  const input = payload.tool_input;
-  if (input != null) {
-    try {
-      inputStr = typeof input === 'string' ? input : JSON.stringify(input);
-    } catch {
-      inputStr = '';
-    }
-  }
-  return `${toolName} ${inputStr}`.trim();
-}
-
-// Merge sticky-active domains for a session into a raw-active set without
-// mutating streaks. Used for non-prompt events where AC5/AC6 hysteresis
-// (which counts "prompts", not arbitrary hook turns) must not advance.
-function mergeStickyActive(rawActive, stickyState, sessionId) {
-  const merged = new Set(rawActive);
-  const session = (stickyState && stickyState[sessionId]) || {};
-  for (const domain of Object.keys(session)) {
-    const entry = session[domain];
-    if (entry && entry.sticky === true) merged.add(domain);
-  }
-  return merged;
-}
-
-function getRecentToolCalls(event, payload) {
-  const baseToolCalls = Array.isArray(payload.recentToolCalls)
-    ? payload.recentToolCalls
-    : Array.isArray(payload.recent_tool_calls)
-      ? payload.recent_tool_calls
-      : [];
-  const currentTool = currentToolCallString(event, payload);
-  return currentTool ? [currentTool, ...baseToolCalls] : baseToolCalls;
-}
-
-function classifyForUserPrompt(ctx) {
-  const { activeDomains, nextStickyState } = classifyWithSticky(ctx);
-  try {
-    saveStickyState({ state: nextStickyState });
-  } catch {
-    // fail-open: persistence failures must not block injection
-  }
-  return { activeDomains };
-}
-
-// SessionStart has no prompt/tool signal yet; Stop/PreToolUse can produce an
-// empty merged set. In either case, returning an empty `activeDomains` would
-// hard-gate every domain-tagged memory. Fail-open with `undefined` so unrelated
-// triggers (trigger_session, trigger_pretool) still fire.
-function passiveActiveDomains(event, payload, registry, stickyState, sessionId) {
-  if (event === 'SessionStart') return undefined;
-  const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
-  const recentToolCalls = getRecentToolCalls(event, payload);
-  const rawActive = classifyActiveDomains({ prompt, recentToolCalls, registry });
-  const activeDomains = mergeStickyActive(rawActive, stickyState, sessionId);
-  if (!activeDomains || activeDomains.size === 0) return undefined;
-  return { activeDomains };
-}
-
+// Build the activeDomains opts for selectForEvent. Delegates to the
+// shared resolver so synapsys-explain stays in lockstep. Uses the
+// injectLedger session-id resolver so sticky-state, ledger, and telemetry
+// all key off the same session, and persists the next sticky state on
+// UserPromptSubmit via saveStickyState (the read-only CLI omits this).
 function buildActiveDomainsForPayload(event, payload) {
-  try {
-    const registry = loadDomainRegistry();
-    if (!registry || !registry.roots || registry.roots.size === 0) return undefined;
-
-    // Use the same resolver as injectLedger so sticky-state, ledger, and
-    // telemetry all key off the same session id. The raw payload fallback
-    // (`payload.session_id || 'default'`) diverged from resolveSessionId,
-    // breaking hysteresis carry-over across hook invocations in the same
-    // session. Fail-open to 'default' if the resolver throws.
-    let sessionId;
-    try {
-      sessionId = injectLedger.resolveSessionId(payload);
-    } catch {
-      sessionId = 'default';
-    }
-    const stickyState = loadStickyState();
-
-    if (event === 'UserPromptSubmit') {
-      return classifyForUserPrompt({
-        prompt: typeof payload.prompt === 'string' ? payload.prompt : '',
-        recentToolCalls: getRecentToolCalls(event, payload),
-        registry,
-        stickyState,
-        sessionId,
-      });
-    }
-
-    return passiveActiveDomains(event, payload, registry, stickyState, sessionId);
-  } catch {
-    return undefined;
-  }
+  const activeDomains = buildActiveDomains(event, payload, {
+    resolveSessionId: injectLedger.resolveSessionId,
+    onPersistSticky: (state) => saveStickyState({ state }),
+  });
+  return activeDomains ? { activeDomains } : undefined;
 }
 
 function formatMatchedOutput(matched, sessionId) {

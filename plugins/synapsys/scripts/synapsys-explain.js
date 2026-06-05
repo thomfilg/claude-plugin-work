@@ -27,8 +27,7 @@ const path = require('node:path');
 const { makeFlag } = require(path.join(__dirname, '..', 'lib', 'cli-args'));
 const memoryStore = require(path.join(__dirname, '..', 'lib', 'memory-store'));
 const matcher = require(path.join(__dirname, '..', 'lib', 'matcher'));
-const { loadDomainRegistry } = require(path.join(__dirname, '..', 'lib', 'domains'));
-const { classifyActiveDomains } = require(path.join(__dirname, '..', 'lib', 'classifier'));
+const { buildActiveDomains } = require(path.join(__dirname, '..', 'lib', 'active-domains'));
 
 const VALID_EVENTS = new Set(['UserPromptSubmit', 'PreToolUse', 'SessionStart', 'Stop']);
 
@@ -108,26 +107,12 @@ function evaluateMemory(memory, event, payload, activeDomains) {
   return { fired: false, reason: 'events-exclude' };
 }
 
-// Mirror the dispatcher's UserPromptSubmit classification path so the
-// `activeDomains` set fed to evaluateMemory matches what selectForEvent
-// would use at injection time. SessionStart / Stop / PreToolUse: we
-// return undefined (fail-open), same as the hook's passive path on a
-// fresh session with no sticky state.
+// Read-only activeDomains resolver — uses the same shared helper as the
+// dispatcher so explain's domain gate agrees with what selectForEvent
+// would do at injection time. `onPersistSticky` is omitted so the CLI
+// never mutates sticky state (diagnostic-only).
 function computeActiveDomainsForExplain(event, payload) {
-  if (event !== 'UserPromptSubmit') return undefined;
-  try {
-    const registry = loadDomainRegistry();
-    if (!registry || !registry.roots || registry.roots.size === 0) return undefined;
-    const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
-    const recentToolCalls = Array.isArray(payload.recentToolCalls)
-      ? payload.recentToolCalls
-      : Array.isArray(payload.recent_tool_calls)
-        ? payload.recent_tool_calls
-        : [];
-    return classifyActiveDomains({ prompt, recentToolCalls, registry });
-  } catch {
-    return undefined;
-  }
+  return buildActiveDomains(event, payload);
 }
 
 function truncate(str, max) {
