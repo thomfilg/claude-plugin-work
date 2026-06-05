@@ -28,6 +28,9 @@ const { makeFlag } = require(path.join(__dirname, '..', 'lib', 'cli-args'));
 const memoryStore = require(path.join(__dirname, '..', 'lib', 'memory-store'));
 const matcher = require(path.join(__dirname, '..', 'lib', 'matcher'));
 const { buildActiveDomains } = require(path.join(__dirname, '..', 'lib', 'active-domains'));
+const { resolveSessionId: ledgerResolveSessionId } = require(
+  path.join(__dirname, '..', 'lib', 'inject-ledger')
+);
 
 const VALID_EVENTS = new Set(['UserPromptSubmit', 'PreToolUse', 'SessionStart', 'Stop']);
 
@@ -109,10 +112,13 @@ function evaluateMemory(memory, event, payload, activeDomains) {
 
 // Read-only activeDomains resolver — uses the same shared helper as the
 // dispatcher so explain's domain gate agrees with what selectForEvent
-// would do at injection time. `onPersistSticky` is omitted so the CLI
-// never mutates sticky state (diagnostic-only).
+// would do at injection time. Passes the inject-ledger session resolver
+// so sticky-state is read under the SAME bucket the dispatcher writes
+// to (without it, explain reads the 'default' bucket and disagrees with
+// live hysteresis). `onPersistSticky` is omitted so the CLI never
+// mutates sticky state (diagnostic-only).
 function computeActiveDomainsForExplain(event, payload) {
-  return buildActiveDomains(event, payload);
+  return buildActiveDomains(event, payload, { resolveSessionId: ledgerResolveSessionId });
 }
 
 function truncate(str, max) {
