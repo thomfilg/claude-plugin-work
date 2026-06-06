@@ -144,7 +144,7 @@ After adding `exclude_preset`, replay the trigger against a colliding prompt to 
 ```bash
 node plugins/synapsys/scripts/synapsys-explain.js \
   --event=UserPromptSubmit \
-  --prompt="rebasing onto main" \
+  --prompt="git rebase onto main" \
   --only=read-envrc-first --verbose
 # expect: Fired ✗ — reason cites the matched exclude_preset pattern.
 ```
