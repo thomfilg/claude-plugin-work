@@ -355,10 +355,7 @@ function runTestCommandWithOutput(cmd) {
 
 // GH-532 — RED load-failure heuristic. Shared with future
 // `enforce-tdd-on-stop.js` consumer via `lib/red-load-failure.js`.
-const {
-  detectRedLoadFailure,
-  extractLoadFailureSnippet,
-} = require('./lib/red-load-failure');
+const { detectRedLoadFailure, extractLoadFailureSnippet } = require('./lib/red-load-failure');
 
 /**
  * Build the rejection diagnostic for a RED load-failure. Multi-sentence,
@@ -631,15 +628,17 @@ function cmdRecordRed(ticketId, args) {
   // GH-532: reject fake-RED caused by load failures (ReferenceError /
   // SyntaxError / Cannot find module / 0 tests reported). These exit
   // non-zero but the test file never actually ran an assertion.
-  const combinedOutput = (stdout || '') + '\n' + (stderr || '');
-  const loadFailure = detectRedLoadFailure(combinedOutput);
+  // Scan stdout and stderr independently — concatenating them can leak
+  // an unclosed YAML-envelope state across the seam when stdout is
+  // truncated (timeout / signal) and mask a real stderr load failure.
+  const loadFailure = detectRedLoadFailure({ stdout, stderr });
   if (loadFailure.matched) {
     rejectRedLoadFailure({
       ticketId,
       cycle: state.currentCycle,
       testCommand: cmd,
       signature: loadFailure.signature,
-      snippet: extractLoadFailureSnippet(combinedOutput, loadFailure.signature),
+      snippet: extractLoadFailureSnippet(loadFailure.line),
       taskNum,
     });
   }
@@ -680,8 +679,7 @@ function cmdRecordRed(ticketId, args) {
 function cmdRecordRedSynthesized(ticketId, args, cmd, taskNum, opts) {
   // Validate reason (mirrors cmdException). Empty/missing → BYPASS, no audit.
   const reasonIdx = args.indexOf('--reason');
-  const reason =
-    reasonIdx !== -1 && reasonIdx + 1 < args.length ? args[reasonIdx + 1] : undefined;
+  const reason = reasonIdx !== -1 && reasonIdx + 1 < args.length ? args[reasonIdx + 1] : undefined;
   if (!reason || !reason.trim()) {
     // Write a BYPASS: line to stderr so callers see the recovery hint. Do NOT
     // append an audit row — fail-closed: no justification ⇒ no record.

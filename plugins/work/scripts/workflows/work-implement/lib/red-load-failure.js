@@ -79,34 +79,39 @@ function matchLoadFailureSignature(line) {
 }
 
 /**
- * Scan combined stdout+stderr line-by-line for a RED-load-failure signature.
+ * State-machine predicate: should this line be skipped by the scanner?
  *
- * Lines ignored:
+ * Lines skipped:
  *   - stack frames matching /^\s+at\s/ — a `ReferenceError:` thrown inside
  *     a passing test's `assert.throws` reports the type name on a stack
  *     frame; we don't want that to count as a top-level load failure.
- *   - lines inside any node:test YAML diagnostic block, bracketed by `---`
- *     (open) and `...` (close). A failing test's `error: |-` payload may
- *     literally include `ReferenceError:` (when the test body raised one);
- *     that is a real RED, not a load failure.
+ *   - lines inside an indented node:test YAML diagnostic block, bracketed
+ *     by an indented `---` (open) and an indented `...` (close). A failing
+ *     test's `error: |-` payload may literally include `ReferenceError:`
+ *     (when the test body raised one); that is a real RED, not a load
+ *     failure. Top-level (unindented) `---` / `...` lines do NOT open or
+ *     close YAML — they're just dividers in test output (Bug 9).
  *   - lines inside a contiguous `details:` block — kept as a defensive
  *     fallback for runners that emit `details:` outside the YAML envelope.
  *
- * Fail-closed: if the scan throws unexpectedly, return a match with
- * signature `'scan-error'` so the recorder rejects rather than silently
- * accepting the RED.
+ * Mutates `state` in place.
  *
- * @param {string} output combined stdout + '\n' + stderr
- * @returns {{ matched: boolean, signature: string|null }}
+ * @param {string} line raw output line
+ * @param {{ inYamlBlock: boolean, inDetailsBlock: boolean, detailsBaseIndent: number }} state
+ * @returns {boolean} true if the line should be skipped
  */
 function shouldSkipLine(line, state) {
   if (/^\s+at\s/.test(line)) return true;
-  const trimmed = line.trim();
+  // TAP YAML envelopes are ALWAYS indented under the preceding `not ok` line.
+  // Require leading whitespace for the `---` opener and the `...` closer so a
+  // top-level, unindented `---` in test output (a divider, a meta-test
+  // fixture) does NOT silently swallow a real load-failure signature that
+  // follows it (Bug 9).
   if (state.inYamlBlock) {
-    if (trimmed === '...') state.inYamlBlock = false;
+    if (/^\s+\.\.\.\s*$/.test(line)) state.inYamlBlock = false;
     return true;
   }
-  if (trimmed === '---') {
+  if (/^\s+---\s*$/.test(line)) {
     state.inYamlBlock = true;
     return true;
   }
@@ -127,48 +132,73 @@ function shouldSkipLine(line, state) {
   return false;
 }
 
-function detectRedLoadFailure(output) {
-  try {
-    if (typeof output !== 'string' || output.length === 0) {
-      return { matched: false, signature: null };
-    }
-    const state = { inYamlBlock: false, inDetailsBlock: false, detailsBaseIndent: -1 };
-    for (const line of output.split(/\r?\n/)) {
-      if (shouldSkipLine(line, state)) continue;
-      const hit = matchLoadFailureSignature(line);
-      if (hit.matched) return hit;
-    }
-    return { matched: false, signature: null };
-  } catch {
-    return { matched: true, signature: 'scan-error' };
+/**
+ * Scan a single string (stdout OR stderr — never the concatenation) for a
+ * load-failure signature. Returns the matched line alongside the signature
+ * so the audit row's `meta.snippet` can quote exactly the line the detector
+ * matched, not a heuristic re-scan that may disagree (Bug 6).
+ *
+ * The scan is total over `string` (string split + regex test + integer
+ * indexes don't throw), so there is no try/catch fail-closed branch — a
+ * defensive catch here would be unreachable and pollute the audit row's
+ * `signature` field with a `'scan-error'` value no upstream consumer
+ * matches against (Bug 8).
+ *
+ * @param {string} stream a single stream's contents
+ * @returns {{ matched: boolean, signature: string|null, line: string|null }}
+ */
+function scanStream(stream) {
+  if (typeof stream !== 'string' || stream.length === 0) {
+    return { matched: false, signature: null, line: null };
   }
+  const state = { inYamlBlock: false, inDetailsBlock: false, detailsBaseIndent: -1 };
+  for (const line of stream.split(/\r?\n/)) {
+    if (shouldSkipLine(line, state)) continue;
+    const hit = matchLoadFailureSignature(line);
+    if (hit.matched) {
+      return { matched: true, signature: hit.signature, line };
+    }
+  }
+  return { matched: false, signature: null, line: null };
 }
 
 /**
- * Extract a short (~200 char) snippet of the matched line(s) from the
- * combined runner output for audit-row `meta.snippet`.
+ * Detect a RED-load failure across stdout and stderr. Each stream is scanned
+ * INDEPENDENTLY so an unclosed YAML envelope at the end of a truncated stdout
+ * cannot leak `inYamlBlock=true` state across the seam and silently swallow
+ * a real load-failure signature on stderr (Bug 7).
  *
- * @param {string} output combined stdout+stderr
- * @param {string} signatureName one of RED_LOAD_FAILURE_PATTERNS[].name
+ * Accepts either:
+ *   - a single string (legacy callers): treated as stdout.
+ *   - an object `{ stdout, stderr }`: scanned independently; stdout wins ties.
+ *
+ * @param {string | { stdout?: string, stderr?: string }} output
+ * @returns {{ matched: boolean, signature: string|null, line: string|null }}
+ */
+function detectRedLoadFailure(output) {
+  const streams =
+    typeof output === 'string' ? [output] : [output && output.stdout, output && output.stderr];
+  for (const stream of streams) {
+    const hit = scanStream(stream);
+    if (hit.matched) return hit;
+  }
+  return { matched: false, signature: null, line: null };
+}
+
+/**
+ * Trim and cap a detector-matched line for use as the audit row's
+ * `meta.snippet`. Callers MUST pass the line returned by
+ * `detectRedLoadFailure(...).line` so the snippet quotes exactly what the
+ * detector matched — not a second independent scan that may disagree on
+ * which line triggered (Bug 6).
+ *
+ * @param {string|null|undefined} matchedLine the `.line` field from detectRedLoadFailure
  * @returns {string}
  */
-function extractLoadFailureSnippet(output, signatureName) {
+function extractLoadFailureSnippet(matchedLine) {
   const MAX = 200;
-  try {
-    if (typeof output !== 'string' || output.length === 0) return '';
-    const pattern = RED_LOAD_FAILURE_PATTERNS.find((p) => p.name === signatureName);
-    if (!pattern) return output.slice(0, MAX);
-    const lines = output.split(/\r?\n/);
-    for (const line of lines) {
-      if (/^\s+at\s/.test(line)) continue;
-      if (pattern.regex.test(line)) {
-        return line.trim().slice(0, MAX);
-      }
-    }
-    return output.slice(0, MAX);
-  } catch {
-    return '';
-  }
+  if (typeof matchedLine !== 'string' || matchedLine.length === 0) return '';
+  return matchedLine.trim().slice(0, MAX);
 }
 
 module.exports = {

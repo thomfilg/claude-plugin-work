@@ -434,4 +434,110 @@ describe('tdd-phase-state record-red — load-failure rejection (GH-532)', () =>
     const cycle = state.cycles.find((c) => c.cycle === state.currentCycle);
     assert.ok(cycle && cycle.red, 'record.red must be persisted for runtime RED');
   });
+
+  it('Audit snippet quotes the line the detector actually matched (Bug 6)', () => {
+    // The detector skips ReferenceError: lines inside a YAML envelope and
+    // matches the SECOND ReferenceError: line below (the unindented one).
+    // The audit row's meta.snippet must quote the matched line — NOT the
+    // earlier YAML-enveloped one. Otherwise operators debugging from
+    // .work-actions.json chase the wrong cause.
+    runCli('init GH-532-SNIP', homeDir);
+    const tap =
+      'TAP version 13\n' +
+      '# Subtest: a real failing test\n' +
+      'not ok 1 - a real failing test\n' +
+      '  ---\n' +
+      '  duration_ms: 0.5\n' +
+      '  error: |-\n' +
+      '    ReferenceError: enveloped runtime error\n' +
+      '  ...\n' +
+      'ReferenceError: top-level load crash here\n' +
+      '# tests 1\n' +
+      '# pass 0\n' +
+      '# fail 1\n';
+    const script = createOutputScript(scriptDir, 'snippet-mismatch', {
+      stdout: tap,
+      exitCode: 1,
+    });
+    const { exitCode } = runCli(`record-red GH-532-SNIP --cmd "${script}"`, homeDir, repo);
+    assert.strictEqual(exitCode, 1, 'expected rejection');
+    const actions = JSON.parse(
+      fs.readFileSync(
+        path.join(homeDir, 'worktrees', 'tasks', 'GH-532-SNIP', '.work-actions.json'),
+        'utf8'
+      )
+    );
+    const row = actions.find((a) => a.action === 'tdd-red-load-failure-rejected');
+    assert.ok(row, 'expected rejection audit row');
+    assert.ok(
+      /top-level load crash here/.test(row.meta.snippet),
+      `snippet must quote the matched (top-level) line, got: ${row.meta.snippet}`
+    );
+    assert.ok(
+      !/enveloped runtime error/.test(row.meta.snippet),
+      `snippet must NOT quote a YAML-enveloped line the detector skipped, got: ${row.meta.snippet}`
+    );
+  });
+
+  it('stderr load failure is detected even when stdout truncates mid-YAML (Bug 7)', () => {
+    // Test runner killed mid-YAML (timeout/signal) so stdout ends INSIDE a
+    // `---` envelope without ever emitting `...`. The real load failure
+    // surfaces on stderr. If detector state carries across the stdout→stderr
+    // seam, the stderr ReferenceError: gets skipped → real fault masked.
+    runCli('init GH-532-TRUNC', homeDir);
+    const truncatedStdout =
+      'TAP version 13\n' +
+      '# Subtest: hung test\n' +
+      'not ok 1 - hung test\n' +
+      '  ---\n' +
+      '  duration_ms: 4999\n' +
+      '  error: |-\n' +
+      '    timeout\n';
+    const stderr = 'ReferenceError: setupStagedHook is not defined\n';
+    const script = createOutputScript(scriptDir, 'truncated-yaml', {
+      stdout: truncatedStdout,
+      stderr,
+      exitCode: 1,
+    });
+    const { exitCode, stderr: rejStderr } = runCli(
+      `record-red GH-532-TRUNC --cmd "${script}"`,
+      homeDir,
+      repo
+    );
+    assert.strictEqual(
+      exitCode,
+      1,
+      `truncated-stdout-then-stderr load failure must be rejected, got stderr: ${rejStderr}`
+    );
+    assert.ok(
+      /ReferenceError/.test(rejStderr),
+      `expected ReferenceError diagnostic, got: ${rejStderr}`
+    );
+  });
+
+  it('Unindented "---" in test output does not open a YAML envelope (Bug 9)', () => {
+    // A test prints a top-level divider `---` followed by a load-failure
+    // signature. The TAP YAML envelope is ALWAYS indented under `not ok`;
+    // an unindented `---` is just a divider. The detector must not treat
+    // it as a YAML opener and silently swallow the subsequent
+    // ReferenceError:.
+    runCli('init GH-532-DIV', homeDir);
+    const stdout =
+      'TAP version 13\n' +
+      '---\n' +
+      'ReferenceError: simulated load error in test fixture\n' +
+      '...\n' +
+      '# tests 0\n';
+    const script = createOutputScript(scriptDir, 'unindented-divider', {
+      stdout,
+      exitCode: 1,
+    });
+    const { exitCode, stderr } = runCli(`record-red GH-532-DIV --cmd "${script}"`, homeDir, repo);
+    assert.strictEqual(
+      exitCode,
+      1,
+      `unindented "---" must not gate the ReferenceError, got stderr: ${stderr}`
+    );
+    assert.ok(/ReferenceError/.test(stderr), `expected ReferenceError diagnostic, got: ${stderr}`);
+  });
 });
