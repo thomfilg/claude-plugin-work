@@ -23,7 +23,7 @@ const CLASSIFIER_PATH = require.resolve('../lib/infra-classifier');
 const GET_CONFIG_PATH = require.resolve(path.resolve(__dirname, '..', '..', 'lib', 'get-config'));
 const GH_ACTIONS_STATUS_PATH = path.resolve(__dirname, '..', 'lib', 'gh-actions-status.js');
 
-function loadStep({ envFlag, classifyImpl, ghActionsStatusImpl } = {}) {
+function loadStep({ classifyImpl, ghActionsStatusImpl } = {}) {
   delete require.cache[STEP_PATH];
   delete require.cache[CLASSIFIER_PATH];
   delete require.cache[GET_CONFIG_PATH];
@@ -50,10 +50,7 @@ function loadStep({ envFlag, classifyImpl, ghActionsStatusImpl } = {}) {
     exports: { classify, __test__: {} },
   };
 
-  const getConfig = (key) => {
-    if (key === 'WORK_AUTO_RETRY_INFRA') return envFlag;
-    return undefined;
-  };
+  const getConfig = () => undefined;
   require.cache[GET_CONFIG_PATH] = {
     id: GET_CONFIG_PATH,
     filename: GET_CONFIG_PATH,
@@ -103,7 +100,6 @@ function captureStderr(fn) {
 describe('infra-retry — Task 7 telemetry / retry-success log / gh-actions outage (RED)', () => {
   it('7.1: appends telemetry entry to state.history[] on classify', () => {
     const { handler } = loadStep({
-      envFlag: 'true',
       classifyImpl: () => ({
         classification: 'infra-suspected',
         signals: ['signal1', 'signal2'],
@@ -127,7 +123,6 @@ describe('infra-retry — Task 7 telemetry / retry-success log / gh-actions outa
 
   it('7.2: retry-success branch writes "auto-retry: infra flake confirmed" to stderr', () => {
     const { handler } = loadStep({
-      envFlag: 'true',
       classifyImpl: () => ({
         classification: 'infra-suspected',
         signals: ['signal1', 'signal2'],
@@ -164,7 +159,6 @@ describe('infra-retry — Task 7 telemetry / retry-success log / gh-actions outa
 
   it('7.3: signal4 across ≥2 jobs + gh actions degraded → action:surface, no retry consumed', () => {
     const { handler, ghActionsCalls } = loadStep({
-      envFlag: 'true',
       classifyImpl: () => ({
         classification: 'infra-suspected',
         signals: ['signal4'],

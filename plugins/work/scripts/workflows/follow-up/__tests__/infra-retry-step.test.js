@@ -3,11 +3,14 @@
 /**
  * Tests for the infra-retry step handler.
  *
- * Deliverable 3.1.1 (RED): short-circuit / bypass cases (1-4).
- *  1. WORK_AUTO_RETRY_INFRA unset → return null, no classify call.
- *  2. failureCategory='conflict' → return null, no classify.
- *  3. failureCategory='review_failure' → return null, no classify.
- *  4. classify() returns 'code-failure' → return null.
+ * Short-circuit / bypass cases:
+ *  1. failureCategory='conflict' → return null, no classify.
+ *  2. failureCategory='review_failure' → return null, no classify.
+ *  3. classify() returns 'code-failure' → return null.
+ *
+ * Note: the WORK_AUTO_RETRY_INFRA opt-in flag was removed (GH-508 design
+ * decision). Auto-retry is always on, gated by signal floor + retry cap +
+ * exhaustion surface.
  */
 
 const { describe, it } = require('node:test');
@@ -19,7 +22,7 @@ const STEP_PATH = require.resolve('../lib/steps/infra-retry');
 const CLASSIFIER_PATH = require.resolve('../lib/infra-classifier');
 const GET_CONFIG_PATH = require.resolve(path.resolve(__dirname, '..', '..', 'lib', 'get-config'));
 
-function loadStep({ envFlag, classifyImpl }) {
+function loadStep({ classifyImpl } = {}) {
   // Clear caches so each test gets a fresh module wired to fresh mocks.
   delete require.cache[STEP_PATH];
   delete require.cache[CLASSIFIER_PATH];
@@ -41,16 +44,13 @@ function loadStep({ envFlag, classifyImpl }) {
     exports: { classify, __test__: {} },
   };
 
-  // Patch get-config to control WORK_AUTO_RETRY_INFRA without touching env.
-  const getConfig = (key) => {
-    if (key === 'WORK_AUTO_RETRY_INFRA') return envFlag;
-    return undefined;
-  };
+  // Stub get-config — opt-in flag was removed, only WORK_INFRA_RETRY_FALLBACK
+  // remains (defaulted via undefined).
   require.cache[GET_CONFIG_PATH] = {
     id: GET_CONFIG_PATH,
     filename: GET_CONFIG_PATH,
     loaded: true,
-    exports: getConfig,
+    exports: () => undefined,
   };
 
   const stepModule = require(STEP_PATH);
@@ -62,35 +62,25 @@ function loadStep({ envFlag, classifyImpl }) {
   return { handler: handlers['infra-retry'], classifyCalls };
 }
 
-describe('infra-retry step — short-circuits and bypasses (RED 3.1.1)', () => {
-  it('case 1: WORK_AUTO_RETRY_INFRA unset → returns null and never calls classify', () => {
-    const { handler, classifyCalls } = loadStep({ envFlag: undefined });
-    const state = { failureCategory: 'ci_failure', infraRetry: { count: 0, attempts: [] } };
-    const ctx = {};
-    const result = handler(state, ctx);
-    assert.equal(result, null);
-    assert.equal(classifyCalls.length, 0, 'classify must not be invoked when feature is off');
-  });
-
-  it('case 2: failureCategory=conflict → returns null and never calls classify', () => {
-    const { handler, classifyCalls } = loadStep({ envFlag: 'true' });
+describe('infra-retry step — short-circuits and bypasses', () => {
+  it('case 1: failureCategory=conflict → returns null and never calls classify', () => {
+    const { handler, classifyCalls } = loadStep();
     const state = { failureCategory: 'conflict' };
     const result = handler(state, {});
     assert.equal(result, null);
     assert.equal(classifyCalls.length, 0, 'merge conflicts bypass classifier entirely');
   });
 
-  it('case 3: failureCategory=review_failure → returns null and never calls classify', () => {
-    const { handler, classifyCalls } = loadStep({ envFlag: 'true' });
+  it('case 2: failureCategory=review_failure → returns null and never calls classify', () => {
+    const { handler, classifyCalls } = loadStep();
     const state = { failureCategory: 'review_failure' };
     const result = handler(state, {});
     assert.equal(result, null);
     assert.equal(classifyCalls.length, 0, 'review failures bypass classifier entirely');
   });
 
-  it('case 4: classify returns code-failure → returns null (no retry dispatched)', () => {
+  it('case 3: classify returns code-failure → returns null (no retry dispatched)', () => {
     const { handler, classifyCalls } = loadStep({
-      envFlag: 'true',
       classifyImpl: () => ({ classification: 'code-failure', signals: [], evidence: {} }),
     });
     const state = {
@@ -112,7 +102,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
   });
 
   it('case 5: attempt 0 → 1 — records attempt, currentStep=monitor, delegate calls `gh run rerun <id> --failed`', () => {
-    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const { handler } = loadStep({ classifyImpl: infraSuspected });
     const state = {
       ticketId: 'GH-508',
       failureCategory: 'ci_failure',
@@ -138,7 +128,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
   });
 
   it('case 6: attempt 1 → 2', () => {
-    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const { handler } = loadStep({ classifyImpl: infraSuspected });
     const state = {
       ticketId: 'GH-508',
       failureCategory: 'ci_failure',
@@ -167,7 +157,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
   });
 
   it('case 7: attempt 2 → 3', () => {
-    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const { handler } = loadStep({ classifyImpl: infraSuspected });
     const state = {
       ticketId: 'GH-508',
       failureCategory: 'ci_failure',
@@ -203,7 +193,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
   });
 
   it('case 8: attempt 3 → exhausted (surface + failureCategory=infra-stuck, no fix-ci)', () => {
-    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const { handler } = loadStep({ classifyImpl: infraSuspected });
     const state = {
       ticketId: 'GH-508',
       failureCategory: 'ci_failure',
@@ -254,7 +244,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
   });
 
   it('case 5b: derives runId from state._ciFailedJobs[0].runId when state.runId is unset', () => {
-    const { handler } = loadStep({ envFlag: 'true', classifyImpl: infraSuspected });
+    const { handler } = loadStep({ classifyImpl: infraSuspected });
     const state = {
       ticketId: 'GH-508',
       failureCategory: 'ci_failure',
@@ -274,10 +264,7 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
   });
 
   it('case 9: prior retry succeeded → marks last attempt outcome=succeeded and advances normally', () => {
-    const { handler, classifyCalls } = loadStep({
-      envFlag: 'true',
-      classifyImpl: infraSuspected,
-    });
+    const { handler, classifyCalls } = loadStep({ classifyImpl: infraSuspected });
     const state = {
       ticketId: 'GH-508',
       failureCategory: 'ci_failure',

@@ -25,21 +25,15 @@ const NUMERIC_RUN_ID = /^\d+$/;
 /**
  * Categories that bypass the infra-retry step entirely — these failures are
  * not infrastructure-related and have dedicated handling elsewhere.
+ *
+ * Note: previously gated additionally by WORK_AUTO_RETRY_INFRA env flag. The
+ * flag was removed (always-on per user decision GH-508) — the signal floor
+ * (≥2 of 4 INFRA_SUSPECTED_PAIRS), MAX_INFRA_RETRIES cap, and the exhaustion
+ * surface are the only safeguards needed.
  */
 function categoryBypass(state) {
   const cat = state && state.failureCategory;
   return cat === 'conflict' || cat === 'review_failure';
-}
-
-/**
- * Feature-flag bypass. Separated from `categoryBypass` so the exhaustion +
- * fresh-monitor gates can run even when the auto-retry feature is OFF — a
- * ticket that already hit MAX_INFRA_RETRIES must surface `infra-stuck`
- * regardless of the flag (Bug 542-21).
- */
-function featureFlagOff() {
-  const flag = getConfig('WORK_AUTO_RETRY_INFRA');
-  return !flag || flag === 'false' || flag === '0';
 }
 
 /**
@@ -309,10 +303,6 @@ function runInfraRetryStep(state, ctx) {
 
   const exhaustedSurface = maybeSurfaceAlreadyExhausted(state);
   if (exhaustedSurface) return exhaustedSurface;
-
-  // Feature flag off: skip the retry attempt itself, but only AFTER the
-  // exhaustion gate above has had a chance to surface infra-stuck.
-  if (featureFlagOff()) return null;
 
   // R1e / R7: consult the classifier.
   const result = classifyWithDefaults(state, ctx);

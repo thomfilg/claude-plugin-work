@@ -138,7 +138,6 @@ describe('follow-up-next.js — ctx wiring (Bug 2)', () => {
     );
     process.env.TASKS_BASE = tasksBase;
     process.env.WORKTREES_BASE = tmp;
-    process.env.WORK_AUTO_RETRY_INFRA = 'true';
 
     const mod = require(FOLLOW_UP_NEXT_PATH);
     mod.getNextInstruction('GH-CTX4', 542);
@@ -151,8 +150,6 @@ describe('follow-up-next.js — ctx wiring (Bug 2)', () => {
       'succeeded',
       'pending attempt must be marked succeeded when _ciStatus=success in state'
     );
-
-    delete process.env.WORK_AUTO_RETRY_INFRA;
   });
 
   it('PR #542: rebuilds ctx inside the loop so a step that mutates state._ciStatus is visible to the next step', () => {
