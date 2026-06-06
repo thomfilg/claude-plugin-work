@@ -243,6 +243,39 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
     assert.notEqual(result.action, 'execute', 'fix-ci must NOT be dispatched on infra-stuck');
   });
 
+  it('case 9b (Bug 542-28): retry-success clears ci_cancelled_blocking too, not just ci_failure', () => {
+    // triage.js routes both `ci_failure` and `ci_cancelled_blocking` to
+    // infra-retry. The post-success category clear must cover both, otherwise
+    // report.js refuses to mark complete and surfaces the stale category.
+    const { handler } = loadStep({ classifyImpl: infraSuspected });
+    const state = {
+      ticketId: 'GH-508',
+      failureCategory: 'ci_cancelled_blocking',
+      runId: '99999',
+      _ciStatusFreshness: { pid: process.pid, at: new Date().toISOString() },
+      infraRetry: {
+        count: 1,
+        attempts: [
+          {
+            attemptNumber: 1,
+            timestamp: 't0',
+            runId: '88888',
+            signals: ['signal1', 'signal2'],
+            retryMethod: 'rerun-failed',
+            outcome: 'pending',
+          },
+        ],
+      },
+    };
+    handler(state, { ciStatus: 'success' });
+    assert.equal(state.currentStep, 'report', 'routed to report on success');
+    assert.equal(
+      state.failureCategory,
+      null,
+      'ci_cancelled_blocking must be cleared so report marks complete'
+    );
+  });
+
   it('case 5d (Bug 542-26): closes prior pending attempt as failed before dispatching the next retry', () => {
     // After retry #1 the attempt is pending. If monitor reports CI still
     // failing and infra-suspected re-fires, the next dispatch must close the

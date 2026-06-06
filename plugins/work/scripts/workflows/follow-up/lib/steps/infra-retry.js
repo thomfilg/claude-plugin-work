@@ -307,9 +307,15 @@ function maybeSurfaceAlreadyExhausted(state) {
   };
 }
 
+// Bug 542-28: clear any CI-related failureCategory after a successful retry.
+// triage.js routes BOTH `ci_failure` and `ci_cancelled_blocking` into
+// infra-retry; only clearing `ci_failure` left the cancelled-blocking case
+// pinned, and report.js then surfaced it instead of marking complete.
+const POST_RETRY_CLEARABLE_CATEGORIES = new Set(['ci_failure', 'ci_cancelled_blocking']);
+
 function routeRetrySuccessToReport(state) {
   state.currentStep = 'report';
-  if (state.failureCategory === 'ci_failure') {
+  if (POST_RETRY_CLEARABLE_CATEGORIES.has(state.failureCategory)) {
     state.failureCategory = null;
   }
 }
