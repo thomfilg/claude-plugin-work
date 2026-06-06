@@ -210,7 +210,30 @@ function maybeSurfaceExhausted(state, retry, result) {
  * Increment retry counter, record the attempt entry, and return the delegate
  * that retries the failed run.
  */
+/**
+ * Bug 542-26: before dispatching a new retry, close out any prior `pending`
+ * attempt as 'failed'. This happens when monitor confirmed CI is still
+ * failing post-rerun, so the prior retry didn't help. Without this, the
+ * pending attempt stacks up and history loses the per-retry verdict.
+ */
+function closePriorPendingAsFailed(state) {
+  const last = lastPendingAttempt(state);
+  if (!last) return;
+  last.outcome = 'failed';
+  // Also update the corresponding history entry (the one appended when this
+  // attempt's classification was recorded) — most recent 'dispatched' wins.
+  if (Array.isArray(state.history)) {
+    for (let i = state.history.length - 1; i >= 0; i--) {
+      if (state.history[i].outcome === 'dispatched') {
+        state.history[i].outcome = 'failed';
+        break;
+      }
+    }
+  }
+}
+
 function dispatchRetryAttempt(state, retry, result) {
+  closePriorPendingAsFailed(state);
   const attemptNumber = retry.count + 1;
   const runId = resolveRunId(state);
   // Bug 542-22: if we can't resolve a numeric run id, infra-retry has no

@@ -243,6 +243,43 @@ describe('infra-retry step — retry state machine (R2/R3/R4)', () => {
     assert.notEqual(result.action, 'execute', 'fix-ci must NOT be dispatched on infra-stuck');
   });
 
+  it('case 5d (Bug 542-26): closes prior pending attempt as failed before dispatching the next retry', () => {
+    // After retry #1 the attempt is pending. If monitor reports CI still
+    // failing and infra-suspected re-fires, the next dispatch must close the
+    // prior pending entry (outcome=failed) so per-retry verdicts aren\'t lost.
+    const { handler } = loadStep({ classifyImpl: infraSuspected });
+    const state = {
+      ticketId: 'GH-508',
+      failureCategory: 'ci_failure',
+      runId: '22222',
+      _ciStatusFreshness: { pid: process.pid, at: new Date().toISOString() },
+      infraRetry: {
+        count: 1,
+        attempts: [
+          {
+            attemptNumber: 1,
+            timestamp: 't1',
+            runId: '11111',
+            signals: ['signal1', 'signal2'],
+            retryMethod: 'rerun-failed',
+            outcome: 'pending',
+          },
+        ],
+      },
+    };
+    const result = handler(state, {}); // ctx.ciStatus undefined → not success
+    assert.ok(result, 'dispatches retry #2');
+    assert.equal(result.action, 'execute');
+    assert.equal(state.infraRetry.count, 2);
+    assert.equal(state.infraRetry.attempts.length, 2);
+    assert.equal(
+      state.infraRetry.attempts[0].outcome,
+      'failed',
+      'prior pending attempt closed as failed'
+    );
+    assert.equal(state.infraRetry.attempts[1].outcome, 'pending', 'new attempt is pending');
+  });
+
   it('case 5c: missing runId → returns null (orchestrator advances), does NOT throw', () => {
     // Bug 542-22: a missing/non-numeric runId used to throw TypeError out of
     // buildRetryDelegate. The follow-up loop had no catch, so the whole
