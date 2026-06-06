@@ -43,15 +43,6 @@ const RECORDER_CLI = path.join(
   'work-implement',
   'tdd-phase-state.js'
 );
-const TASK_NEXT_CLI = path.join(
-  REPO_ROOT,
-  'plugins',
-  'work',
-  'scripts',
-  'workflows',
-  'work-implement',
-  'task-next.js'
-);
 
 /**
  * Build a fixture that mirrors the GH-508 Task 6 broken-test state:
@@ -124,14 +115,7 @@ function runRecorder(args, { homeDir, cwd }) {
 
 function readPhaseState(homeDir, ticketId, taskNum) {
   const segment = taskNum ? `task${taskNum}` : '';
-  const tddPath = path.join(
-    homeDir,
-    'worktrees',
-    'tasks',
-    ticketId,
-    segment,
-    'tdd-phase.json'
-  );
+  const tddPath = path.join(homeDir, 'worktrees', 'tasks', ticketId, segment, 'tdd-phase.json');
   if (!fs.existsSync(tddPath)) return null;
   return JSON.parse(fs.readFileSync(tddPath, 'utf8'));
 }
@@ -187,10 +171,10 @@ describe('GH-508 Task 6 broken-test scenario — recorder rejects and phase does
       `broken fixture must surface ReferenceError; got stdout=${sanity.stdout} stderr=${sanity.stderr}`
     );
 
-    const recRes = runRecorder(
-      ['record-red', ticketId, '--task', '6', '--cmd', brokenCmd],
-      { homeDir, cwd: repoDir }
-    );
+    const recRes = runRecorder(['record-red', ticketId, '--task', '6', '--cmd', brokenCmd], {
+      homeDir,
+      cwd: repoDir,
+    });
     assert.notEqual(recRes.exitCode, 0, `expected non-zero exit; stderr=${recRes.stderr}`);
     assert.match(
       recRes.stderr,
@@ -213,41 +197,43 @@ describe('GH-508 Task 6 broken-test scenario — recorder rejects and phase does
     assert.ok(state, 'tdd-phase.json must exist after init');
     assert.equal(state.currentPhase, 'red', 'phase must remain red after rejection');
     const cycle = (state.cycles || []).find((c) => c.cycle === state.currentCycle);
-    assert.ok(
-      !cycle || !cycle.red,
-      'no record.red evidence must be persisted on rejection'
+    assert.ok(!cycle || !cycle.red, 'no record.red evidence must be persisted on rejection');
+
+    // 4. A direct attempt to transition red -> green MUST be blocked because
+    //    no record.red evidence was persisted. This exercises the real TDD
+    //    gate in cmdTransition (the `No evidence recorded for red phase`
+    //    branch) — proving that the rejection actually wedges the cycle and
+    //    prevents fake-RED escalation, not just that an unrelated upstream
+    //    probe happened to exit early. (The earlier revision of this test
+    //    spawned task-next.js against a sandbox with no tasks.md; task-next
+    //    died on the missing-tasks-file check before reaching any TDD gate,
+    //    so the assertion proved nothing about the gate.)
+    const txRes = runRecorder(['transition', ticketId, 'green', '--task', '6'], {
+      homeDir,
+      cwd: repoDir,
+    });
+    assert.notEqual(
+      txRes.exitCode,
+      0,
+      `transition red->green must be blocked when no red evidence exists; got exitCode=${txRes.exitCode} stderr=${txRes.stderr}`
+    );
+    assert.match(
+      txRes.stderr,
+      /No evidence recorded for red phase/i,
+      `transition rejection must name the missing red evidence; got: ${txRes.stderr}`
     );
 
-    // 4. A subsequent phase-advance probe (task-next.js) MUST NOT transition
-    //    to green. We invoke task-next.js directly and assert that the state
-    //    file still reports `currentPhase: 'red'` afterwards. task-next may
-    //    exit non-zero (blocked) — that is the correct behavior for an
-    //    unresolved RED gate.
-    const tasksBase = path.join(homeDir, 'worktrees', 'tasks');
-    spawnSync('node', [TASK_NEXT_CLI, ticketId, 'task6'], {
-      cwd: repoDir,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        HOME: homeDir,
-        TASKS_BASE: tasksBase,
-        WORK_TDD_TOKEN_SKIP: '1',
-        WORK_TDD_SKIP_WORKSPACE_CHECK: '1',
-      },
-    });
     const stateAfter = readPhaseState(homeDir, ticketId, 6);
-    assert.ok(stateAfter, 'tdd-phase.json must still exist after task-next');
+    assert.ok(stateAfter, 'tdd-phase.json must still exist after transition probe');
     assert.equal(
       stateAfter.currentPhase,
       'red',
-      'task-next must not transition phase to green while RED is unresolved'
+      'transition probe must not advance phase to green while RED is unresolved'
     );
-    const cycleAfter = (stateAfter.cycles || []).find(
-      (c) => c.cycle === stateAfter.currentCycle
-    );
+    const cycleAfter = (stateAfter.cycles || []).find((c) => c.cycle === stateAfter.currentCycle);
     assert.ok(
       !cycleAfter || !cycleAfter.green,
-      'no record.green evidence must be persisted by task-next probe'
+      'no record.green evidence must be persisted by the blocked transition'
     );
   });
 });
