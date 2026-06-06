@@ -53,6 +53,18 @@ function recordClassification(state, result) {
 }
 
 /**
+ * R14 (Bug 542-24): update the most-recent history entry's `outcome` field as
+ * the workflow learns the fate of that classification. Outcomes: 'succeeded'
+ * (CI green after retry), 'exhausted' (hit MAX_INFRA_RETRIES), 'no-retry'
+ * (classifier returned code-failure or runId missing), 'dispatched' (retry
+ * sent to GH Actions; resolves to succeeded/exhausted on a later visit).
+ */
+function updateLastHistoryOutcome(state, outcome) {
+  if (!state || !Array.isArray(state.history) || state.history.length === 0) return;
+  state.history[state.history.length - 1].outcome = outcome;
+}
+
+/**
  * Detect a prior pending attempt whose retry now succeeded.
  *
  * Task 7.2 (R15): when ctx signals CI is green and the last persisted attempt
@@ -78,6 +90,7 @@ function maybeHandleRetrySuccess(state, ctx) {
   if (!last) return false;
   if (!ciStatusIsFreshSuccess(state, ctx)) return false;
   last.outcome = 'succeeded';
+  updateLastHistoryOutcome(state, 'succeeded');
   process.stderr.write(`${RETRY_SUCCESS_LOG}\n`);
   routeRetrySuccessToReport(state);
   return true;
@@ -176,6 +189,7 @@ function maybeSurfaceExhausted(state, retry, result) {
   if (retry.count < MAX_INFRA_RETRIES) return null;
   state.failureCategory = 'infra-stuck';
   retry.exhausted = true;
+  updateLastHistoryOutcome(state, 'exhausted');
   // Bug D+E (GH-508): use the standard surface contract
   // ({ action, payload: { reason, ... } }) AND set reason to 'infra-stuck' so
   // report.js's KNOWN_RESOLVABLE_CATEGORIES match fires the diagnostic bundle.
@@ -203,7 +217,10 @@ function dispatchRetryAttempt(state, retry, result) {
   // GitHub Actions handle to rerun. Return null so the orchestrator advances
   // to fix-ci instead of throwing TypeError (the loop has no catch and would
   // otherwise abort the whole follow-up workflow).
-  if (!NUMERIC_RUN_ID.test(String(runId || ''))) return null;
+  if (!NUMERIC_RUN_ID.test(String(runId || ''))) {
+    updateLastHistoryOutcome(state, 'no-retry');
+    return null;
+  }
   // Validate before mutating state so a bad runId doesn't consume a retry.
   const delegate = buildRetryDelegate(state, runId, attemptNumber);
   retry.count = attemptNumber;
@@ -216,6 +233,7 @@ function dispatchRetryAttempt(state, retry, result) {
       getConfig('WORK_INFRA_RETRY_FALLBACK') === 'empty-commit' ? 'empty-commit' : 'rerun-failed',
     outcome: 'pending',
   });
+  updateLastHistoryOutcome(state, 'dispatched');
   state.currentStep = 'monitor';
   return delegate;
 }
@@ -256,6 +274,7 @@ function maybeSurfaceAlreadyExhausted(state) {
   if (!retry.exhausted && !atCap) return null;
   retry.exhausted = true;
   state.failureCategory = 'infra-stuck';
+  updateLastHistoryOutcome(state, 'exhausted');
   return {
     action: 'surface',
     payload: {
@@ -315,7 +334,10 @@ function runInfraRetryStep(state, ctx) {
   // R14: telemetry append on every classification.
   recordClassification(state, result);
 
-  if (!isInfraSuspected(result)) return null;
+  if (!isInfraSuspected(result)) {
+    updateLastHistoryOutcome(state, 'no-retry');
+    return null;
+  }
 
   const outage = maybeSurfaceGhActionsOutage(state, result);
   if (outage) return outage;

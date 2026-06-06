@@ -119,6 +119,94 @@ describe('infra-retry — Task 7 telemetry / retry-success log / gh-actions outa
     assert.deepEqual(entry.signals, ['signal1', 'signal2'], 'records signals');
     assert.equal(entry.decision, 'infra-suspected', 'records decision');
     assert.ok('outcome' in entry, 'has outcome key');
+    // Bug 542-24: dispatched retry must flip the latest entry to 'dispatched',
+    // not leave it as the default 'pending'.
+    assert.equal(entry.outcome, 'dispatched', 'outcome reflects dispatched retry');
+  });
+
+  it('7.1b (Bug 542-24): outcome=succeeded recorded on retry-success', () => {
+    const { handler } = loadStep({
+      classifyImpl: () => ({
+        classification: 'infra-suspected',
+        signals: ['signal1', 'signal2'],
+        evidence: {},
+      }),
+    });
+    const state = {
+      failureCategory: 'ci_failure',
+      runId: '12345',
+      _ciStatusFreshness: { pid: process.pid, at: new Date().toISOString() },
+      history: [
+        {
+          timestamp: 't0',
+          signals: ['signal1', 'signal2'],
+          decision: 'infra-suspected',
+          outcome: 'dispatched',
+        },
+      ],
+      infraRetry: {
+        count: 1,
+        attempts: [
+          {
+            attemptNumber: 1,
+            timestamp: 't0',
+            runId: '12345',
+            signals: ['signal1', 'signal2'],
+            retryMethod: 'rerun-failed',
+            outcome: 'pending',
+          },
+        ],
+      },
+    };
+    handler(state, { ciStatus: 'success' });
+    assert.equal(state.history[0].outcome, 'succeeded', 'history outcome updated on success');
+  });
+
+  it('7.1c (Bug 542-24): outcome=exhausted recorded when classify cap-triggers exhaust', () => {
+    // Drive the cap-trigger path: count=2 going in, infra-suspected
+    // classification → dispatchRetryAttempt bumps count to 3, the NEXT visit
+    // hits maybeSurfaceExhausted via the classify pathway, which records the
+    // exhausted outcome on the history entry just appended.
+    const { handler } = loadStep({
+      classifyImpl: () => ({
+        classification: 'infra-suspected',
+        signals: ['signal1', 'signal2'],
+        evidence: {},
+      }),
+    });
+    const state = {
+      failureCategory: 'ci_failure',
+      runId: '12345',
+      _ciStatusFreshness: { pid: process.pid, at: new Date().toISOString() },
+      infraRetry: {
+        count: 2,
+        attempts: [
+          {
+            attemptNumber: 1,
+            timestamp: 't1',
+            runId: '1',
+            signals: [],
+            retryMethod: 'rerun-failed',
+            outcome: 'pending',
+          },
+          {
+            attemptNumber: 2,
+            timestamp: 't2',
+            runId: '2',
+            signals: [],
+            retryMethod: 'rerun-failed',
+            outcome: 'pending',
+          },
+        ],
+      },
+    };
+    // First visit: dispatches retry #3, history gets entry with outcome=dispatched.
+    handler(state, {});
+    assert.equal(state.infraRetry.count, 3, 'retry #3 dispatched');
+    // Second visit at count=3 + infra-suspected → maybeSurfaceExhausted fires.
+    handler(state, {});
+    const last = state.history[state.history.length - 1];
+    assert.equal(last.outcome, 'exhausted', 'history outcome reflects exhaustion');
   });
 
   it('7.2: retry-success branch writes "auto-retry: infra flake confirmed" to stderr', () => {
