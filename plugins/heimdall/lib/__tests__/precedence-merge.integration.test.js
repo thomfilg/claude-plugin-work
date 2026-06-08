@@ -18,14 +18,7 @@ const lockStorePath = path.resolve(__dirname, '..', 'lock-store');
 const guardPath = path.resolve(__dirname, '..', 'guard');
 
 const lockStore = require(lockStorePath);
-const {
-  MARKER,
-  FOLDER,
-  SHARED_FOLDER,
-  discoverStores,
-  readConfig,
-  writeConfig,
-} = lockStore;
+const { MARKER, FOLDER, SHARED_FOLDER, discoverStores, readConfig, writeConfig } = lockStore;
 const { buildEntries } = require(guardPath);
 
 let originalHome;
@@ -111,6 +104,63 @@ describe('Four-kind precedence merge for buildEntries', () => {
     assert.deepEqual(
       merged.map((m) => m.entry.unlockPhrase),
       ['unlock-local', 'unlock-worktree', 'unlock-global', 'unlock-shared']
+    );
+  });
+
+  it('local store with wide allowedPaths does NOT merge into a shared store sharing the same unlock phrase', () => {
+    // Regression for #545 §5D ambiguity: sharing an unlock phrase between
+    // stores must not merge their `allowedPaths` into a combined entry.
+    // Each store contributes an independent entry with its own
+    // `allowedPaths`, so a looser local store cannot weaken a stricter
+    // shared store on a path only the shared store protects.
+    const wt = path.join(base, 'wt-allow');
+    const repo = path.join(wt, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+
+    writeConfig(path.join(repo, '.claude', FOLDER), {
+      kind: 'local',
+      locks: [
+        {
+          unlockPhrase: 'edit secrets',
+          protect: ['repo-config'],
+          allowedPaths: ['everything', '**'],
+        },
+      ],
+    });
+    writeConfig(sharedDir, {
+      kind: 'shared',
+      locks: [
+        {
+          unlockPhrase: 'edit secrets',
+          protect: ['~/secret'],
+        },
+      ],
+    });
+
+    const stores = discoverStores(repo);
+    const allLocks = [];
+    for (const store of stores) {
+      const cfg = readConfig(store.dir) || { locks: [] };
+      allLocks.push(...cfg.locks);
+    }
+    const entries = buildEntries(allLocks, repo);
+
+    // Exactly two entries — one per store — even though the phrase matches.
+    assert.equal(entries.length, 2, 'expected one entry per store, not a merged single entry');
+
+    const localEntry = entries.find((e) => e.dir.includes('repo-config'));
+    const sharedEntry = entries.find((e) => e.dir.includes('secret'));
+    assert.ok(localEntry, 'expected a local entry for repo-config');
+    assert.ok(sharedEntry, 'expected a shared entry for ~/secret');
+
+    // The local entry's wide allowedPaths must NOT have leaked into the
+    // shared entry. If it had, a write under the shared entry's dir would be
+    // allowed by `isInAllowedSubdir` — the under-protection §5D warned about.
+    assert.deepEqual(localEntry.allowedPaths, ['everything', '**']);
+    assert.equal(
+      sharedEntry.allowedPaths,
+      null,
+      'shared entry must retain null allowedPaths regardless of phrase collision with local'
     );
   });
 
