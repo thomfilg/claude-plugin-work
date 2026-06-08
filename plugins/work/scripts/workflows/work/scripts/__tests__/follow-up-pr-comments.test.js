@@ -764,6 +764,36 @@ describe('follow-up-pr-comments CLI', () => {
         : [];
       assert.equal(calls.length, 0, `expected zero execFn calls, got ${calls.length}`);
     });
+
+    it('--also-resolve-on-github before description still parses positional args', () => {
+      writeExecMock();
+      const comments = [makeComment({ id: 400, threadId: 'PRT_kwDOABCD456' })];
+      ctx = createTempState(makeState(comments));
+      // Flag inserted BEFORE description — must not be consumed as description.
+      const result = run(
+        ['--mark-locally-solved', '400', 'def5678', '--also-resolve-on-github', 'real desc'],
+        { ...envFor(ctx.tmpDir), FOLLOW_UP_PR_EXEC_MOCK_PATH: mockFile },
+        { cwd: cwdFor(ctx) }
+      );
+      assert.equal(
+        result.status,
+        0,
+        `expected exit 0, got ${result.status}; stderr=${result.stderr}`
+      );
+
+      const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
+      const comment = state.comments.find((c) => c.id === 400);
+      assert.equal(comment.status, 'solved');
+      assert.equal(comment.commitSha, 'def5678');
+      assert.equal(
+        comment.resolution,
+        'real desc',
+        `description must come from the real positional arg, not the flag`
+      );
+
+      const calls = JSON.parse(fs.readFileSync(sidecarFile, 'utf8'));
+      assert.equal(calls.length, 1, 'mutation should still run once');
+    });
   });
 
   // ── Task 6: graceful auth-scope error handling ───────────────────────────

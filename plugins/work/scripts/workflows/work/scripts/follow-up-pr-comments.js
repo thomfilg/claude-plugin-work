@@ -642,6 +642,17 @@ function hasAlsoResolveFlag(argv) {
 }
 
 /**
+ * Return argv with modifier flags (e.g. `--also-resolve-on-github`) removed,
+ * so positional indexing for <commentId>, <commitSha>, <description>/<reason>
+ * is not skewed by flag placement.
+ * @param {string[]} argv
+ * @returns {string[]}
+ */
+function stripModifierFlags(argv) {
+  return argv.filter((a) => a !== '--also-resolve-on-github');
+}
+
+/**
  * Load the exec function used by resolveThreadOnGitHub. By default this is
  * the production `ghExec`, but tests inject a mock via
  * FOLLOW_UP_PR_EXEC_MOCK_PATH (absolute path to a CommonJS module that
@@ -750,7 +761,8 @@ function main() {
 
     case '--solve-comment':
     case '--mark-locally-solved': {
-      if (argv.length < 4) {
+      const positional = stripModifierFlags(argv);
+      if (positional.length < 4) {
         console.error(`Error: ${subcommand} requires <commentId> <commitSha> "<description>"`);
         printUsage();
         process.exit(2);
@@ -758,7 +770,7 @@ function main() {
       if (subcommand === '--solve-comment') {
         console.error(DEPRECATION_SOLVE_MSG);
       }
-      handleSolveComment(argv[1], argv[2], argv[3], {
+      handleSolveComment(positional[1], positional[2], positional[3], {
         alsoResolveOnGitHub: hasAlsoResolveFlag(argv),
       });
       break;
@@ -766,7 +778,8 @@ function main() {
 
     case '--skip-comment':
     case '--mark-locally-skipped': {
-      if (argv.length < 3) {
+      const positional = stripModifierFlags(argv);
+      if (positional.length < 3) {
         console.error(`Error: ${subcommand} requires <commentId> "<reason>"`);
         printUsage();
         process.exit(2);
@@ -774,7 +787,7 @@ function main() {
       if (subcommand === '--skip-comment') {
         console.error(DEPRECATION_SKIP_MSG);
       }
-      handleSkipComment(argv[1], argv[2], {
+      handleSkipComment(positional[1], positional[2], {
         alsoResolveOnGitHub: hasAlsoResolveFlag(argv),
       });
       break;
