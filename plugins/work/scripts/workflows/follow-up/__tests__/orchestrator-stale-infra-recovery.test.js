@@ -42,10 +42,13 @@ describe('orchestrator auto-clears stale infra cache before any step (GH-536 PR 
     );
   });
 
-  it('rewinds currentStep to STEPS[0] (monitor) on stale-infra clear', () => {
+  it("rewinds currentStep to literal 'monitor' on stale-infra clear", () => {
+    // Hardcoded 'monitor' rather than STEPS[0] so a future reorder of the
+    // step registry can't silently rewind to a different first step
+    // (GH-536 PR #551 review round-3).
     assert.ok(
-      /state\.currentStep\s*=\s*STEPS\[0\]/.test(ORCHESTRATOR_SRC),
-      'orchestrator must rewind currentStep to monitor so the next iteration re-fetches'
+      /state\.currentStep\s*=\s*['"]monitor['"]/.test(ORCHESTRATOR_SRC),
+      "orchestrator must rewind currentStep to the literal 'monitor' so the next iteration re-fetches"
     );
   });
 

@@ -605,42 +605,37 @@ describe('clearStaleInfraCache (GH-536 Task 3)', () => {
   });
 });
 
-describe('clearStaleInfraCache wired into monitor step (GH-536 Task 3)', () => {
-  it('monitor.js calls clearStaleInfraCache at least once (definition + call site)', () => {
+describe('clearStaleInfraCache wired via orchestrator (GH-536 round-2)', () => {
+  // The in-step call was removed because the orchestrator
+  // (follow-up-next.js) now clears stale infra cache BEFORE any step runs,
+  // including triage/fix-ci/report — the in-step variant only fired when
+  // monitor was reached, which never happened when triage blocked on
+  // exitCode 2. These assertions pin the round-2 lift in place.
+  it('declares clearStaleInfraCache but does NOT call it from inside monitor.js', () => {
     const src = fs.readFileSync(MONITOR_PATH, 'utf8');
     assert.ok(
       /function\s+clearStaleInfraCache\s*\(/.test(src),
       'expected `function clearStaleInfraCache(` declaration in monitor.js'
     );
-    const calls = src.match(/clearStaleInfraCache\s*\(/g) || [];
-    // ≥2 = 1 declaration + 1 call site (inside register('monitor', ...))
-    assert.ok(
-      calls.length >= 2,
-      `expected ≥2 occurrences of clearStaleInfraCache( (1 decl + 1 call), found ${calls.length}`
+    const callCount = (src.match(/clearStaleInfraCache\s*\(/g) || []).length;
+    // 1 occurrence = the function declaration itself, no call sites.
+    assert.equal(
+      callCount,
+      1,
+      `expected exactly 1 occurrence of clearStaleInfraCache( (the declaration; orchestrator owns invocation), found ${callCount}`
     );
   });
 
-  it("invokes clearStaleInfraCache BEFORE fetchPrInfoOrFail inside register('monitor', ...)", () => {
-    const src = fs.readFileSync(MONITOR_PATH, 'utf8');
-    // Slice from the register('monitor', ...) declaration onward to ignore the function definition above.
-    const regIdx = src.indexOf("register('monitor'");
-    assert.notEqual(regIdx, -1, "expected register('monitor', ...) call in monitor.js");
-    const tail = src.slice(regIdx);
-    const clearIdx = tail.indexOf('clearStaleInfraCache(');
-    const fetchIdx = tail.indexOf('fetchPrInfoOrFail(');
-    assert.notEqual(
-      clearIdx,
-      -1,
-      'expected clearStaleInfraCache(...) call inside the monitor step body'
-    );
-    assert.notEqual(
-      fetchIdx,
-      -1,
-      'expected fetchPrInfoOrFail(...) call inside the monitor step body'
+  it('orchestrator (follow-up-next.js) clears stale infra cache before any step runs', () => {
+    const orchestratorPath = path.join(__dirname, '..', '..', '..', 'follow-up-next.js');
+    const src = fs.readFileSync(orchestratorPath, 'utf8');
+    assert.ok(
+      /isInfraFailure\(cached\.output/.test(src),
+      'expected orchestrator to check isInfraFailure(cached.output ...) before step dispatch'
     );
     assert.ok(
-      clearIdx < fetchIdx,
-      'clearStaleInfraCache must be called BEFORE fetchPrInfoOrFail in the monitor step'
+      /delete state\.lastMonitorResult/.test(src),
+      'expected orchestrator to delete state.lastMonitorResult when cache is stale infra'
     );
   });
 });

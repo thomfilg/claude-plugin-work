@@ -487,10 +487,10 @@ function buildInitialFailedJobs(ci) {
 
 module.exports = function registerMonitor(register) {
   register('monitor', (state, ctx) => {
-    // FIRST statement: auto-clear stale infra cache so a transient infra failure
-    // from a prior tick (DNS hiccup, HTTP 401/403/404, gh CLI flake) does not
-    // wedge the follow-up loop indefinitely. See GH-536 R2/R5/R8.
-    clearStaleInfraCache(state);
+    // Stale infra-failure cache is auto-cleared by the orchestrator in
+    // follow-up-next.js BEFORE any step runs (GH-536 round-2 lift). The
+    // in-step call previously here is removed as dead code; `clearStaleInfraCache`
+    // remains exported for direct unit-test use.
 
     const followUpPr = require(path.join(ctx.workScriptsDir, 'follow-up-pr.js'));
     const { getPRInfo, checkCI, getReviews, formatReport } = followUpPr;
