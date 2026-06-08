@@ -1,8 +1,7 @@
 'use strict';
 
 // fix-reviews.test.js — Task 7 (GH-537): assert delegate-block strings use
-// the new --mark-locally-solved / --mark-locally-skipped flag names and
-// include the --also-resolve-on-github caveat + example.
+// the new --mark-locally-solved / --mark-locally-skipped flag names.
 //
 // Strategy: read fix-reviews.js as source text and assert the substrings
 // appear (or are absent). This mirrors monitor.test.js's source-text style.
@@ -57,15 +56,14 @@ describe('fix-reviews delegate block (Task 7)', () => {
     );
   });
 
-  // GH-537 followup — the --also-resolve-on-github flag is an explicit operator
-  // opt-in for direct CLI use; surfacing it in the delegate block lets the
-  // autonomous /work agent decide to act on GitHub, which contradicts the
-  // ticket framing and conflicts with the standing user rules
-  // [[never-solve-bot-comments]] and [[never-comment-external-systems]].
+  // GH-537 followup — the opt-in GitHub-resolve flag was withdrawn entirely
+  // (the autonomous /work agent must never act on external state per
+  // [[never-solve-bot-comments]] and [[never-comment-external-systems]]).
+  // This regression guard prevents the concept from being re-advertised.
   it('does NOT advertise --also-resolve-on-github to agents', () => {
     assert.ok(
       !SOURCE.includes('--also-resolve-on-github'),
-      'delegate block must not surface --also-resolve-on-github to autonomous agents; the flag stays available for direct CLI use only'
+      'delegate block must not reintroduce the withdrawn opt-in GitHub-resolve flag'
     );
   });
 });

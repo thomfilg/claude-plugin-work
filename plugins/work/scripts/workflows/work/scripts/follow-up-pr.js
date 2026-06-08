@@ -576,9 +576,8 @@ function isBlockingPriority(priority) {
  *   - `outdatedThreadIds` — Array of thread IDs that are outdated but not yet
  *     resolved (for optional bulk dismissal).
  *   - `commentIdToThreadId` — Map<databaseId, threadId> covering EVERY thread
- *     (active, resolved, outdated). Used by `--snapshot` to persist a per-comment
- *     `threadId` so later `--also-resolve-on-github` calls can target the right
- *     review thread without re-querying GraphQL. See GH-537 / R10.
+ *     (active, resolved, outdated). Persisted onto `comment.threadId` by
+ *     `--snapshot` for forward-compatibility; currently a dormant payload.
  *
  * On failure all three are returned empty so callers stay safe.
  */
@@ -626,8 +625,8 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
         const nodes = comments.nodes || [];
 
         // Map every comment to its parent thread, regardless of resolved/outdated.
-        // Snapshot writers use this to persist `comment.threadId` for later
-        // --also-resolve-on-github calls (GH-537 / R10).
+        // Snapshot writers persist `comment.threadId` as a forward-compatible
+        // dormant payload.
         if (thread.id) {
           for (const comment of nodes) {
             if (comment?.databaseId != null) {
@@ -667,24 +666,6 @@ function getResolvedCommentIds(repo, prNumber, execFn = ghExec) {
     commentIdToThreadId.clear();
   }
   return { resolved, outdatedThreadIds, commentIdToThreadId };
-}
-
-/**
- * Resolve a single review thread on GitHub via GraphQL mutation.
- * Used by `follow-up-pr-comments.js --also-resolve-on-github` (GH-537 / Task 5).
- *
- * Reuses the same mutation as `resolveOutdatedThreads` but for a single
- * threadId so the CLI can target the specific thread being marked solved.
- *
- * @param {string} threadId - The GraphQL PRT_… id of the review thread.
- * @param {Function} [execFn=ghExec] - Injected exec function for testability.
- * @returns {*} The raw response from execFn (e.g. `{ data: { resolveReviewThread: ... } }`).
- * @throws {Error} Re-throws any error from `execFn` so callers can classify
- *   auth-scope failures (per Task 6) and exit gracefully.
- */
-function resolveThreadOnGitHub(threadId, execFn = ghExec) {
-  const mutation = `mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}`;
-  return execFn(['api', 'graphql', '-f', `query=${mutation}`, '-f', `threadId=${threadId}`]);
 }
 
 /**
@@ -831,9 +812,8 @@ function getReviews(prNumber) {
       return false;
     };
     const botCheckCompleted = (bot) => {
-      const keywords = botCheckKeywords[bot.toLowerCase()] || botCheckKeywords[bot] || [
-        bot.toLowerCase().replace(/\[bot\]$/, ''),
-      ];
+      const keywords = botCheckKeywords[bot.toLowerCase()] ||
+        botCheckKeywords[bot] || [bot.toLowerCase().replace(/\[bot\]$/, '')];
       const matching = checks.filter((ck) => {
         const name = (ck.name || ck.context || '').toLowerCase();
         return keywords.some((kw) => name.includes(kw));
@@ -1906,7 +1886,6 @@ module.exports = {
   isBlockingPriority,
   getResolvedCommentIds,
   resolveOutdatedThreads,
-  resolveThreadOnGitHub,
   decideNextAction,
   getEffectivePendingBots,
   getAdaptiveInterval,

@@ -421,20 +421,17 @@ describe('getResolvedCommentIds', () => {
         result.commentIdToThreadId,
         'getResolvedCommentIds must return a commentIdToThreadId field'
       );
-      assert.ok(
-        result.commentIdToThreadId instanceof Map,
-        'commentIdToThreadId must be a Map'
-      );
+      assert.ok(result.commentIdToThreadId instanceof Map, 'commentIdToThreadId must be a Map');
       assert.equal(result.commentIdToThreadId.get(700), 'PRT_threadA');
       assert.equal(result.commentIdToThreadId.get(701), 'PRT_threadA');
       assert.equal(result.commentIdToThreadId.get(702), 'PRT_threadB');
     });
 
     it('maps comments from active (unresolved, non-outdated) threads too', () => {
-      // Active threads also expose threadId so snapshot can record it for
-      // future --also-resolve-on-github calls. Resolved/outdated comments
-      // are filtered out elsewhere, but their threadId still belongs in the
-      // map for completeness.
+      // Active threads expose threadId so the snapshot can record it as a
+      // forward-compatible payload. Resolved/outdated comments are filtered
+      // out elsewhere, but their threadId still belongs in the map for
+      // completeness.
       const exec = () =>
         makeGraphQLResponse([
           {
@@ -827,14 +824,22 @@ describe('partitionByRequired', () => {
 describe('getCodeContext', () => {
   it('returns context lines around the target line', () => {
     // Use this test file itself as a known file
-    const result = getCodeContext('plugins/work/scripts/workflows/work/scripts/__tests__/follow-up-pr.test.js', 1, 1);
+    const result = getCodeContext(
+      'plugins/work/scripts/workflows/work/scripts/__tests__/follow-up-pr.test.js',
+      1,
+      1
+    );
     assert.ok(result, 'should return context');
     assert.ok(result.includes('>>>'), 'should have a marker on the target line');
     assert.ok(result.includes('1:'), 'should have line number 1');
   });
 
   it('marks the correct line with >>>', () => {
-    const result = getCodeContext('plugins/work/scripts/workflows/work/scripts/__tests__/follow-up-pr.test.js', 3, 1);
+    const result = getCodeContext(
+      'plugins/work/scripts/workflows/work/scripts/__tests__/follow-up-pr.test.js',
+      3,
+      1
+    );
     assert.ok(result);
     const lines = result.split('\n');
     const markedLine = lines.find((l) => l.startsWith('>>>'));
@@ -868,7 +873,11 @@ describe('getCodeContext', () => {
   });
 
   it('handles line 1 without negative index', () => {
-    const result = getCodeContext('plugins/work/scripts/workflows/work/scripts/__tests__/follow-up-pr.test.js', 1, 3);
+    const result = getCodeContext(
+      'plugins/work/scripts/workflows/work/scripts/__tests__/follow-up-pr.test.js',
+      1,
+      3
+    );
     assert.ok(result, 'should return context');
     assert.ok(result.includes('>>>'), 'should have marker');
     // Should not have negative line numbers
