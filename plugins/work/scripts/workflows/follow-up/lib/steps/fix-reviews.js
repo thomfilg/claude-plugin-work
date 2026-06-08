@@ -179,10 +179,11 @@ module.exports = function registerFixReviews(register) {
 
     // Build the solve/skip commands the agent must use.
     // The new flag names (GH-537) make the local-only scope explicit; the
-    // legacy aliases still work but emit a deprecation warning.
+    // legacy aliases still work but emit a deprecation warning. The opt-in
+    // GitHub-resolve flag is intentionally NOT surfaced to the agent here —
+    // it stays reachable only for humans invoking the CLI directly.
     const solveCmd = `node "${commentsScript}" --mark-locally-solved "${commentId}" "<COMMIT_SHA>" "<description of what you fixed>"`;
     const skipCmd = `node "${commentsScript}" --mark-locally-skipped "${commentId}" "<reason>"`;
-    const solveAndResolveCmd = `node "${commentsScript}" --mark-locally-solved "${commentId}" "<COMMIT_SHA>" "<description>" --also-resolve-on-github`;
     const nextCmd = `node "${path.join(__dirname, '..', '..', 'follow-up-next.js')}" "${state.ticketId}"${state.prNumber ? ` --pr ${state.prNumber}` : ''}`;
 
     return {
@@ -209,13 +210,9 @@ module.exports = function registerFixReviews(register) {
           '### Option A — Fix the code:',
           '1. Fix the issue in the specified file',
           '2. Stage and commit: `git add <files> && git commit -m "fix(review): <what you fixed>"`',
-          '3. Then mark as addressed locally:',
+          '3. Then mark as addressed:',
           '```',
           solveCmd,
-          '```',
-          'Note: the default does NOT resolve the GitHub conversation thread — it only updates the local audit trail. To also close the thread on GitHub in one go, pass `--also-resolve-on-github`:',
-          '```',
-          solveAndResolveCmd,
           '```',
           '',
           '### Option B — Skip with reason:',

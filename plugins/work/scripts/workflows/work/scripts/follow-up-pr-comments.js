@@ -588,9 +588,7 @@ function handleSolveComment(rawId, rawSha, rawDesc, opts = {}) {
         );
       } else {
         console.error(`Error: --also-resolve-on-github failed: ${msg}`);
-        console.error(
-          'Hint: see memory note [[follow-up-stuck-means-human-blocker]].'
-        );
+        console.error('Hint: see memory note [[follow-up-stuck-means-human-blocker]].');
       }
       process.exit(1);
     }
@@ -699,11 +697,22 @@ function printUsage() {
   console.error(`Usage: node follow-up-pr-comments.js <subcommand> [args]
 
 Subcommands:
-  --snapshot --pr <N>                     Fetch & cache all PR comments
-  --next-comment                          Return first unsolved comment by priority
-  --solve-comment <id> <sha> "<desc>"     Mark comment as solved
-  --skip-comment <id> "<reason>"          Mark comment as skipped
-  --status                                Show summary counts`);
+  --snapshot --pr <N>                            Fetch & cache all PR comments
+  --next-comment                                 Return first unsolved comment by priority
+  --mark-locally-solved <id> <sha> "<desc>"      Mark comment solved (local only)
+  --mark-locally-skipped <id> "<reason>"         Mark comment skipped (local only)
+  --status                                       Show summary counts
+
+Modifier flags:
+  --also-resolve-on-github                       Opt-in: when paired with
+                                                 --mark-locally-solved, also
+                                                 resolve the GitHub conversation
+                                                 thread via GraphQL. No-op with
+                                                 --mark-locally-skipped.
+
+Deprecated aliases (still accepted, but emit a warning):
+  --solve-comment <id> <sha> "<desc>"     Deprecated alias of --mark-locally-solved
+  --skip-comment <id> "<reason>"          Deprecated alias of --mark-locally-skipped`);
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -742,9 +751,7 @@ function main() {
     case '--solve-comment':
     case '--mark-locally-solved': {
       if (argv.length < 4) {
-        console.error(
-          `Error: ${subcommand} requires <commentId> <commitSha> "<description>"`
-        );
+        console.error(`Error: ${subcommand} requires <commentId> <commitSha> "<description>"`);
         printUsage();
         process.exit(2);
       }

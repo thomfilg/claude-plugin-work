@@ -102,6 +102,11 @@ describe('follow-up-pr-comments CLI', () => {
       const result = run([]);
       assert.equal(result.status, 2);
       assert.match(result.stderr, /usage/i);
+      // Canonical flag names appear in usage (GH-537 followup).
+      assert.match(result.stderr, /--mark-locally-solved/);
+      assert.match(result.stderr, /--mark-locally-skipped/);
+      // Legacy aliases are still listed but explicitly labeled deprecated.
+      assert.match(result.stderr, /deprecated/i);
     });
 
     it('exits 2 for unknown subcommand', () => {
@@ -557,9 +562,7 @@ describe('follow-up-pr-comments CLI', () => {
 
     it('handleSkipComment delegates to skipLocally (thin dispatcher)', () => {
       const src = fs.readFileSync(SCRIPT_PATH, 'utf8');
-      const handlerMatch = src.match(
-        /function\s+handleSkipComment\s*\([^)]*\)\s*\{([\s\S]*?)\n\}/
-      );
+      const handlerMatch = src.match(/function\s+handleSkipComment\s*\([^)]*\)\s*\{([\s\S]*?)\n\}/);
       assert.ok(handlerMatch, 'expected handleSkipComment definition');
       assert.match(
         handlerMatch[1],
@@ -583,7 +586,11 @@ describe('follow-up-pr-comments CLI', () => {
         envFor(ctx.tmpDir),
         { cwd: cwdFor(ctx) }
       );
-      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
+      assert.equal(
+        result.status,
+        0,
+        `expected exit 0, got ${result.status}; stderr=${result.stderr}`
+      );
       assert.equal(result.stderr, '', `expected empty stderr, got: ${result.stderr}`);
 
       const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
@@ -596,12 +603,14 @@ describe('follow-up-pr-comments CLI', () => {
     it('New flag --mark-locally-skipped marks comment skipped without warnings', () => {
       const comments = [makeComment({ id: 200 })];
       ctx = createTempState(makeState(comments));
-      const result = run(
-        ['--mark-locally-skipped', '200', 'Out of scope'],
-        envFor(ctx.tmpDir),
-        { cwd: cwdFor(ctx) }
+      const result = run(['--mark-locally-skipped', '200', 'Out of scope'], envFor(ctx.tmpDir), {
+        cwd: cwdFor(ctx),
+      });
+      assert.equal(
+        result.status,
+        0,
+        `expected exit 0, got ${result.status}; stderr=${result.stderr}`
       );
-      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
       assert.equal(result.stderr, '', `expected empty stderr, got: ${result.stderr}`);
 
       const state = JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8'));
@@ -663,9 +672,7 @@ describe('follow-up-pr-comments CLI', () => {
 
     it('--also-resolve-on-github calls resolveReviewThread mutation', () => {
       writeExecMock();
-      const comments = [
-        makeComment({ id: 100, threadId: 'PRT_kwDOABCD123' }),
-      ];
+      const comments = [makeComment({ id: 100, threadId: 'PRT_kwDOABCD123' })];
       ctx = createTempState(makeState(comments));
       const result = run(
         ['--mark-locally-solved', '100', 'abc1234', 'fixed null', '--also-resolve-on-github'],
@@ -698,9 +705,7 @@ describe('follow-up-pr-comments CLI', () => {
 
     it('--also-resolve-on-github paired with --mark-locally-skipped is a no-op with warning', () => {
       writeExecMock();
-      const comments = [
-        makeComment({ id: 200, threadId: 'PRT_kwDOSKIPPED' }),
-      ];
+      const comments = [makeComment({ id: 200, threadId: 'PRT_kwDOSKIPPED' })];
       ctx = createTempState(makeState(comments));
       const result = run(
         ['--mark-locally-skipped', '200', 'Out of scope', '--also-resolve-on-github'],
@@ -713,7 +718,11 @@ describe('follow-up-pr-comments CLI', () => {
       const calls = fs.existsSync(sidecarFile)
         ? JSON.parse(fs.readFileSync(sidecarFile, 'utf8'))
         : [];
-      assert.equal(calls.length, 0, `expected zero execFn calls for skip path, got ${calls.length}`);
+      assert.equal(
+        calls.length,
+        0,
+        `expected zero execFn calls for skip path, got ${calls.length}`
+      );
 
       // Stderr warns about audit trail
       assert.match(
@@ -738,7 +747,11 @@ describe('follow-up-pr-comments CLI', () => {
         { ...envFor(ctx.tmpDir), FOLLOW_UP_PR_EXEC_MOCK_PATH: mockFile },
         { cwd: cwdFor(ctx) }
       );
-      assert.equal(result.status, 1, `expected exit 1, got ${result.status}; stderr=${result.stderr}`);
+      assert.equal(
+        result.status,
+        1,
+        `expected exit 1, got ${result.status}; stderr=${result.stderr}`
+      );
       assert.match(
         result.stderr,
         /re-run --snapshot/i,
@@ -799,9 +812,7 @@ describe('follow-up-pr-comments CLI', () => {
       );
 
       // No Node stack-trace frames (no "at " lines)
-      const stackFrameLines = result.stderr
-        .split('\n')
-        .filter((l) => /^\s*at\s/.test(l));
+      const stackFrameLines = result.stderr.split('\n').filter((l) => /^\s*at\s/.test(l));
       assert.equal(
         stackFrameLines.length,
         0,
@@ -819,12 +830,14 @@ describe('follow-up-pr-comments CLI', () => {
     it('Deprecated --solve-comment still works but warns', () => {
       const comments = [makeComment({ id: 100 })];
       ctx = createTempState(makeState(comments));
-      const result = run(
-        ['--solve-comment', '100', 'abc1234', 'desc'],
-        envFor(ctx.tmpDir),
-        { cwd: cwdFor(ctx) }
+      const result = run(['--solve-comment', '100', 'abc1234', 'desc'], envFor(ctx.tmpDir), {
+        cwd: cwdFor(ctx),
+      });
+      assert.equal(
+        result.status,
+        0,
+        `expected exit 0, got ${result.status}; stderr=${result.stderr}`
       );
-      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
 
       // Exactly one stderr line, mentioning both replacement flag and local-only scope.
       const stderrLines = result.stderr.split('\n').filter((l) => l.trim().length > 0);
@@ -847,12 +860,14 @@ describe('follow-up-pr-comments CLI', () => {
     it('Deprecated --skip-comment still works but warns', () => {
       const comments = [makeComment({ id: 200 })];
       ctx = createTempState(makeState(comments));
-      const result = run(
-        ['--skip-comment', '200', 'reason'],
-        envFor(ctx.tmpDir),
-        { cwd: cwdFor(ctx) }
+      const result = run(['--skip-comment', '200', 'reason'], envFor(ctx.tmpDir), {
+        cwd: cwdFor(ctx),
+      });
+      assert.equal(
+        result.status,
+        0,
+        `expected exit 0, got ${result.status}; stderr=${result.stderr}`
       );
-      assert.equal(result.status, 0, `expected exit 0, got ${result.status}; stderr=${result.stderr}`);
 
       const stderrLines = result.stderr.split('\n').filter((l) => l.trim().length > 0);
       assert.equal(
