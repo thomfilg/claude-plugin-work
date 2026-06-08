@@ -20,6 +20,101 @@ const { discoverStores, listMemoriesFromStore } = require(
   path.join(__dirname, '..', 'lib', 'memory-store')
 );
 const { selectForEvent } = require(path.join(__dirname, '..', 'lib', 'matcher'));
+const { buildActiveDomains } = require(path.join(__dirname, '..', 'lib', 'active-domains'));
+const { saveStickyState } = require(path.join(__dirname, '..', 'lib', 'sticky-state'));
+const injectLedger = require('../lib/inject-ledger');
+const { recordFired } = require(path.join(__dirname, '..', 'lib', 'telemetry'));
+const { runCiteScan } = require(path.join(__dirname, '..', 'lib', 'cite-scan'));
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * decideInjection — pure helper implementing the brief AC-5 renderer policy.
+ *
+ *   always       → full body on every match
+ *   once         → full body iff injectedCount === 0, else reminder
+ *   occasionally → full body iff injectedCount % fireCadence === 0, else reminder
+ *
+ * `ledgerEntry` is the per-memory record from `loadLedger().memories[name]`
+ * (or `undefined` for "never injected this session").
+ */
+function resolveCadence(memory) {
+  const raw = Number(memory && memory.fireCadence);
+  return raw > 0 ? raw : 5;
+}
+
+function decideInjection(memory, ledgerEntry) {
+  const mode = (memory && memory.fireMode) || 'once';
+  const count = Number(ledgerEntry && ledgerEntry.injectedCount) || 0;
+  if (mode === 'always') return { kind: 'full' };
+  if (mode === 'occasionally') {
+    const cadence = resolveCadence(memory);
+    return { kind: count % cadence === 0 ? 'full' : 'reminder' };
+  }
+  // default: once
+  return { kind: count === 0 ? 'full' : 'reminder' };
+}
+
+function reminderLine(memory) {
+  return `[synapsys:active] ${memory.name} (fired earlier; full body in this session)`;
+}
+
+/**
+ * renderMatchedMemories — per-memory loop wrapper. Routes each match through
+ * the ledger + decideInjection + recordInjection. The entire call is fail-open
+ * (R1): any throw → fall back to formatting every memory as full body.
+ */
+const SEP = '\n\n---\n\n';
+
+function commitInjection(ledger, sessionId, memory, isFull) {
+  const entry = ledger.memories[memory.name];
+  const prevCount = Number(entry && entry.injectedCount) || 0;
+  const prevLast = Number(entry && entry.lastFullInjectAt) || 0;
+  const nextCount = prevCount + 1;
+  ledger.memories[memory.name] = {
+    injectedCount: nextCount,
+    lastFullInjectAt: isFull ? nextCount : prevLast,
+  };
+  try {
+    injectLedger.recordInjection(sessionId, memory.name, { full: isFull });
+  } catch {
+    /* fail-open */
+  }
+}
+
+// Cap-aware renderer. Only memories whose rendered text fits within
+// MAX_INJECT_CHARS are recorded in the ledger — anything truncated by the cap
+// keeps its prior injectedCount so it can re-fire (full body) on a later match.
+function renderMatchedMemories(matched, sessionId) {
+  try {
+    const ledger = injectLedger.loadLedger(sessionId);
+    if (!ledger.memories || typeof ledger.memories !== 'object') {
+      ledger.memories = {};
+    }
+    const pieces = [];
+    let used = 0;
+    let truncated = false;
+    for (const m of matched) {
+      const decision = decideInjection(m, ledger.memories[m.name]);
+      const isFull = decision.kind === 'full';
+      const text = isFull ? formatMemory(m) : reminderLine(m);
+      const sepLen = pieces.length ? SEP.length : 0;
+      if (used + sepLen + text.length > MAX_INJECT_CHARS) {
+        truncated = true;
+        break;
+      }
+      pieces.push(text);
+      used += sepLen + text.length;
+      commitInjection(ledger, sessionId, m, isFull);
+    }
+    const body = pieces.join(SEP);
+    return truncated
+      ? `${body}${SEP}[synapsys: output truncated at ${MAX_INJECT_CHARS} chars]`
+      : body;
+  } catch {
+    return matched.map(formatMemory).join(SEP);
+  }
+}
 
 const VALID_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop']);
 const MAX_INJECT_CHARS = 8000;
@@ -83,10 +178,34 @@ function getSessionStartHint(event, stores, memories) {
   return null;
 }
 
-function formatMatchedOutput(matched) {
-  const out = matched.map(formatMemory).join('\n\n---\n\n');
+// Build the activeDomains opts for selectForEvent. Delegates to the
+// shared resolver so synapsys-explain stays in lockstep. Uses the
+// injectLedger session-id resolver so sticky-state, ledger, and telemetry
+// all key off the same session, and persists the next sticky state on
+// UserPromptSubmit via saveStickyState (the read-only CLI omits this).
+function buildActiveDomainsForPayload(event, payload) {
+  const activeDomains = buildActiveDomains(event, payload, {
+    resolveSessionId: injectLedger.resolveSessionId,
+    onPersistSticky: (state) => saveStickyState({ state }),
+  });
+  return activeDomains ? { activeDomains } : undefined;
+}
+
+function formatMatchedOutput(matched, sessionId) {
+  const out = renderMatchedMemories(matched, sessionId);
   if (out.length <= MAX_INJECT_CHARS) return out;
   return `${out.slice(0, MAX_INJECT_CHARS)}\n\n[synapsys: output truncated at ${MAX_INJECT_CHARS} chars]`;
+}
+
+function emitMatched(matched, payload, event) {
+  if (!matched.length) return;
+  for (const m of matched) {
+    try {
+      recordFired(m, payload, event);
+    } catch {
+      // fail-open
+    }
+  }
 }
 
 (async () => {
@@ -99,17 +218,51 @@ function formatMatchedOutput(matched) {
     const stores = discoverStores(cwd);
     const memories = stores.flatMap(listMemoriesFromStore);
 
+    // Resolve session id once; used for both ledger reset (SessionStart) and
+    // the per-memory render path. Fail-open: any throw → noop and the rest of
+    // the dispatcher behaves like the pre-ledger code path.
+    let sessionId;
+    try {
+      sessionId = injectLedger.resolveSessionId(payload);
+      // Publish the resolved id to `.current` so out-of-process callers
+      // (synapsys-list CLI) read the same session ledger the dispatcher
+      // writes to. Fail-open: a write error never blocks the dispatcher.
+      injectLedger.publishCurrentSessionId(sessionId);
+    } catch {
+      sessionId = '';
+    }
+
+    // SessionStart resets the per-session ledger (brief AC-4 / spec §3.3) and
+    // opportunistically GCs stale ledger files older than 7 days (spec §4.2).
+    if (event === 'SessionStart') {
+      try {
+        injectLedger.resetLedgerForSession(sessionId);
+        injectLedger.gcStaleLedgers({ maxAgeMs: SEVEN_DAYS_MS });
+      } catch {
+        /* fail-open */
+      }
+    }
+
     const sessionHint = getSessionStartHint(event, stores, memories);
     if (sessionHint) {
       process.stdout.write(sessionHint);
       process.exit(0);
     }
 
-    if (!memories.length) process.exit(0);
-    const matched = selectForEvent(memories, event, payload);
-    if (!matched.length) process.exit(0);
+    // Build activeDomains FIRST so UserPromptSubmit advances sticky-state
+    // even when the memory list is empty. Fail-open: on any error, omit
+    // `opts.activeDomains` to preserve pre-classifier behavior.
+    const selectOpts = buildActiveDomainsForPayload(event, payload);
+    const matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
+    // On Stop the cite scan must read the session JSONL state from BEFORE
+    // this turn's Stop-time fired writes; Stop-injections happen after the
+    // assistant response, so attributing citations to them would be a
+    // false positive (the response cannot reference a memory that wasn't
+    // yet injected at the time it was written).
+    if (event === 'Stop') runCiteScan(payload, memories);
+    emitMatched(matched, payload, event);
 
-    process.stdout.write(formatMatchedOutput(matched));
+    process.stdout.write(formatMatchedOutput(matched, sessionId));
     process.exit(0);
   } catch {
     process.exit(0);
