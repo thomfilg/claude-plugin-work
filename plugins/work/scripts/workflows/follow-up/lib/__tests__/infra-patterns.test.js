@@ -74,6 +74,51 @@ describe('isInfraFailure — negative cases', () => {
       false,
     );
   });
+
+  // Negative cases for the line-anchored HTTP / gh-CLI patterns. These guard
+  // against false positives where a test log or stack frame happens to print
+  // the same tokens mid-line — auto-clearing real CI failures would silently
+  // swallow them.
+  it('returns false for mid-line "HTTP 401" inside a test assertion', () => {
+    assert.equal(
+      infraPatterns.isInfraFailure('FAIL api.test.ts > returns HTTP 401 when token invalid'),
+      false,
+    );
+  });
+
+  it('returns false for mid-line "HTTP 404" inside an expectation message', () => {
+    assert.equal(
+      infraPatterns.isInfraFailure('expected response.status to be 200, got HTTP 404'),
+      false,
+    );
+  });
+
+  it('returns false for mid-line "gh command failed" inside a stack frame', () => {
+    assert.equal(
+      infraPatterns.isInfraFailure('stack trace: at gh command failed handler in user code'),
+      false,
+    );
+  });
+
+  // Positive cases for the line-anchored variants — both `^` and `\n` anchors
+  // must keep matching real gh-CLI surface output.
+  it('returns true for a leading "HTTP 401" at line start (no indent)', () => {
+    assert.equal(infraPatterns.isInfraFailure('HTTP 401: Bad credentials'), true);
+  });
+
+  it('returns true for "HTTP 403" preceded by a newline in multi-line output', () => {
+    assert.equal(
+      infraPatterns.isInfraFailure('gh: error fetching reviews\n  HTTP 403: Forbidden'),
+      true,
+    );
+  });
+
+  it('returns true for "gh command failed" at line start of multi-line output', () => {
+    assert.equal(
+      infraPatterns.isInfraFailure('some preamble\ngh command failed: exit status 1'),
+      true,
+    );
+  });
 });
 
 describe('isStale — legacy compat (R8: missing timestamp is infinitely old)', () => {

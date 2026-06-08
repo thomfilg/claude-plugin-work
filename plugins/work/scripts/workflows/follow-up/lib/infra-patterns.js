@@ -30,10 +30,15 @@
 const INFRA_FAILURE_PATTERNS = Object.freeze([
   // resolve
   /Could not resolve to a Repository/,
-  // http (covers 401 Unauthorized, 403 Forbidden, 404 Not Found)
-  /HTTP 4(01|03|04)\b/,
-  // gh CLI surface error wrapping any of the above
-  /gh command failed/,
+  // http (covers 401 Unauthorized, 403 Forbidden, 404 Not Found) — anchored to
+  // line-start (with optional leading whitespace) so that test logs asserting
+  // on HTTP responses ("FAIL ... returns HTTP 401", "expected status 200, got
+  // HTTP 404") are NOT mistaken for gh-CLI transport errors.
+  /(^|\n)\s*HTTP 4(01|03|04)\b/,
+  // gh CLI surface error wrapping any of the above — anchored to line-start
+  // so a stack frame mentioning the phrase mid-line ("at gh command failed
+  // handler") is not auto-cleared.
+  /(^|\n)gh command failed/,
   // network
   /ENOTFOUND/,
   /ETIMEDOUT/,
@@ -95,6 +100,11 @@ function isStale(lastMonitorAt, now = Date.now()) {
   }
   const parsed = Date.parse(lastMonitorAt);
   if (Number.isNaN(parsed)) {
+    // Surface garbage timestamps via stderr so state-file corruption is
+    // visible instead of silently auto-clearing the cache forever.
+    process.stderr.write(
+      `[infra-patterns] WARN: unparseable lastMonitorAt=${JSON.stringify(lastMonitorAt)}; treating as stale\n`
+    );
     return true;
   }
   const ageSeconds = (now - parsed) / 1000;
