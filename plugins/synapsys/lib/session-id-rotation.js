@@ -52,14 +52,17 @@ function lastObservedFile() {
 }
 
 /**
- * Path to the rotation audit JSONL. The leading underscore is intentional
- * and load-bearing: every reader that iterates the telemetry directory
- * MUST skip files starting with `_` so these sidecar rows don't get
- * mis-parsed as per-session memory events. Any future sidecar file in
- * this directory should follow the same `_<purpose>.jsonl` convention.
+ * Path to the rotation audit JSONL. The leading DOUBLE underscore is
+ * intentional and load-bearing: every reader that iterates the telemetry
+ * directory MUST skip files starting with `__` so these sidecar rows
+ * don't get mis-parsed as per-session memory events. Single-underscore
+ * names (e.g. `_unknown-session.jsonl`, or any session id starting with
+ * `_` per SAFE_ID_RE) are legitimate telemetry buckets and must NOT be
+ * filtered out. Any future sidecar file in this directory should follow
+ * the same `__<purpose>.jsonl` convention.
  */
 function rotationsFile() {
-  return path.join(telemetryDir(), '_session-rotations.jsonl');
+  return path.join(telemetryDir(), '__session-rotations.jsonl');
 }
 
 function readLastObserved() {

@@ -32,12 +32,15 @@ function listJsonlFiles(telDir) {
   } catch {
     return [];
   }
-  // Skip leading-underscore sidecars (e.g. `_session-rotations.jsonl`) — those
+  // Skip DOUBLE-underscore sidecars (e.g. `__session-rotations.jsonl`) — those
   // store cross-session instrumentation rows that do NOT follow the per-memory
   // event schema and would crash or skew stats if parsed as memory events.
+  // Single-underscore names like `_unknown-session.jsonl` (legitimate fallback
+  // bucket from telemetry.resolveSessionId) and any session id starting with
+  // `_` (allowed by SAFE_ID_RE) ARE real telemetry data and stay in scope.
   // See session-id-rotation.js::rotationsFile for the convention.
   return entries
-    .filter((n) => n.endsWith('.jsonl') && !n.startsWith('_'))
+    .filter((n) => n.endsWith('.jsonl') && !n.startsWith('__'))
     .map((n) => path.join(telDir, n));
 }
 
