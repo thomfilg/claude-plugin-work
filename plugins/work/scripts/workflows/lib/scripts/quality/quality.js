@@ -196,7 +196,7 @@ function touchedFiles(repoRoot) {
     const out = new Set();
     for (const line of res.stdout.split('\n')) {
       const trimmed = line.trim();
-      if (trimmed.length > 0) out.add(trimmed);
+      if (trimmed.length > 0) out.add(path.normalize(trimmed));
     }
     return out;
   } catch {
