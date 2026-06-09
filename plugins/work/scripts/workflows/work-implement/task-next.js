@@ -43,6 +43,7 @@ try {
 const TDD_CLI = path.join(__dirname, 'tdd-phase-state.js');
 
 const { TDD_PHASES, TDD_PHASE_TRANSITIONS } = require('./tdd-phase-registry');
+const { gateContractFor } = require('../../../skills/split-in-tasks/lib/task-types');
 
 // `done` is derived in this script (a cycle with red+green+refactor evidence
 // is treated as complete). It is NOT a state-machine target in the registry.
@@ -887,6 +888,17 @@ function main() {
   const docsExempt = isDocsExempt(type);
   const visualOnly = isVisualOnlyTask(scope);
   const testsOnly = type === 'tests-only';
+  // GH-528 review comment #3 (cursor[bot]): single source of truth for
+  // whether `--docs-exempt` should be forwarded to the recorder. The
+  // recorder relaxes RC-D (empty-output trap) only when this flag is set.
+  // Per the central contract in skills/split-in-tasks/lib/task-types.js,
+  // ONLY Types with `rcdEmptyTrap === false` (docs, config, ci, file-move,
+  // checkpoint) qualify. tests-only / tdd-code / mechanical-refactor keep
+  // the trap armed. Visual-only Storybook tasks have no executable surface
+  // and inherit the docs-exempt semantics by scope shape (orthogonal to
+  // Type) — they are added on as an OR.
+  const contractAllowsDocsExempt = gateContractFor(type, scope).rcdEmptyTrap === false;
+  const docsExemptForward = contractAllowsDocsExempt || visualOnly;
 
   // Checkpoint tasks are verification-only — no source change, no test
   // authorship, no gherkin scenarios. Asking the agent to satisfy a TDD
@@ -1058,8 +1070,14 @@ function main() {
           // command failed as RED requires (exitCode !== 0 confirmed above).
           // Accept it. Fires for documentation tasks (isDocsExempt) and for
           // Storybook stories-only tasks (isVisualOnlyTask).
+          // GH-528 review comment #3: drive `docsExempt` from the central
+          // contract (`gateContractFor`) rather than hard-coding `true`. For
+          // Type=docs (and visual-only Storybook scope) this resolves to
+          // true; for any other Type that reaches this fallback the trap
+          // stays armed. Guarded by the `(docsExempt || visualOnly)`
+          // condition above, so `docsExemptForward` is the right value here.
           const rec = recordEvidence(TDD_PHASES.red, ticket, taskNum, testCmd, repoRoot, scope, {
-            docsExempt: true,
+            docsExempt: docsExemptForward,
           });
           if (!rec.ok) {
             blockReason = `Could not record RED evidence:\n${rec.out}`;
@@ -1126,8 +1144,15 @@ function main() {
             'Type=tests-only GREEN requires at least one in-scope test file to be modified. ' +
             'No `*.test.*` / `*.spec.*` file under scope has changes vs. HEAD.';
         } else {
+          // GH-528 review comment #3 (cursor[bot]): tests-only's gate contract
+          // is `rcdEmptyTrap: true` (see gateContractFor('tests-only')). We
+          // therefore MUST NOT forward `--docs-exempt` here — doing so would
+          // disable the RC-D empty-output trap and let a silent verifier
+          // (e.g. `node -e ""`) record GREEN after merely touching a test
+          // file. `docsExemptForward` is driven by the central contract and
+          // resolves to `false` for tests-only, keeping the trap armed.
           const rec = recordEvidence(TDD_PHASES.green, ticket, taskNum, testCmd, repoRoot, scope, {
-            docsExempt: true,
+            docsExempt: docsExemptForward,
           });
           if (!rec.ok) {
             blockReason = `Could not record GREEN evidence:\n${rec.out}`;
@@ -1151,16 +1176,19 @@ function main() {
       // so we forward `--docs-exempt` to the recorder, which relaxes the
       // RC-D trap for this one invocation. Emit a diagnostic so operators
       // see why a silent verifier was accepted. See R8 + R9.
-      const greenDocsExempt = docsExempt || visualOnly;
+      // GH-528 review comment #3: `docsExemptForward` is now driven by the
+      // central `gateContractFor()` contract (plus visual-only OR), not by
+      // ad-hoc `docsExempt || visualOnly`. Same observable behaviour for
+      // docs/visual-only but routed through the single source of truth.
       const rec = recordEvidence(TDD_PHASES.green, ticket, taskNum, testCmd, repoRoot, scope, {
-        docsExempt: greenDocsExempt,
+        docsExempt: docsExemptForward,
       });
       if (!rec.ok) {
         blockReason = `Could not record GREEN evidence:\n${rec.out}`;
       } else {
         advanced = true;
         phase = TDD_PHASES.refactor;
-        if (greenDocsExempt) {
+        if (docsExemptForward) {
           const fallbackLabel = visualOnly
             ? 'visual-only fallback (Storybook stories-only scope — no testable code surface'
             : 'docs-exempt fallback (documentation task — no testable code surface';
@@ -1178,9 +1206,11 @@ function main() {
       // code surface, so their REFACTOR verifier is silent (`grep -q`,
       // `test -f`, etc.). Forward `--docs-exempt` so the recorder relaxes
       // RC-D for this single invocation — symmetric with RED and GREEN.
-      const refactorDocsExempt = docsExempt || visualOnly;
+      // GH-528 review comment #3: same single-source-of-truth routing as
+      // the GREEN branch above. `docsExemptForward` is `false` for tests-only
+      // (rcdEmptyTrap stays armed) and for any tdd-code task.
       const rec = recordEvidence(TDD_PHASES.refactor, ticket, taskNum, testCmd, repoRoot, scope, {
-        docsExempt: refactorDocsExempt,
+        docsExempt: docsExemptForward,
       });
       if (!rec.ok) {
         blockReason = `Could not record REFACTOR evidence:\n${rec.out}`;
