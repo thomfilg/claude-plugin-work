@@ -48,6 +48,9 @@ const { decideEdit, relativizePath, findMatch } = require(
   path.join(__dirname, '..', '..', 'lib', 'hooks', 'policies', 'scope-protection')
 );
 const { parseTasks } = require(path.join(__dirname, '..', '..', 'work', 'lib', 'task-parser'));
+const { matchesTypeScope, scopeRulesFor, isTestFilePath } = require(
+  path.join(__dirname, '..', '..', '..', '..', 'skills', 'split-in-tasks', 'lib', 'task-types')
+);
 const { appendEnforcementAudit } = require(
   path.join(__dirname, '..', '..', 'work', 'lib', 'work-actions')
 );
@@ -144,6 +147,13 @@ function getActiveTask(tasksDir) {
     // by sibling tasks). decideEdit blocks would be overridden to exit 0 with
     // a `cross-task-dep-allow` audit row.
     crossTaskDeps: Array.isArray(task.crossTaskDeps) ? task.crossTaskDeps : [],
+    // GH-528 item 5: per-Type allowlist layer. tdd-code / checkpoint /
+    // mechanical-refactor / file-move keep existing behavior (no per-Type
+    // restriction beyond the filesInScope/filesOutOfScope check). The
+    // closed-allowlist types (tests-only, docs, config, ci) additionally
+    // require the write target to match their per-Type pattern set in
+    // skills/split-in-tasks/lib/task-types.js.
+    type: typeof task.type === 'string' ? task.type : '',
   };
 }
 
@@ -207,6 +217,140 @@ function extractBashWriteTargets(cmd) {
 
 // ─── Main hook ──────────────────────────────────────────────────────────────
 
+// ─── GH-528 item 5: per-Type allowlist + Type-line edit guard ───────────────
+
+/**
+ * Per-Type closed-allowlist types. For these, the write target must match
+ * the Type's scopePatterns regex in addition to the active task's filesInScope.
+ * Types not in this set keep the existing behavior (filesInScope check only).
+ */
+const TYPE_ENFORCED_KINDS = new Set(['tests-only', 'docs', 'config', 'ci']);
+
+function typeAllowlistDecision(type, relTarget) {
+  if (!type || !TYPE_ENFORCED_KINDS.has(type)) return { blocked: false };
+  const rules = scopeRulesFor(type);
+  if (!rules || !rules.scopePatterns) return { blocked: false };
+  if (matchesTypeScope(type, relTarget)) {
+    // For tests-only also require the target to be a test file. matchesTypeScope
+    // already enforces this via the TEST_FILE_PATTERN pattern but keep an
+    // explicit check so the error message is precise.
+    if (type === 'tests-only' && !isTestFilePath(relTarget)) {
+      return {
+        blocked: true,
+        reason:
+          `Type=tests-only restricts writes to *.test.* / *.spec.* files. ` +
+          `Target "${relTarget}" is not a test file.`,
+      };
+    }
+    return { blocked: false };
+  }
+  return {
+    blocked: true,
+    reason:
+      `Type=${type} restricts writes to a closed allowlist (see ` +
+      `plugins/work/skills/split-in-tasks/lib/task-types.js). ` +
+      `Target "${relTarget}" is not in the ${type} allowlist.`,
+  };
+}
+
+/**
+ * Detect attempts to edit the `### Type` line inside a tasks.md write. The
+ * planner authors `### Type`; the implementer must not be able to flip it
+ * mid-implement (which would let them switch from tdd-code to docs to bypass
+ * the TDD gate). For Write tool calls targeting tasks.md, reject when the
+ * new content's `### Type` line differs from the on-disk version.
+ *
+ * Returns `{ blocked: true, reason }` to block, `{ blocked: false }` to allow.
+ *
+ * Scope: only triggers when the target relative path ends with `tasks.md`.
+ * Edit / MultiEdit tools that operate via `old_string` / `new_string` patches
+ * are checked by scanning the patches for the `### Type` line.
+ */
+function checkWriteTypeLines(toolInput, onDiskTypes) {
+  const newContent = (toolInput.content || '').toString();
+  const newTypes = extractTypeLines(newContent);
+  if (typesEqual(onDiskTypes, newTypes)) return { blocked: false };
+  return {
+    blocked: true,
+    reason:
+      `protect-task-scope: refusing to modify \`### Type\` lines in tasks.md ` +
+      `mid-implement. The planner sets Type; the implementer cannot change it ` +
+      `(would bypass the per-Type TDD contract). On disk: ${JSON.stringify(onDiskTypes)} ` +
+      `→ new: ${JSON.stringify(newTypes)}.`,
+  };
+}
+
+function checkEditTypeLines(toolName, toolInput) {
+  const edits =
+    toolName === 'Edit' ? [toolInput] : Array.isArray(toolInput.edits) ? toolInput.edits : [];
+  for (const edit of edits) {
+    const oldStr = (edit.old_string || '').toString();
+    const newStr = (edit.new_string || '').toString();
+    const oldHas = /^###\s+Type\b/m.test(oldStr);
+    const newHas = /^###\s+Type\b/m.test(newStr);
+    if ((oldHas || newHas) && oldStr !== newStr) {
+      return {
+        blocked: true,
+        reason:
+          `protect-task-scope: refusing to edit \`### Type\` line in tasks.md ` +
+          `mid-implement. Type is planner-authored.`,
+      };
+    }
+  }
+  return { blocked: false };
+}
+
+function typeLineGuard(toolName, toolInput, workDir, tasksDir) {
+  if (!toolInput || !tasksDir) return { blocked: false };
+  const target = (toolInput.file_path || '').toString();
+  if (!target) return { blocked: false };
+  const resolvedTarget = path.isAbsolute(target) ? target : path.resolve(workDir, target);
+  const tasksMdPath = path.resolve(tasksDir, 'tasks.md');
+  if (resolvedTarget !== tasksMdPath) return { blocked: false };
+
+  let onDisk = '';
+  try {
+    onDisk = fs.readFileSync(tasksMdPath, 'utf8');
+  } catch {
+    return { blocked: false };
+  }
+  const onDiskTypes = extractTypeLines(onDisk);
+
+  if (toolName === 'Write') return checkWriteTypeLines(toolInput, onDiskTypes);
+  if (toolName === 'Edit' || toolName === 'MultiEdit') {
+    return checkEditTypeLines(toolName, toolInput);
+  }
+  return { blocked: false };
+}
+
+function extractTypeLines(md) {
+  const out = [];
+  const lines = md.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^###\s+Type\s*$/i.test(lines[i].trim())) {
+      // Find the next non-blank line.
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const next = lines[j].trim();
+        if (!next) continue;
+        if (next.startsWith('#')) {
+          out.push('');
+          break;
+        }
+        out.push(next.toLowerCase());
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function typesEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 function evaluateTool(toolName, toolInput, active, workDir) {
   if (FILE_WRITE_TOOLS.has(toolName)) {
     const filePath = toolInput && toolInput.file_path;
@@ -260,6 +404,15 @@ async function main() {
 
   const toolName = hookData.tool_name || '';
   const toolInput = hookData.tool_input || {};
+
+  // GH-528 item 5: Type-line edit guard runs before scope evaluation.
+  // tasks.md is generally out of scope already, but this specifically
+  // blocks the bypass of flipping `### Type` mid-implement.
+  const typeLineDecision = typeLineGuard(toolName, toolInput, cwd, tasksDir);
+  if (typeLineDecision.blocked) {
+    process.stderr.write(typeLineDecision.reason + '\n');
+    process.exit(2);
+  }
 
   const decision = evaluateTool(toolName, toolInput, active, cwd);
   if (decision && decision.blocked) {
@@ -346,7 +499,36 @@ async function main() {
     process.stderr.write(decision.reason + '\n');
     process.exit(2);
   }
+
+  const typeBlock = checkPerTypeAllowlist(active, toolName, toolInput, cwd);
+  if (typeBlock.blocked) {
+    process.stderr.write(typeBlock.reason + '\n');
+    process.exit(2);
+  }
   process.exit(0);
+}
+
+/**
+ * GH-528 item 5: per-Type closed-allowlist check. Runs after the standard
+ * filesInScope decision has allowed the write. For tdd-code / checkpoint /
+ * mechanical-refactor / file-move, returns {blocked:false} unconditionally
+ * (their existing behavior). Honors the one-shot env-var bypass pair so
+ * operators can still pin a single override target across this layer.
+ */
+function checkPerTypeAllowlist(active, toolName, toolInput, cwd) {
+  if (!active.type || !TYPE_ENFORCED_KINDS.has(active.type)) return { blocked: false };
+  const target = extractTargetPath(toolName, toolInput) || '';
+  if (!target) return { blocked: false };
+  const relTarget = relativizePath(target, cwd);
+  if (!relTarget) return { blocked: false };
+  const bypassReason = (process.env.PROTECT_TASK_SCOPE_BYPASS_REASON || '').trim();
+  const bypassTargetCfg = (process.env.PROTECT_TASK_SCOPE_BYPASS_TARGET || '').trim();
+  const bypassMatched =
+    bypassReason &&
+    bypassTargetCfg &&
+    (relTarget === bypassTargetCfg || findMatch(relTarget, [bypassTargetCfg]) !== null);
+  if (bypassMatched) return { blocked: false };
+  return typeAllowlistDecision(active.type, relTarget);
 }
 
 /**
@@ -377,4 +559,13 @@ if (require.main === module) {
   });
 }
 
-module.exports = { evaluateTool, extractBashWriteTargets, getTicketId, getActiveTask };
+module.exports = {
+  evaluateTool,
+  extractBashWriteTargets,
+  getTicketId,
+  getActiveTask,
+  typeAllowlistDecision,
+  typeLineGuard,
+  extractTypeLines,
+  TYPE_ENFORCED_KINDS,
+};
