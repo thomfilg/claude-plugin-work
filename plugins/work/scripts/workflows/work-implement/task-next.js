@@ -1109,17 +1109,27 @@ function main() {
         // proving there is at least one failing test block under Suggested
         // Scope. The test command already failed (exitCode !== 0) above —
         // we just need to confirm authorship intent.
-        if (testFiles.length === 0 && (docsExempt || visualOnly)) {
+        // GH-528 review comment #7: the RED-fallback entry condition
+        // predates the closed-Type taxonomy. Drive it from the central
+        // contract — any Type whose `redRequiresTestFiles === false`
+        // (docs, config, ci, file-move, mechanical-refactor, checkpoint,
+        // tests-only) qualifies. Visual-only Storybook scope inherits the
+        // same semantics by scope shape (orthogonal to Type) and is added
+        // as an OR. tdd-code keeps `redRequiresTestFiles: true`, so it
+        // continues to require a `*.test.*` file in scope.
+        const redFileGuardWaived =
+          gateContractFor(type, scope).redRequiresTestFiles === false || visualOnly;
+        if (testFiles.length === 0 && redFileGuardWaived) {
           // Test-exempt: no `*.test.*` authorship surface, but the verification
           // command failed as RED requires (exitCode !== 0 confirmed above).
-          // Accept it. Fires for documentation tasks (isDocsExempt) and for
-          // Storybook stories-only tasks (isVisualOnlyTask).
-          // GH-528 review comment #3: drive `docsExempt` from the central
-          // contract (`gateContractFor`) rather than hard-coding `true`. For
-          // Type=docs (and visual-only Storybook scope) this resolves to
-          // true; for any other Type that reaches this fallback the trap
-          // stays armed. Guarded by the `(docsExempt || visualOnly)`
-          // condition above, so `docsExemptForward` is the right value here.
+          // Accept it. Fires for the silent-verifier-exempt Types listed above
+          // and for Storybook stories-only tasks (isVisualOnlyTask).
+          // `docsExemptForward` (driven by `rcdEmptyTrap === false || visualOnly`)
+          // is the right `--docs-exempt` forwarding value for the recorder:
+          // it stays armed for `mechanical-refactor` / `tests-only` even though
+          // they bypass the RED file guard, keeping RC-D protection intact for
+          // GREEN/REFACTOR. For docs/config/ci/file-move/checkpoint the trap
+          // is also relaxed by contract.
           const rec = recordEvidence(TDD_PHASES.red, ticket, taskNum, testCmd, repoRoot, scope, {
             docsExempt: docsExemptForward,
           });
@@ -1128,9 +1138,12 @@ function main() {
           } else {
             advanced = true;
             phase = TDD_PHASES.green;
+            const contractKind = gateContractFor(type, scope).kind;
             const fallbackLabel = visualOnly
               ? 'visual-only fallback (Storybook stories-only scope — no testable code surface'
-              : 'docs-exempt fallback (documentation task — no testable code surface';
+              : docsExempt
+                ? 'docs-exempt fallback (documentation task — no testable code surface'
+                : `contract fallback (Type=${contractKind} — no *.test.* authorship surface required by gate contract`;
             process.stdout.write(
               `task-next: RED accepted via ${fallbackLabel}; verification command failed as required).\n`
             );
