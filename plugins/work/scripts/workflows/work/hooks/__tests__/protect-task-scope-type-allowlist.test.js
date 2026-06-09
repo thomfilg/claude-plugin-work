@@ -24,7 +24,24 @@ const { spawnSync } = require('node:child_process');
 
 const HOOK = path.resolve(__dirname, '..', 'protect-task-scope.js');
 const WORK_STATE_FILENAME = '.work' + '-state.json';
+const WORK_ACTIONS_FILENAME = '.work' + '-actions.json';
 const TICKET = 'TEST-528';
+
+function readActions(tasksBase) {
+  const p = path.join(tasksBase, TICKET, WORK_ACTIONS_FILENAME);
+  if (!fs.existsSync(p)) return [];
+  const raw = fs.readFileSync(p, 'utf8').trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return raw
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+  }
+}
 
 function writeWorkState(tasksDir) {
   fs.writeFileSync(
@@ -187,17 +204,85 @@ describe('protect-task-scope — per-Type allowlist', () => {
   it('one-shot bypass pair still works for per-Type layer', () => {
     writeTasksMd(tasksDir, { type: 'docs', filesInScope: ['**/*'] });
     const target = path.join(tmpHome, 'src/foo.js');
+    const reason = 'emergency docs ship';
     const r = runHook({
       tasksBase,
       cwd: tmpHome,
       toolName: 'Write',
       toolInput: { file_path: target, content: 'x' },
       env: {
-        PROTECT_TASK_SCOPE_BYPASS_REASON: 'emergency docs ship',
+        PROTECT_TASK_SCOPE_BYPASS_REASON: reason,
         PROTECT_TASK_SCOPE_BYPASS_TARGET: 'src/foo.js',
       },
     });
     assert.equal(r.status, 0, `expected bypass to allow; stderr=${r.stderr}`);
+
+    // Audit trail: per-Type bypass must append a scope-bypass row with
+    // guard='type-allowlist'. Without this, operators can override the
+    // closed-allowlist gate silently.
+    const rows = readActions(tasksBase);
+    const bypassRows = rows.filter((row) => row && row.action === 'scope-bypass');
+    assert.equal(bypassRows.length, 1, 'exactly one scope-bypass audit row expected');
+    const row = bypassRows[0];
+    assert.equal(row.reason, reason, 'audit row carries the supplied reason');
+    assert.equal(row.allow, true, 'audit row records the allow decision');
+    assert.equal(
+      row.meta && row.meta.guard,
+      'type-allowlist',
+      `audit row meta should discriminate the type-allowlist guard; got: ${JSON.stringify(row)}`
+    );
+    assert.equal(
+      row.meta && row.meta.configuredTarget,
+      'src/foo.js',
+      `audit row meta should record configuredTarget; got: ${JSON.stringify(row)}`
+    );
+    const serialized = JSON.stringify(row);
+    assert.ok(
+      serialized.includes('src/foo.js'),
+      `audit row should reference the actual write target; got: ${serialized}`
+    );
+  });
+
+  it('per-Type bypass with NON-matching TARGET does NOT append audit row and blocks', () => {
+    writeTasksMd(tasksDir, { type: 'docs', filesInScope: ['**/*'] });
+    const target = path.join(tmpHome, 'src/foo.js');
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'Write',
+      toolInput: { file_path: target, content: 'x' },
+      env: {
+        PROTECT_TASK_SCOPE_BYPASS_REASON: 'some reason',
+        PROTECT_TASK_SCOPE_BYPASS_TARGET: 'src/elsewhere.js',
+      },
+    });
+    assert.equal(r.status, 2, `expected block when TARGET mismatches; stderr=${r.stderr}`);
+    const rows = readActions(tasksBase);
+    const bypassRows = rows.filter((row) => row && row.action === 'scope-bypass');
+    assert.equal(bypassRows.length, 0, 'no scope-bypass row when per-Type TARGET mismatches');
+  });
+
+  it('per-Type bypass with REASON set but no TARGET does NOT append audit row and blocks', () => {
+    writeTasksMd(tasksDir, { type: 'docs', filesInScope: ['**/*'] });
+    const target = path.join(tmpHome, 'src/foo.js');
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'Write',
+      toolInput: { file_path: target, content: 'x' },
+      env: {
+        PROTECT_TASK_SCOPE_BYPASS_REASON: 'lone reason',
+        // No TARGET set
+      },
+    });
+    assert.equal(r.status, 2, `expected block when TARGET missing; stderr=${r.stderr}`);
+    const rows = readActions(tasksBase);
+    const bypassRows = rows.filter((row) => row && row.action === 'scope-bypass');
+    assert.equal(
+      bypassRows.length,
+      0,
+      'REASON alone never opens the per-Type gate or appends audit'
+    );
   });
 });
 

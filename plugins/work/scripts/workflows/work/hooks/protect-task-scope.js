@@ -577,7 +577,7 @@ async function main() {
     process.exit(2);
   }
 
-  const typeBlock = checkPerTypeAllowlist(active, toolName, toolInput, cwd);
+  const typeBlock = checkPerTypeAllowlist(active, toolName, toolInput, cwd, ticketId);
   if (typeBlock.blocked) {
     process.stderr.write(typeBlock.reason + '\n');
     process.exit(2);
@@ -592,7 +592,7 @@ async function main() {
  * (their existing behavior). Honors the one-shot env-var bypass pair so
  * operators can still pin a single override target across this layer.
  */
-function checkPerTypeAllowlist(active, toolName, toolInput, cwd) {
+function checkPerTypeAllowlist(active, toolName, toolInput, cwd, ticketId) {
   if (!active.type || !TYPE_ENFORCED_KINDS.has(active.type)) return { blocked: false };
   const target = extractTargetPath(toolName, toolInput) || '';
   if (!target) return { blocked: false };
@@ -604,7 +604,37 @@ function checkPerTypeAllowlist(active, toolName, toolInput, cwd) {
     bypassReason &&
     bypassTargetCfg &&
     (relTarget === bypassTargetCfg || findMatch(relTarget, [bypassTargetCfg]) !== null);
-  if (bypassMatched) return { blocked: false };
+  if (bypassMatched) {
+    // Mirror the scope-bypass audit pattern (see main() around L519 and the
+    // type-line guard's tryTypeLineBypass) so a closed-allowlist override is
+    // never silent. Discriminator: meta.guard='type-allowlist'.
+    if (ticketId) {
+      try {
+        appendEnforcementAudit(ticketId, {
+          origin: 'ai-subtask',
+          task: active.taskNum,
+          phase: null,
+          action: 'scope-bypass',
+          allow: true,
+          reason: bypassReason,
+          outputPath: relTarget,
+          meta: {
+            taskNum: active.taskNum,
+            target: relTarget,
+            configuredTarget: bypassTargetCfg,
+            guard: 'type-allowlist',
+          },
+        });
+      } catch (err) {
+        try {
+          logHookError(__filename, err);
+        } catch {
+          /* swallow */
+        }
+      }
+    }
+    return { blocked: false };
+  }
   return typeAllowlistDecision(active.type, relTarget);
 }
 
