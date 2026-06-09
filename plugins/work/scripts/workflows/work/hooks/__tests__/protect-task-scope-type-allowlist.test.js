@@ -211,7 +211,13 @@ describe('protect-task-scope — Type-line edit guard', () => {
     tasksDir = path.join(tasksBase, TICKET);
     fs.mkdirSync(tasksDir, { recursive: true });
     writeWorkState(tasksDir);
-    writeTasksMd(tasksDir, { type: 'tdd-code', filesInScope: ['src/**'] });
+    // Include tasks.md in scope so the ONLY gate that can block these edits
+    // is the Type-line guard itself — proves the guard, not the scope gate,
+    // is doing the work.
+    writeTasksMd(tasksDir, {
+      type: 'tdd-code',
+      filesInScope: ['src/**', 'tasks/**/tasks.md'],
+    });
   });
   afterEach(() => fs.rmSync(tmpHome, { recursive: true, force: true }));
 
@@ -268,5 +274,118 @@ describe('protect-task-scope — Type-line edit guard', () => {
     });
     assert.equal(r.status, 2);
     assert.match(r.stderr, /### Type/);
+  });
+
+  // Comment 5 — cursor[bot] HIGH: value-only patches must be blocked too.
+  it('Edit tool with value-only patch (no `### Type` header in strings) is BLOCKED', () => {
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'Edit',
+      toolInput: {
+        file_path: path.join(tasksDir, 'tasks.md'),
+        old_string: 'tdd-code',
+        new_string: 'docs',
+      },
+    });
+    assert.equal(r.status, 2, `expected block; stdout=${r.stdout} stderr=${r.stderr}`);
+    assert.match(r.stderr, /### Type/);
+  });
+
+  it('Edit tool with whitespace-tricked value patch is BLOCKED', () => {
+    // Author the on-disk Type value with trailing whitespace so a patch can
+    // strip it and still flip semantic value.
+    const lines = [
+      '## Task 1 — sample',
+      '',
+      '### Type',
+      'tdd-code  ',
+      '',
+      '### Files in scope',
+      '- src/**',
+      '- tasks/**/tasks.md',
+      '',
+    ];
+    fs.writeFileSync(path.join(tasksDir, 'tasks.md'), lines.join('\n'));
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'Edit',
+      toolInput: {
+        file_path: path.join(tasksDir, 'tasks.md'),
+        old_string: 'tdd-code  ',
+        new_string: 'docs',
+      },
+    });
+    assert.equal(r.status, 2, `expected block; stderr=${r.stderr}`);
+  });
+
+  it('MultiEdit split across two value-only edits that flip Type is BLOCKED', () => {
+    // Neither edit contains `### Type`; the combined effect flips tdd-code → docs.
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'MultiEdit',
+      toolInput: {
+        file_path: path.join(tasksDir, 'tasks.md'),
+        edits: [
+          { old_string: 'tdd-code', new_string: 'PLACEHOLDER_X' },
+          { old_string: 'PLACEHOLDER_X', new_string: 'docs' },
+        ],
+      },
+    });
+    assert.equal(r.status, 2, `expected block; stderr=${r.stderr}`);
+  });
+
+  it('Edit on a non-Type line of tasks.md is NOT blocked by Type-line guard', () => {
+    // Patches the `### Files in scope` bullet, not Type — Type-line guard must
+    // not fire. (Other gates may still block tasks.md edits, but the stderr
+    // must not mention the Type-line refusal message.)
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'Edit',
+      toolInput: {
+        file_path: path.join(tasksDir, 'tasks.md'),
+        old_string: '- src/**',
+        new_string: '- src/**\n- lib/**',
+      },
+    });
+    assert.doesNotMatch(r.stderr || '', /refusing to (modify|edit) `### Type`/);
+  });
+
+  it('Edit on a totally different file does NOT trigger Type-line guard', () => {
+    // Out-of-scope path so the scope check may block — but the Type-line guard
+    // must not fire (no false positive on non-tasks.md files).
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'Edit',
+      toolInput: {
+        file_path: path.join(tmpHome, 'src/foo.js'),
+        old_string: 'tdd-code',
+        new_string: 'docs',
+      },
+    });
+    assert.doesNotMatch(r.stderr || '', /refusing to (modify|edit) `### Type`/);
+  });
+
+  it('one-shot bypass pair still works for Type-line guard when target matches', () => {
+    const target = path.join(tasksDir, 'tasks.md');
+    const r = runHook({
+      tasksBase,
+      cwd: tmpHome,
+      toolName: 'Edit',
+      toolInput: {
+        file_path: target,
+        old_string: 'tdd-code',
+        new_string: 'docs',
+      },
+      env: {
+        PROTECT_TASK_SCOPE_BYPASS_REASON: 'planner re-keying type mid-cycle',
+        PROTECT_TASK_SCOPE_BYPASS_TARGET: path.relative(tmpHome, target),
+      },
+    });
+    assert.equal(r.status, 0, `expected bypass to allow; stderr=${r.stderr}`);
   });
 });

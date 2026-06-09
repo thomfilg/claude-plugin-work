@@ -280,24 +280,100 @@ function checkWriteTypeLines(toolInput, onDiskTypes) {
   };
 }
 
-function checkEditTypeLines(toolName, toolInput) {
+/**
+ * Apply a single Edit patch in memory using the same semantics Claude Code's
+ * Edit tool uses: literal string replacement, first occurrence only unless
+ * `replace_all` is true. Returns the patched content, or null when the patch
+ * cannot be applied (old_string not found) — caller treats null as a fall-
+ * through (no change simulated, the real tool would error).
+ */
+function applyEditPatch(content, edit) {
+  const oldStr = (edit.old_string || '').toString();
+  const newStr = (edit.new_string || '').toString();
+  if (!oldStr) return content;
+  if (edit.replace_all) {
+    return content.split(oldStr).join(newStr);
+  }
+  const idx = content.indexOf(oldStr);
+  if (idx === -1) return null;
+  return content.slice(0, idx) + newStr + content.slice(idx + oldStr.length);
+}
+
+/**
+ * Cursor[bot] Comment 5 (GH-528): value-only patches must be detected.
+ *
+ * The old heuristic (string-match `### Type` in patch text) missed:
+ *   - `old: "tdd-code", new: "docs"` (no header in patch strings)
+ *   - whitespace tricks (`old: "tdd-code  ", new: "docs"`)
+ *   - MultiEdit split across two edits that combine to flip the value
+ *
+ * The source of truth is "what does the resolved file look like after the
+ * patch?" — so we read tasks.md from disk, simulate the Edit/MultiEdit, and
+ * compare extracted `### Type` lines before vs after. If they differ, block.
+ *
+ * This function is invoked only when the write target IS tasks.md (caller
+ * guarantees), so the cost of reading + simulating is bounded.
+ */
+function checkEditTypeLines(toolName, toolInput, onDiskContent, onDiskTypes) {
   const edits =
     toolName === 'Edit' ? [toolInput] : Array.isArray(toolInput.edits) ? toolInput.edits : [];
+  if (edits.length === 0) return { blocked: false };
+
+  let simulated = onDiskContent;
   for (const edit of edits) {
-    const oldStr = (edit.old_string || '').toString();
-    const newStr = (edit.new_string || '').toString();
-    const oldHas = /^###\s+Type\b/m.test(oldStr);
-    const newHas = /^###\s+Type\b/m.test(newStr);
-    if ((oldHas || newHas) && oldStr !== newStr) {
-      return {
-        blocked: true,
-        reason:
-          `protect-task-scope: refusing to edit \`### Type\` line in tasks.md ` +
-          `mid-implement. Type is planner-authored.`,
-      };
+    const next = applyEditPatch(simulated, edit);
+    // null = old_string not found; the real tool would error, so the file
+    // wouldn't change. Skip this edit in the simulation.
+    if (next !== null) simulated = next;
+  }
+
+  const newTypes = extractTypeLines(simulated);
+  if (typesEqual(onDiskTypes, newTypes)) return { blocked: false };
+
+  return {
+    blocked: true,
+    reason:
+      `protect-task-scope: refusing to edit \`### Type\` line in tasks.md ` +
+      `mid-implement. Type is planner-authored. On disk: ${JSON.stringify(onDiskTypes)} ` +
+      `→ after patch: ${JSON.stringify(newTypes)}.`,
+  };
+}
+
+/**
+ * Honor the one-shot env-var escape hatch for the Type-line guard. Returns
+ * true when the bypass fired (audit appended, caller should exit 0).
+ */
+function tryTypeLineBypass(toolName, toolInput, cwd, ticketId, active) {
+  const rel = relativizePath(extractTargetPath(toolName, toolInput) || '', cwd);
+  const bypassReason = (process.env.PROTECT_TASK_SCOPE_BYPASS_REASON || '').trim();
+  const bypassTargetCfg = (process.env.PROTECT_TASK_SCOPE_BYPASS_TARGET || '').trim();
+  if (!bypassReason || !bypassTargetCfg || !rel) return false;
+  const matched = rel === bypassTargetCfg || findMatch(rel, [bypassTargetCfg]) !== null;
+  if (!matched) return false;
+  try {
+    appendEnforcementAudit(ticketId, {
+      origin: 'ai-subtask',
+      task: active.taskNum,
+      phase: null,
+      action: 'scope-bypass',
+      allow: true,
+      reason: bypassReason,
+      outputPath: rel,
+      meta: {
+        taskNum: active.taskNum,
+        target: rel,
+        configuredTarget: bypassTargetCfg,
+        guard: 'type-line',
+      },
+    });
+  } catch (err) {
+    try {
+      logHookError(__filename, err);
+    } catch {
+      /* swallow */
     }
   }
-  return { blocked: false };
+  return true;
 }
 
 function typeLineGuard(toolName, toolInput, workDir, tasksDir) {
@@ -318,7 +394,7 @@ function typeLineGuard(toolName, toolInput, workDir, tasksDir) {
 
   if (toolName === 'Write') return checkWriteTypeLines(toolInput, onDiskTypes);
   if (toolName === 'Edit' || toolName === 'MultiEdit') {
-    return checkEditTypeLines(toolName, toolInput);
+    return checkEditTypeLines(toolName, toolInput, onDisk, onDiskTypes);
   }
   return { blocked: false };
 }
@@ -410,6 +486,7 @@ async function main() {
   // blocks the bypass of flipping `### Type` mid-implement.
   const typeLineDecision = typeLineGuard(toolName, toolInput, cwd, tasksDir);
   if (typeLineDecision.blocked) {
+    if (tryTypeLineBypass(toolName, toolInput, cwd, ticketId, active)) process.exit(0);
     process.stderr.write(typeLineDecision.reason + '\n');
     process.exit(2);
   }
