@@ -252,6 +252,168 @@ describe('tdd-phase-state record-red --red-skip-file-guard — Type gate', () =>
   });
 });
 
+// ── Bug 5: --docs-exempt must require contract+scope (Cursor[bot] HIGH/Medium) ──
+//
+// Same shape as --red-skip-file-guard and record-skip-red: the recorder
+// honors `--docs-exempt` from argv alone across all three record phases
+// (record-red, record-green, record-refactor) without consulting the active
+// task's Type. A tokened agent can pass --docs-exempt on a tdd-code task to
+// skip the RED file guard or the GREEN/REFACTOR RC-D empty-output trap.
+//
+// Gate the flag on `gateContractFor(type).rcdEmptyTrap === false` (matches
+// the orchestrator's `contractAllowsDocsExempt` discriminator). Visual-only
+// Storybook scope is an orthogonal allow path covered by reading the task's
+// Files in scope from tasks.md.
+
+function makeTasksBaseWithScope(type, scope) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tdd-de-'));
+  fs.mkdirSync(path.join(dir, TICKET, 'task1'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, TICKET, '.work' + '-state.json'),
+    JSON.stringify({ ticketId: TICKET })
+  );
+  const lines = [
+    '## Task 1 — sample',
+    '',
+    '### Type',
+    type,
+    '',
+    '### Files in scope',
+    ...scope.map((s) => `- ${s}`),
+    '',
+  ];
+  fs.writeFileSync(path.join(dir, TICKET, 'tasks.md'), lines.join('\n'));
+  return dir;
+}
+
+describe('tdd-phase-state record-red --docs-exempt — Type gate', () => {
+  let tasksBase;
+  afterEach(() => {
+    if (tasksBase) {
+      fs.rmSync(tasksBase, { recursive: true, force: true });
+      tasksBase = null;
+    }
+  });
+
+  it('--docs-exempt is REJECTED at record-red for Type=tdd-code', () => {
+    tasksBase = makeTasksBaseWithScope('tdd-code', ['src/**']);
+    const init = runCli(['init', TICKET, '--task', '1'], tasksBase);
+    assert.equal(init.status, 0, `init failed: ${init.stderr}`);
+    const r = runCli(
+      ['record-red', TICKET, '--task', '1', '--cmd', 'node -e "process.exit(1)"', '--docs-exempt'],
+      tasksBase
+    );
+    assert.notEqual(r.status, 0, `--docs-exempt must be rejected for tdd-code; stderr=${r.stderr}`);
+    assert.match(r.stderr, /docs-exempt|tdd-code|Type/);
+  });
+
+  it('--docs-exempt is HONORED at record-red for Type=docs', () => {
+    tasksBase = makeTasksBaseWithScope('docs', ['README.md']);
+    const init = runCli(['init', TICKET, '--task', '1'], tasksBase);
+    assert.equal(init.status, 0, `init failed: ${init.stderr}`);
+    const r = runCli(
+      ['record-red', TICKET, '--task', '1', '--cmd', 'node -e "process.exit(1)"', '--docs-exempt'],
+      tasksBase
+    );
+    assert.equal(r.status, 0, `expected accept; stderr=${r.stderr}`);
+  });
+
+  it('--docs-exempt is HONORED for visual-only Storybook scope (any Type)', () => {
+    // Visual-only Storybook tasks have all scope entries matching
+    // *.stories.[jt]sx? — orchestrator forwards --docs-exempt regardless
+    // of Type. Recorder must honor the same allow-path.
+    tasksBase = makeTasksBaseWithScope('tdd-code', [
+      'src/Button.stories.tsx',
+      'src/Card.stories.tsx',
+    ]);
+    const init = runCli(['init', TICKET, '--task', '1'], tasksBase);
+    assert.equal(init.status, 0, `init failed: ${init.stderr}`);
+    const r = runCli(
+      ['record-red', TICKET, '--task', '1', '--cmd', 'node -e "process.exit(1)"', '--docs-exempt'],
+      tasksBase
+    );
+    assert.equal(r.status, 0, `visual-only scope must allow --docs-exempt; stderr=${r.stderr}`);
+  });
+});
+
+describe('tdd-phase-state record-green --docs-exempt — Type gate', () => {
+  let tasksBase;
+  afterEach(() => {
+    if (tasksBase) {
+      fs.rmSync(tasksBase, { recursive: true, force: true });
+      tasksBase = null;
+    }
+  });
+
+  it('--docs-exempt is REJECTED at record-green for Type=tdd-code', () => {
+    tasksBase = makeTasksBaseWithScope('tdd-code', ['src/**']);
+    const init = runCli(['init', TICKET, '--task', '1'], tasksBase);
+    assert.equal(init.status, 0, `init failed: ${init.stderr}`);
+    // Advance to green via record-red with redSkipFileGuard for setup
+    // would require mechanical-refactor — instead, transition directly.
+    const transition = runCli(['transition', TICKET, 'green', '--task', '1'], tasksBase);
+    // Transition may fail in test fixture; what we care about is the
+    // docs-exempt rejection at record-green. Force currentPhase via direct
+    // file edit if transition refused — keep test focused on the gate.
+    if (transition.status !== 0) {
+      const statePath = path.join(tasksBase, TICKET, 'task1', 'tdd-phase.json');
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      state.currentPhase = 'green';
+      fs.writeFileSync(statePath, JSON.stringify(state));
+    }
+    const r = runCli(
+      [
+        'record-green',
+        TICKET,
+        '--task',
+        '1',
+        '--cmd',
+        'node -e "console.log(\'ok\')"',
+        '--docs-exempt',
+      ],
+      tasksBase
+    );
+    assert.notEqual(r.status, 0, `--docs-exempt must be rejected for tdd-code; stderr=${r.stderr}`);
+    assert.match(r.stderr, /docs-exempt|tdd-code|Type/);
+  });
+});
+
+describe('tdd-phase-state record-refactor --docs-exempt — Type gate', () => {
+  let tasksBase;
+  afterEach(() => {
+    if (tasksBase) {
+      fs.rmSync(tasksBase, { recursive: true, force: true });
+      tasksBase = null;
+    }
+  });
+
+  it('--docs-exempt is REJECTED at record-refactor for Type=tdd-code', () => {
+    tasksBase = makeTasksBaseWithScope('tdd-code', ['src/**']);
+    const init = runCli(['init', TICKET, '--task', '1'], tasksBase);
+    assert.equal(init.status, 0, `init failed: ${init.stderr}`);
+    // Force currentPhase to refactor — focus the test on the gate, not
+    // the full RED→GREEN→REFACTOR ramp.
+    const statePath = path.join(tasksBase, TICKET, 'task1', 'tdd-phase.json');
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    state.currentPhase = 'refactor';
+    fs.writeFileSync(statePath, JSON.stringify(state));
+    const r = runCli(
+      [
+        'record-refactor',
+        TICKET,
+        '--task',
+        '1',
+        '--cmd',
+        'node -e "console.log(\'ok\')"',
+        '--docs-exempt',
+      ],
+      tasksBase
+    );
+    assert.notEqual(r.status, 0, `--docs-exempt must be rejected for tdd-code; stderr=${r.stderr}`);
+    assert.match(r.stderr, /docs-exempt|tdd-code|Type/);
+  });
+});
+
 // ── Bug 2: bare CLI exits zero silently ─────────────────────────────────────
 
 describe('tdd-phase-state CLI — bare invocation', () => {

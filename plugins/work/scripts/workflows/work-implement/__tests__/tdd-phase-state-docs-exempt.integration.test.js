@@ -62,13 +62,36 @@ function seedGreenPhase(homeDir, ticket) {
     },
   ];
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  // GH-528 round-2 follow-up (Cursor[bot] HIGH/Medium): record-green's
+  // `--docs-exempt` flag is now gated on the active task's Type via on-disk
+  // tasks.md. Plant a Type=docs task so the relaxation contract test still
+  // passes through the new gate. The seed leaves taskNum unset on the CLI
+  // call, so the recorder falls back to the legacy ticket-root state path;
+  // tasks.md still lives at the ticket root and the gate reads `Task 1`.
+  fs.writeFileSync(
+    path.join(homeDir, 'worktrees', 'tasks', ticket, 'tasks.md'),
+    [
+      '## Task 1 — sample',
+      '',
+      '### Type',
+      'docs',
+      '',
+      '### Files in scope',
+      '- README.md',
+      '',
+    ].join('\n')
+  );
   return statePath;
 }
 
 describe('RC-D --docs-exempt relaxation', () => {
   let homeDir;
-  beforeEach(() => { homeDir = mkTempHome(); });
-  afterEach(() => { fs.rmSync(homeDir, { recursive: true, force: true }); });
+  beforeEach(() => {
+    homeDir = mkTempHome();
+  });
+  afterEach(() => {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  });
 
   it('tdd-phase-state record-green still rejects silent verifiers by default', () => {
     seedGreenPhase(homeDir, 'TEST-DOCS-1');

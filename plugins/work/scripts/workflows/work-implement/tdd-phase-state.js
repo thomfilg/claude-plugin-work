@@ -98,16 +98,16 @@ const TOKEN_MAX_AGE_MS = 10_000; // 10 seconds
  * Callers MUST handle `null` as "Type unknown, fail closed at the gate"
  * (i.e. do NOT honor `record-skip-red` or `--red-skip-file-guard`).
  */
-function readActiveTaskType(ticketId, taskNum) {
-  if (!ticketId || !Number.isInteger(taskNum) || taskNum < 1) return null;
+function readActiveTaskBlock(ticketId, taskNum) {
+  if (!ticketId || !Number.isInteger(taskNum) || taskNum < 1) {
+    return { type: null, scope: [] };
+  }
   try {
     const base = resolveTasksBaseWithFallback();
     const safeId = sanitizeId(ticketId);
     const tasksMdPath = path.resolve(base, safeId, 'tasks.md');
-    if (!fs.existsSync(tasksMdPath)) return null;
+    if (!fs.existsSync(tasksMdPath)) return { type: null, scope: [] };
     const md = fs.readFileSync(tasksMdPath, 'utf8');
-    // Locate `## Task <N>` header (case-insensitive, allow em-dash / hyphen
-    // separators). Read forward until the next `## ` heading.
     const lines = md.split(/\r?\n/);
     const headerRe = new RegExp(`^##\\s+Task\\s+${taskNum}\\b`, 'i');
     let start = -1;
@@ -117,7 +117,7 @@ function readActiveTaskType(ticketId, taskNum) {
         break;
       }
     }
-    if (start === -1) return null;
+    if (start === -1) return { type: null, scope: [] };
     let end = lines.length;
     for (let i = start + 1; i < lines.length; i += 1) {
       if (/^##\s+/.test(lines[i])) {
@@ -125,23 +125,99 @@ function readActiveTaskType(ticketId, taskNum) {
         break;
       }
     }
-    // Inside the task block, find `### Type` and take the next non-blank
-    // non-heading line as the Type value.
+    let type = null;
+    const scope = [];
     for (let i = start + 1; i < end; i += 1) {
-      if (/^###\s+Type\s*$/i.test(lines[i].trim())) {
+      const trimmed = lines[i].trim();
+      if (/^###\s+Type\s*$/i.test(trimmed)) {
         for (let j = i + 1; j < end; j += 1) {
           const next = lines[j].trim();
           if (!next) continue;
-          if (next.startsWith('#')) return null;
-          return next.toLowerCase();
+          if (next.startsWith('#')) break;
+          type = next.toLowerCase();
+          break;
         }
-        return null;
+        continue;
+      }
+      if (/^###\s+Files in scope\b/i.test(trimmed)) {
+        for (let j = i + 1; j < end; j += 1) {
+          const next = lines[j].trim();
+          if (!next) continue;
+          if (/^###\s+/.test(next) || /^##\s+/.test(next)) break;
+          const bullet = next.match(/^[-*+]\s+(.*)$/);
+          if (!bullet) continue;
+          const cleaned = bullet[1]
+            .replace(/`/g, '')
+            .replace(/\s+#.*$/, '')
+            .trim();
+          if (cleaned) scope.push(cleaned);
+        }
       }
     }
-    return null;
+    return { type, scope };
   } catch {
-    return null;
+    return { type: null, scope: [] };
   }
+}
+
+// Backward-compatible helper — returns only the Type, used by the existing
+// record-skip-red and --red-skip-file-guard gates.
+function readActiveTaskType(ticketId, taskNum) {
+  return readActiveTaskBlock(ticketId, taskNum).type;
+}
+
+// Visual-only Storybook detection (mirrors task-next.js isVisualOnlyTask).
+// When every scope entry matches `*.stories.[jt]sx?`, the task has no
+// executable test surface and `--docs-exempt` is legitimate even for
+// Type=tdd-code. See split-in-tasks SKILL.md Rule 10.
+function isVisualOnlyScope(scope) {
+  if (!Array.isArray(scope) || scope.length === 0) return false;
+  return scope.every((p) => typeof p === 'string' && /\.stories\.[jt]sx?$/i.test(p));
+}
+
+/**
+ * GH-528 round-2 follow-up (Cursor[bot] HIGH/Medium): single allow-check
+ * for `--docs-exempt`. Mirrors the orchestrator's `docsExemptForward`
+ * discriminator (task-next.js):
+ *     docsExemptForward = contractAllowsDocsExempt || visualOnly
+ *
+ * `--docs-exempt` is legitimate iff EITHER:
+ *   - gateContractFor(type).rcdEmptyTrap === false
+ *     (docs / config / ci / file-move / checkpoint), OR
+ *   - the task's scope is visual-only Storybook (any Type).
+ *
+ * Returns { allowed: boolean, type: string|null, reason: string }.
+ * `reason` carries an operator-facing message when allowed=false.
+ */
+function isDocsExemptAllowed(ticketId, taskNum) {
+  // Legacy compat: callers without --task wrote to the ticket-root state path
+  // (GH-219 pre-per-task). The Type-gate requires --task to resolve the
+  // active block; without it, fall through (the orchestrator always passes
+  // --task on the new code path that the round-2 review is securing).
+  if (!Number.isInteger(taskNum) || taskNum < 1) {
+    return { allowed: true, type: null, reason: 'legacy no-task caller' };
+  }
+  const { type, scope } = readActiveTaskBlock(ticketId, taskNum);
+  if (isVisualOnlyScope(scope)) {
+    return { allowed: true, type, reason: 'visual-only Storybook scope' };
+  }
+  if (type && taskTypes && typeof taskTypes.gateContractFor === 'function') {
+    const contract = taskTypes.gateContractFor(type);
+    if (contract && contract.rcdEmptyTrap === false) {
+      return { allowed: true, type, reason: 'contract rcdEmptyTrap=false' };
+    }
+  }
+  return {
+    allowed: false,
+    type,
+    reason:
+      `--docs-exempt is restricted to Types whose contract sets ` +
+      `rcdEmptyTrap=false (docs / config / ci / file-move / checkpoint) ` +
+      `or to visual-only Storybook scope. ` +
+      `Task ${taskNum || '?'} has Type="${type || 'unknown'}" and non-visual scope; ` +
+      `the RC-D empty-output trap and RED file guard stay armed. ` +
+      `Either fix the \`### Type\` line in tasks.md or drop --docs-exempt.`,
+  };
 }
 
 function sanitizeId(ticketId) {
@@ -654,7 +730,17 @@ function cmdRecordRed(ticketId, args) {
   // `--red-skip-file-guard` ONLY relaxes the file guard; `--docs-exempt`
   // continues to relax both (back-compat). Orchestrator forwards the new
   // flag for any Type whose contract says redRequiresTestFiles===false.
-  const docsExempt = Array.isArray(args) && args.includes('--docs-exempt');
+  // GH-528 round-2 follow-up (Cursor[bot] HIGH/Medium): --docs-exempt at
+  // record-red waives the "No test files changed" guard. Same Type+scope
+  // gate as record-green/record-refactor so a direct CLI call cannot relax
+  // the guard on a tdd-code task.
+  const docsExemptRequested = Array.isArray(args) && args.includes('--docs-exempt');
+  let docsExempt = false;
+  if (docsExemptRequested) {
+    const check = isDocsExemptAllowed(ticketId, taskNum);
+    if (!check.allowed) errorExit(check.reason);
+    docsExempt = true;
+  }
   const redSkipFileGuardRequested = Array.isArray(args) && args.includes('--red-skip-file-guard');
   // GH-528 round-2 follow-up (Cursor[bot] HIGH): the file-guard relaxation
   // must be cross-checked against the active task's contract — otherwise an
@@ -903,7 +989,17 @@ function cmdRecordGreen(ticketId, args) {
   // the RC-D empty-stdout/stderr guard would always trip. Callers (the planner
   // / task-next driver) opt in via this flag; default false preserves existing
   // strict behavior for all code tasks.
-  const docsExempt = Array.isArray(args) && args.includes('--docs-exempt');
+  //
+  // GH-528 round-2 follow-up (Cursor[bot] HIGH/Medium): gate the flag on the
+  // active task's Type + scope. Without this, a tokened agent can pass
+  // --docs-exempt directly to bypass RC-D on a tdd-code task.
+  const docsExemptRequested = Array.isArray(args) && args.includes('--docs-exempt');
+  let docsExempt = false;
+  if (docsExemptRequested) {
+    const check = isDocsExemptAllowed(ticketId, taskNum);
+    if (!check.allowed) errorExit(check.reason);
+    docsExempt = true;
+  }
 
   const state = readState(ticketId, opts);
   if (!state) errorExit('No TDD phase state found. Run "init" first.');
@@ -990,7 +1086,16 @@ function cmdRecordRefactor(ticketId, args) {
   // documentation-only tasks with silent verifiers (e.g. `grep -q`) can
   // finish the full RED → GREEN → REFACTOR cycle. Default behavior keeps
   // RC-D armed for every existing caller.
-  const docsExempt = Array.isArray(args) && args.includes('--docs-exempt');
+  //
+  // GH-528 round-2 follow-up (Cursor[bot] HIGH/Medium): same Type+scope gate
+  // as record-red/record-green to close the direct-CLI bypass surface.
+  const docsExemptRequested = Array.isArray(args) && args.includes('--docs-exempt');
+  let docsExempt = false;
+  if (docsExemptRequested) {
+    const check = isDocsExemptAllowed(ticketId, taskNum);
+    if (!check.allowed) errorExit(check.reason);
+    docsExempt = true;
+  }
 
   const { exitCode, stdout, stderr } = runTestCommandWithOutput(cmd);
   if (exitCode !== 0) {
