@@ -195,4 +195,37 @@ describe('follow-up-pr-comments — handleSnapshot wires Copilot stale-thread he
       'resolution should reference the Copilot stale-thread heuristic'
     );
   });
+
+  it('Fixture C: threadId-only previousStatus (no .status) still routes to Copilot heuristic', () => {
+    // Seed prior state with a threadId-only entry (GH-358-style preservation
+    // for non-terminal comments). Without the `!previousStatus?.status` guard,
+    // the truthy previousStatus would skip the Copilot default and the
+    // snapshot would auto-resolve the unchanged-hunk thread.
+    const ticketDir = path.join(tmpDir, 'GH-531');
+    fs.mkdirSync(ticketDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ticketDir, 'follow-up-comments.json'),
+      JSON.stringify({ comments: [{ id: 9003, threadId: 'thread-abc' }] })
+    );
+
+    installFollowUpPrMock([makeCopilotOutdatedComment({ id: 9003 })]);
+    installGitHunkMock(false); // hunk UNCHANGED — must stay unsolved
+    const mod = loadScript();
+
+    const code = runSnapshotCatchingExit(mod, '123');
+    assert.equal(code, 0);
+
+    const state = JSON.parse(
+      fs.readFileSync(path.join(ticketDir, 'follow-up-comments.json'), 'utf8')
+    );
+    const c = state.comments.find((x) => x.id === 9003);
+    assert.ok(c, 'comment 9003 must be in the snapshot');
+    assert.equal(
+      c.status,
+      'unsolved',
+      'threadId-only previousStatus must not bypass the Copilot stale-thread guard'
+    );
+    assert.equal(c.resolution, null);
+    assert.equal(c.threadId, 'thread-abc', 'threadId should be preserved');
+  });
 });

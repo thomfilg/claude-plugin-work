@@ -410,7 +410,7 @@ function handleSnapshot(prNumber) {
             if (classification.applied) {
               defaultStatus = classification.status;
               defaultResolution = classification.resolution;
-            } else if (isCopilotAuthor(author) && !previousStatus) {
+            } else if (isCopilotAuthor(author) && !previousStatus?.status) {
               // Copilot author but helper said not-applied AND no prior
               // status — that means the hunk did NOT change since
               // created_at (AC5: no false positives). Keep the comment
