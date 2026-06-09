@@ -87,6 +87,18 @@ This is the **ECHO-4453-class wedge**. To avoid it:
 - TDD-required: `tdd-code` (the only Type that runs the full RED→GREEN→REFACTOR cycle)
 - TDD-exempt: `tests-only`, `docs`, `config`, `ci`, `mechanical-refactor`, `file-move`, `checkpoint`
 
+**Build configs are NOT `Type: config`.** The `config` allowlist covers inert configuration (package.json, lockfiles, linter/formatter configs); it intentionally excludes build configs because they ship runtime behavior. Use `Type: tdd-code` (TDD-required) for:
+
+- `vite.config.{ts,js,mjs,cjs}`
+- `rollup.config.{ts,js,mjs,cjs}`
+- `webpack.config.{ts,js,mjs,cjs}`
+- `jest.config.{ts,js,mjs,cjs}`
+- `vitest.config.{ts,js,mjs,cjs}`
+- `next.config.{ts,js,mjs,cjs}`
+- `astro.config.{ts,js,mjs,cjs}`
+
+See [output-format.md "Common migration gotchas"](./output-format.md#common-migration-gotchas--build-configs-are-not-type-config) for the full rationale.
+
 For exempt tasks, use a non-phase deliverables list that describes the concrete verifiable work in execution order, for example: `- Update config`, `- Validate config`, `- Document rollout/usage` as applicable. The implement-time gate maps each Type to a specific contract via `gateContractFor()` — `tests-only` for example uses `record-skip-red` for RED and requires an in-scope test-file modification at GREEN; `docs` accepts silent verifiers via the RC-D relaxation. **Storybook stories-only tasks** are detected by scope shape (every entry matches `*.stories.[jt]sx?`) and use the visual-only gate path.
 
 For stories-only tasks, scope shape alone signals the exemption to the implement-gate: when every entry in `### Files in scope` matches `*.stories.[jt]sx?`, `task-next.js`'s `isVisualOnlyTask()` accepts the verification command (typically `pnpm dev:check`) as RED evidence — no `*.test.*` authorship file is required. Use a `### Test Command` of `pnpm dev:check` (lint + typecheck) and document the visual artifact in deliverables. Do NOT mix story files with `.test.*`/`.spec.*` or production source in the same task's scope, or the exemption will not fire.

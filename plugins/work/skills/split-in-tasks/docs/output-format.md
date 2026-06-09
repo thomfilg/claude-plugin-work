@@ -76,6 +76,22 @@ The closed enum is defined in [`lib/task-types.js`](../lib/task-types.js). Addin
 ---
 ```
 
+## Common migration gotchas — build configs are NOT `Type: config`
+
+`Type: config` is reserved for inert configuration (package.json, lockfiles, linter/formatter configs, `.editorconfig`, etc. — see `TYPE_SCOPE_RULES.config.scopePatterns` in [`../lib/task-types.js`](../lib/task-types.js) for the full allowlist). Build configs are deliberately excluded because they ship runtime behavior — a vite plugin, a webpack loader, or a jest setup file directly affects what runs in production or test.
+
+When migrating an in-flight `tasks.md` to the closed Type taxonomy, the following files should use **`Type: tdd-code`**, not `Type: config`:
+
+- `vite.config.{ts,js,mjs,cjs}`
+- `rollup.config.{ts,js,mjs,cjs}`
+- `webpack.config.{ts,js,mjs,cjs}`
+- `jest.config.{ts,js,mjs,cjs}`
+- `vitest.config.{ts,js,mjs,cjs}`
+- `next.config.{ts,js,mjs,cjs}`
+- `astro.config.{ts,js,mjs,cjs}`
+
+These ship runtime behavior, so they need the full RED → GREEN → REFACTOR TDD cycle. Pass D will warn (`config allowlist`) if you list one under `Type: config`; the per-Type write guard in [`protect-task-scope.js`](../../../scripts/workflows/work/hooks/protect-task-scope.js) will then block the edit at implement time.
+
 ## Task format (checkpoint tasks)
 
 ```markdown
