@@ -162,3 +162,58 @@ describe('task-next.js — tests-only GREEN refuses non-test scope', () => {
     assert.match(r.stdout, /ONLY \*\.test\.\* \/ \*\.spec\.\* files/);
   });
 });
+
+describe('task-next.js — tests-only GREEN accepts test-constrained glob scope', () => {
+  let ws;
+  afterEach(() => {
+    if (ws) {
+      fs.rmSync(ws.tasksBase, { recursive: true, force: true });
+      fs.rmSync(ws.repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('GREEN succeeds when scope is a `**\\/*.test.js` glob and an in-scope test was modified', () => {
+    ws = makeWorkspace({
+      scope: ['src/**/*.test.js'],
+      testCmd: 'node --test src/sub/foo.test.js',
+    });
+    fs.mkdirSync(path.join(ws.repoRoot, 'src', 'sub'), { recursive: true });
+    runTaskNext(ws.tasksBase, ws.repoRoot); // skip RED
+    fs.writeFileSync(
+      path.join(ws.repoRoot, 'src', 'sub', 'foo.test.js'),
+      'const { test } = require("node:test");\ntest("x", () => {});\n'
+    );
+    const r = runTaskNext(ws.tasksBase, ws.repoRoot);
+    assert.equal(r.status, 0, `expected 0; stdout=${r.stdout} stderr=${r.stderr}`);
+    assert.match(r.stdout, /GREEN accepted via tests-only/);
+  });
+
+  it('GREEN succeeds when scope is a `**\\/*.spec.js` glob and an in-scope spec was modified', () => {
+    ws = makeWorkspace({
+      scope: ['src/foo/**/*.spec.js'],
+      testCmd: 'node --test src/foo/sub/bar.spec.js',
+    });
+    fs.mkdirSync(path.join(ws.repoRoot, 'src', 'foo', 'sub'), { recursive: true });
+    runTaskNext(ws.tasksBase, ws.repoRoot); // skip RED
+    fs.writeFileSync(
+      path.join(ws.repoRoot, 'src', 'foo', 'sub', 'bar.spec.js'),
+      'const { test } = require("node:test");\ntest("x", () => {});\n'
+    );
+    const r = runTaskNext(ws.tasksBase, ws.repoRoot);
+    assert.equal(r.status, 0, `expected 0; stdout=${r.stdout} stderr=${r.stderr}`);
+    assert.match(r.stdout, /GREEN accepted via tests-only/);
+  });
+
+  it('GREEN blocks when scope is an open-ended glob like `src/**` (admits non-tests)', () => {
+    ws = makeWorkspace({ scope: ['src/**'] });
+    fs.mkdirSync(path.join(ws.repoRoot, 'src'), { recursive: true });
+    runTaskNext(ws.tasksBase, ws.repoRoot); // skip RED
+    fs.writeFileSync(
+      path.join(ws.repoRoot, 'src', 'foo.test.js'),
+      'const { test } = require("node:test");\ntest("x", () => {});\n'
+    );
+    const r = runTaskNext(ws.tasksBase, ws.repoRoot);
+    assert.notEqual(r.status, 0);
+    assert.match(r.stdout, /ONLY \*\.test\.\* \/ \*\.spec\.\* files/);
+  });
+});

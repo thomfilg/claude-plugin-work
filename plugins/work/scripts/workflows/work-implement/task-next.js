@@ -70,6 +70,43 @@ function filterToTestFiles(scope) {
 }
 
 /**
+ * Classify a `### Files in scope` entry: does its match set consist
+ * EXCLUSIVELY of test/spec files?
+ *
+ * Used by the Type=tests-only GREEN gate (cursor[bot] review, GH-528):
+ * the previous check applied a raw extension test to each entry, which
+ * mis-rejected glob patterns whose basename DOES constrain to test
+ * files (e.g. `plugins/work/**\/*.test.js`) while needing to keep
+ * rejecting open-ended globs like `src/**` that admit non-test files.
+ *
+ * Rules:
+ *   - Empty / non-string                                     → false.
+ *   - Glob entry (contains `*`): inspect its basename — the
+ *     segment after the last `/`. Accept iff the basename ends in
+ *     `*.test.<ext>` / `*.spec.<ext>` (ext one of j/tsx?). This
+ *     accepts `src/**\/*.test.js` and rejects `src/**`, `lib/**\/*.js`.
+ *   - Literal entry: delegate to the same test-extension regex used
+ *     by `filterToTestFiles`. Accept `src/foo.test.js`, reject
+ *     `src/foo.js`.
+ *
+ * @param {string} entry
+ * @returns {boolean}
+ */
+function scopeEntryAdmitsOnlyTestFiles(entry) {
+  if (typeof entry !== 'string' || !entry) return false;
+  const isGlob = entry.includes('*');
+  if (!isGlob) {
+    return /\.(test|spec)\.[jt]sx?$/i.test(entry);
+  }
+  // Glob: examine the basename. A glob whose final segment ends in a
+  // test-file extension pattern admits ONLY test files; any other
+  // shape could match a non-test file.
+  const lastSlash = entry.lastIndexOf('/');
+  const basename = lastSlash >= 0 ? entry.slice(lastSlash + 1) : entry;
+  return /\.(test|spec)\.[jt]sx?$/i.test(basename);
+}
+
+/**
  * Wrap chained / multiline shell commands in strict mode so that
  * middle-of-chain failures surface as a non-zero exit (instead of
  * being masked by a successful final command).
@@ -1188,7 +1225,14 @@ function main() {
       // also checks this — defense in depth), and (b) at least one in-scope
       // test file was actually modified vs. HEAD. Without (b) the agent
       // could no-op into GREEN.
-      const nonTestInScope = scope.filter((p) => p && !/\.(test|spec)\.[jt]sx?$/i.test(p));
+      // cursor[bot] review (GH-528): classify each scope entry via
+      // scopeEntryAdmitsOnlyTestFiles so glob patterns whose basename
+      // constrains to test files (e.g. `src/**\/*.test.js`) are accepted,
+      // while open-ended globs (`src/**`, `lib/**\/*.js`) that admit
+      // non-test matches are still rejected. The old raw-extension test
+      // mis-rejected the former case before detectChangedTestFilesInScope
+      // had a chance to run.
+      const nonTestInScope = scope.filter((p) => p && !scopeEntryAdmitsOnlyTestFiles(p));
       if (nonTestInScope.length > 0) {
         blockReason =
           `Type=tests-only requires scope to contain ONLY *.test.* / *.spec.* files. ` +
@@ -1328,6 +1372,7 @@ function main() {
 
 module.exports = {
   filterToTestFiles,
+  scopeEntryAdmitsOnlyTestFiles,
   filterChangedTestFilesByScope,
   findTestFilesInScope,
   wrapStrictMode,
