@@ -108,23 +108,53 @@ function appendProvenance(ticketDir, ticket) {
   fs.writeFileSync(actionsPath, `${JSON.stringify(rows, null, 2)}\n`);
 }
 
-function run(argv) {
-  const { positional, flags } = parseArgs(argv);
-
+function validateTicket(positional) {
   if (positional.length < 1) {
     process.stderr.write(
       'reset-follow-up: missing <TICKET>. Ticket id must match /^[A-Z]+-\\d+$/.\n'
     );
-    return 1;
+    return null;
   }
   const ticket = positional[0];
-
   if (!TICKET_RE.test(ticket)) {
     process.stderr.write(
       `reset-follow-up: invalid ticket id "${ticket}" — must match /^[A-Z]+-\\d+$/.\n`
     );
-    return 1;
+    return null;
   }
+  return ticket;
+}
+
+function readPreservedPrNumber(ticketDir) {
+  try {
+    const raw = fs.readFileSync(path.join(ticketDir, '.follow-up-state.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.prNumber != null ? parsed.prNumber : null;
+  } catch {
+    return null;
+  }
+}
+
+function removeStateFiles(ticketDir, TASKS_BASE, dryRun) {
+  const removed = [];
+  for (const name of STATE_FILES) {
+    const p = path.join(ticketDir, name);
+    assertContained(p, TASKS_BASE);
+    const exists = fs.existsSync(p);
+    if (dryRun) {
+      if (exists) removed.push(name);
+    } else if (safeUnlink(p)) {
+      removed.push(name);
+    }
+  }
+  return removed;
+}
+
+function run(argv) {
+  const { positional, flags } = parseArgs(argv);
+
+  const ticket = validateTicket(positional);
+  if (!ticket) return 1;
 
   if (!flags.yes && !flags.dryRun) {
     process.stdout.write(
@@ -146,28 +176,10 @@ function run(argv) {
   const ticketDir = path.join(TASKS_BASE, ticket);
   assertContained(ticketDir, TASKS_BASE);
 
-  // Preserve the saved PR number across reset so follow-up re-entry can
-  // still reach the PR after a cap-blocked cycle (GH-531).
-  let preservedPrNumber = null;
-  try {
-    const statePath = path.join(ticketDir, '.follow-up-state.json');
-    const raw = fs.readFileSync(statePath, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.prNumber != null) preservedPrNumber = parsed.prNumber;
-  } catch {
-    // ENOENT or parse error — nothing to preserve.
-  }
-
-  const removed = [];
-  for (const name of STATE_FILES) {
-    const p = path.join(ticketDir, name);
-    assertContained(p, TASKS_BASE);
-    if (flags.dryRun) {
-      if (fs.existsSync(p)) removed.push(name);
-      continue;
-    }
-    if (safeUnlink(p)) removed.push(name);
-  }
+  // Preserve the saved PR number across reset (GH-531) so follow-up re-entry
+  // can still reach the PR after a cap-blocked cycle.
+  const preservedPrNumber = readPreservedPrNumber(ticketDir);
+  const removed = removeStateFiles(ticketDir, TASKS_BASE, flags.dryRun);
 
   if (flags.dryRun) {
     process.stdout.write(
@@ -176,11 +188,8 @@ function run(argv) {
     return 0;
   }
 
-  // Re-initialize fresh state via Task 1's helper, preserving any prior PR number.
   const { initFreshState } = require(path.join(__dirname, 'follow-up-next.js'));
   initFreshState(ticket, { prNumber: preservedPrNumber });
-
-  // Provenance row.
   appendProvenance(ticketDir, ticket);
 
   process.stdout.write(`${JSON.stringify({ ok: true, ticket, removed, reinit: true }, null, 2)}\n`);
