@@ -17,11 +17,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const {
-  lintTypeAcConsistency,
-  lintAllPassD,
-  parseFilesInScope,
-} = require('./lint-type-ac-consistency');
+const { lintAllPassD, parseFilesInScope } = require('./lint-type-ac-consistency');
 
 const WARNING_PREFIX = '> ⚠️ SPLIT-WARNING:';
 
