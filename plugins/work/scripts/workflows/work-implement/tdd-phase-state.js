@@ -562,8 +562,22 @@ function cmdRecordRed(ticketId, args) {
   // already gates this on isDocsExempt/isVisualOnlyTask and forwards
   // `--docs-exempt`; we relax the "No test files changed" guard for that
   // explicit opt-in. RC-D semantics still apply to record-green.
+  //
+  // GH-528 round-2 follow-up (Cursor[bot] medium): mechanical-refactor's
+  // gateContractFor sets redRequiresTestFiles=false AND rcdEmptyTrap=true.
+  // task-next.js' RED fallback waives the file guard for any Type with
+  // redRequiresTestFiles===false, but `docsExemptForward` is driven by
+  // rcdEmptyTrap (so RC-D stays armed at GREEN/REFACTOR) — mechanical-
+  // refactor therefore got docsExempt=false here and the recorder
+  // rejected the call with "No test files changed", wedging the cycle.
+  //
+  // Fix: separate the RED file-guard relaxation from the RC-D relaxation.
+  // `--red-skip-file-guard` ONLY relaxes the file guard; `--docs-exempt`
+  // continues to relax both (back-compat). Orchestrator forwards the new
+  // flag for any Type whose contract says redRequiresTestFiles===false.
   const docsExempt = Array.isArray(args) && args.includes('--docs-exempt');
-  if (testFiles.length === 0 && !docsExempt) {
+  const redSkipFileGuard = Array.isArray(args) && args.includes('--red-skip-file-guard');
+  if (testFiles.length === 0 && !docsExempt && !redSkipFileGuard) {
     errorExit('No test files changed. RED phase requires modified .test or .spec files.');
   }
 
@@ -1076,7 +1090,19 @@ function cmdException(ticketId, args) {
 // file with zero tests instead of hitting the subcommand switch + errorExit.
 // Using process.exit(0) instead of top-level `return` because the standalone
 // biome parser (used by the pre-commit format gate) rejects top-level return.
+//
+// GH-528 round-2 follow-up (Cursor[bot] low): distinguish "loaded by another
+// module / node --test runner" (require.main !== module) from "operator
+// invoked the bare CLI" (require.main === module && argv has no subcommand).
+// The former must stay silent; the latter must error so operators / wrappers
+// don't misread a no-op invocation as success.
 if (process.argv.length < 3) {
+  if (require.main === module) {
+    errorExit(
+      'Missing subcommand. Usage: tdd-phase-state.js <subcommand> <TICKET_ID> [...]. ' +
+        'Valid subcommands: init, current, record-red, record-skip-red, record-green, record-refactor, transition, exception.'
+    );
+  }
   process.exit(0);
 }
 

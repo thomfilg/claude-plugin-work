@@ -621,6 +621,14 @@ function recordEvidence(phase, ticket, taskNum, cmd, cwd, scope, opts = {}) {
     ) {
       recordArgs.push('--docs-exempt');
     }
+    // GH-528 round-2 follow-up (Cursor[bot] medium): mechanical-refactor
+    // and other Types whose contract sets `redRequiresTestFiles === false`
+    // need the RED "no test files changed" guard relaxed without
+    // implying RC-D relaxation at GREEN/REFACTOR. The `--docs-exempt`
+    // flag conflated both; this flag covers only the RED file guard.
+    if (opts && opts.redSkipFileGuard === true && phase === TDD_PHASES.red) {
+      recordArgs.push('--red-skip-file-guard');
+    }
     return spawnSync(process.execPath, recordArgs, {
       cwd,
       stdio: 'pipe',
@@ -1133,8 +1141,17 @@ function main() {
           // they bypass the RED file guard, keeping RC-D protection intact for
           // GREEN/REFACTOR. For docs/config/ci/file-move/checkpoint the trap
           // is also relaxed by contract.
+          //
+          // GH-528 round-2 follow-up (Cursor[bot] medium): the recorder also
+          // has a "No test files changed" guard at RED that fires
+          // independently of RC-D. Without forwarding `--red-skip-file-guard`,
+          // mechanical-refactor (redRequiresTestFiles=false, rcdEmptyTrap=true)
+          // wedges: the orchestrator accepts the fallback, the recorder
+          // rejects it. Forward `redSkipFileGuard: true` whenever this branch
+          // fires — by definition the contract has waived the file guard.
           const rec = recordEvidence(TDD_PHASES.red, ticket, taskNum, testCmd, repoRoot, scope, {
             docsExempt: docsExemptForward,
+            redSkipFileGuard: true,
           });
           if (!rec.ok) {
             blockReason = `Could not record RED evidence:\n${rec.out}`;
