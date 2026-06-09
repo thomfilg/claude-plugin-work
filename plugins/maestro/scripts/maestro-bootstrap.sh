@@ -50,10 +50,6 @@ BASE_BRANCH="${BASE_BRANCH:-main}"
 BASE_BRANCH="${BASE_BRANCH#refs/remotes/origin/}"
 BASE_BRANCH="${BASE_BRANCH#origin/}"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
-# Capture whether SKILL_NAME was explicitly set BEFORE applying the default,
-# so the preserve-existing logic below can distinguish "operator set it" from
-# "shell default fell through".
-_SKILL_NAME_FROM_ENV="${SKILL_NAME:-}"
 SKILL_NAME="${SKILL_NAME:-work}"
 
 # ── Skill resolution (GH-514 Task 2)
@@ -74,37 +70,68 @@ for _arg in "$@"; do
 done
 set -- "${_FILTERED_ARGS[@]+"${_FILTERED_ARGS[@]}"}"
 
+# Whitelist mirrors plugins/maestro/scripts/lib/maestro-conduct/skill-registry.js
+# (REGISTRY keys). Keep these two lists in sync — a value passed via --skill /
+# MAESTRO_SKILL / SKILL_NAME that's not on this list would launch /<typo> in
+# tmux while the conductor reads .maestro-skill, fails the same whitelist, and
+# falls open to /work. That split state is the bug PR #561 review flagged.
+_KNOWN_SKILLS=("work" "follow-up")
+
+is_known_skill() {
+  local cand="$1"
+  for s in "${_KNOWN_SKILLS[@]}"; do
+    [ "$s" = "$cand" ] && return 0
+  done
+  return 1
+}
+
 resolve_skill() {
   # Echo the resolved skill name following the documented precedence.
+  # Precedence: --skill > MAESTRO_SKILL > SKILL_NAME > "work".
+  local candidate=""
   if [ -n "$SKILL_FLAG" ]; then
-    echo "$SKILL_FLAG"
+    candidate="$SKILL_FLAG"
   elif [ -n "${MAESTRO_SKILL:-}" ]; then
-    echo "$MAESTRO_SKILL"
+    candidate="$MAESTRO_SKILL"
   elif [ -n "${SKILL_NAME:-}" ]; then
-    echo "$SKILL_NAME"
+    candidate="$SKILL_NAME"
   else
+    candidate="work"
+  fi
+  if is_known_skill "$candidate"; then
+    echo "$candidate"
+  else
+    echo "[maestro] WARNING: unknown skill '$candidate' (not in registry) — falling open to 'work'" >&2
     echo "work"
   fi
 }
 
 # Track whether the caller EXPLICITLY provided a skill source this invocation.
-# Bare re-runs (no --skill / no env) on an already-bootstrapped ticket must
-# preserve the existing .maestro-skill — otherwise a previous --skill=follow-up
-# would be silently reverted to work on the next plain `bash maestro-bootstrap.sh GH-X`
-# (PR #561 review).
+# Only --skill and MAESTRO_SKILL count: SKILL_NAME is commonly exported (e.g.
+# `SKILL_NAME=work`) and treating it as "explicit" would let a shell default
+# silently overwrite a previously-preserved follow-up on bare re-runs (PR #561
+# review, "SKILL_NAME env overwrites preserved skill").
 SKILL_EXPLICIT=0
-if [ -n "$SKILL_FLAG" ] || [ -n "${MAESTRO_SKILL:-}" ] || [ -n "$_SKILL_NAME_FROM_ENV" ]; then
+if [ -n "$SKILL_FLAG" ] || [ -n "${MAESTRO_SKILL:-}" ]; then
   SKILL_EXPLICIT=1
 fi
 
 RESOLVED_SKILL="$(resolve_skill)"
 
-# Per-ticket `.maestro-skill` file MUST land where skill-registry.js reads it
-# (`tasksBase()`: TASKS_BASE → $WORKTREES_BASE/tasks → ~/worktrees/tasks). The
-# bot caught a divergence here: defaulting to $PWD/tasks would write to the
-# wrong directory and the conductor would silently keep treating tickets as
-# /work. MAESTRO_TASKS_BASE remains an explicit override for tests.
+# Per-ticket `.maestro-skill` file MUST land where skill-registry.js reads it.
+# The registry's tasksBase() resolves in this exact order: TASKS_BASE →
+# $WORKTREES_BASE/tasks → ~/worktrees/tasks. Mirror that chain exactly. The
+# MAESTRO_TASKS_BASE knob remains as an explicit override (used by integration
+# tests) but if it's set without an aligning TASKS_BASE the bootstrap would
+# persist `.maestro-skill` where the conductor never reads it (PR #561 review,
+# "MAESTRO_TASKS_BASE not read by registry"). Warn the operator.
+_MAESTRO_TASKS_BASE_FROM_ENV="${MAESTRO_TASKS_BASE:-}"
 MAESTRO_TASKS_BASE="${MAESTRO_TASKS_BASE:-${TASKS_BASE:-${WORKTREES_BASE:-$HOME/worktrees}/tasks}}"
+if [ -n "$_MAESTRO_TASKS_BASE_FROM_ENV" ] \
+    && [ -z "${TASKS_BASE:-}" ] \
+    && [ "$_MAESTRO_TASKS_BASE_FROM_ENV" != "${WORKTREES_BASE:-$HOME/worktrees}/tasks" ]; then
+  echo "[maestro] WARNING: MAESTRO_TASKS_BASE=$_MAESTRO_TASKS_BASE_FROM_ENV is set but TASKS_BASE is not — the conductor reads .maestro-skill from TASKS_BASE / \$WORKTREES_BASE/tasks. Export TASKS_BASE=\"\$MAESTRO_TASKS_BASE\" so the two agree." >&2
+fi
 
 # Provider-derived session-name / ticket prefix. resolve_prefix() (sets global
 # PREFIX, fail-open to "GH"). maestro-conduct.js derives the same prefix
@@ -178,7 +205,10 @@ for TICKET in "$@"; do
   # GH-514 Task 2: persist resolved skill per ticket so the conductor can read
   # it back (single-line file, no trailing newline noise — registry trims).
   # PR #561 review: preserve existing .maestro-skill on bare re-runs so a prior
-  # --skill=follow-up isn't silently reverted to 'work' by a plain re-bootstrap.
+  # --skill=follow-up isn't silently reverted to 'work'. CRITICAL: when we
+  # preserve, also re-point RESOLVED_SKILL at the preserved value so the
+  # stub-skip gate and the tmux launcher below agree with what the conductor
+  # will read ("Bootstrap ignores preserved skill" finding).
   TICKET_DIR="$MAESTRO_TASKS_BASE/$TICKET"
   mkdir -p "$TICKET_DIR"
   if [ "$SKILL_EXPLICIT" = "1" ] || [ ! -f "$TICKET_DIR/.maestro-skill" ]; then
@@ -186,7 +216,13 @@ for TICKET in "$@"; do
     echo "[$TICKET] .maestro-skill = $RESOLVED_SKILL (written)"
   else
     EXISTING_SKILL="$(head -n1 "$TICKET_DIR/.maestro-skill" | tr -d '[:space:]')"
-    echo "[$TICKET] .maestro-skill = $EXISTING_SKILL (preserved — no explicit skill on this invocation)"
+    if is_known_skill "$EXISTING_SKILL"; then
+      RESOLVED_SKILL="$EXISTING_SKILL"
+      echo "[$TICKET] .maestro-skill = $EXISTING_SKILL (preserved — no explicit skill on this invocation)"
+    else
+      echo "[$TICKET] .maestro-skill on disk contains unknown skill '$EXISTING_SKILL' — overwriting with '$RESOLVED_SKILL'" >&2
+      printf '%s\n' "$RESOLVED_SKILL" > "$TICKET_DIR/.maestro-skill"
+    fi
   fi
 
   # Per-ticket custom bootstrap (runs only on fresh worktrees).

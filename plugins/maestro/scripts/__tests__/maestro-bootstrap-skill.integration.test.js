@@ -205,6 +205,102 @@ test('Bare re-bootstrap (no --skill, no env) preserves existing .maestro-skill (
   );
 });
 
+test('Re-bootstrap with shell-default SKILL_NAME=work does NOT overwrite preserved follow-up (PR #561 review)', () => {
+  // Many setups export SKILL_NAME=work as a shell default. If the bootstrap
+  // treats that as an "explicit" skill source, every bare re-run would silently
+  // revert a prior --skill=follow-up back to work.
+  const { wrapper, base, fakeHome } = makeSandbox();
+  const ticket = 'GH-9001';
+
+  const r1 = runScript(wrapper, {
+    ...RUN_OPTS,
+    args: ['--skill=follow-up', ticket],
+    env: baseEnv(base, fakeHome),
+  });
+  assert.equal(r1.status, 0, `seed: ${r1.stdout}\n${r1.stderr}`);
+  const skillFile = path.join(base, 'tasks', ticket, '.maestro-skill');
+  assert.equal(fs.readFileSync(skillFile, 'utf8').trim(), 'follow-up');
+
+  // Re-run with SKILL_NAME=work in env (shell default). MUST preserve follow-up.
+  const r2 = runScript(wrapper, {
+    ...RUN_OPTS,
+    args: [ticket],
+    env: baseEnv(base, fakeHome, { SKILL_NAME: 'work' }),
+  });
+  assert.equal(r2.status, 0, `re-run: ${r2.stdout}\n${r2.stderr}`);
+  assert.equal(
+    fs.readFileSync(skillFile, 'utf8').trim(),
+    'follow-up',
+    'SKILL_NAME=work env (shell default) must NOT count as explicit and must NOT clobber preserved follow-up'
+  );
+});
+
+test('Preserved follow-up skill drives the tmux launcher on re-bootstrap (PR #561 review)', () => {
+  // Re-bootstrap that recreates a missing tmux session must launch the
+  // PRESERVED skill, not the default "work" — otherwise the conductor reads
+  // follow-up while the relaunched pane runs /work (split state).
+  const { wrapper, base, fakeHome } = makeSandbox();
+  const ticket = 'GH-9001';
+
+  const r1 = runScript(wrapper, {
+    ...RUN_OPTS,
+    args: ['--skill=follow-up', ticket],
+    env: baseEnv(base, fakeHome),
+  });
+  assert.equal(r1.status, 0, `seed: ${r1.stdout}\n${r1.stderr}`);
+
+  // Bare re-run — preserved follow-up must drive launcher argv.
+  const r2 = runScript(wrapper, {
+    ...RUN_OPTS,
+    args: [ticket],
+    env: baseEnv(base, fakeHome),
+  });
+  assert.equal(r2.status, 0, `re-run: ${r2.stdout}\n${r2.stderr}`);
+  const argv = r2.newSessionCalls.join('\n');
+  assert.match(
+    argv,
+    /\/follow-up GH-9001/,
+    `re-bootstrap with preserved follow-up must launch /follow-up; got:\n${argv}`
+  );
+  assert.doesNotMatch(
+    argv,
+    /\/work GH-9001/,
+    `re-bootstrap with preserved follow-up must NOT launch /work; got:\n${argv}`
+  );
+});
+
+test('Unknown --skill value falls open to /work with a stderr warning (PR #561 review)', () => {
+  // resolve_skill must validate against the maestro-conduct skill-registry
+  // whitelist. A typo like "followup" should NOT launch /followup or persist
+  // the bad value (the conductor would silently fall open to /work, producing
+  // split state).
+  const { wrapper, base, fakeHome } = makeSandbox();
+  const ticket = 'GH-9001';
+
+  const r = runScript(wrapper, {
+    ...RUN_OPTS,
+    args: ['--skill=followup', ticket],
+    env: baseEnv(base, fakeHome),
+  });
+  assert.equal(r.status, 0, `bootstrap: ${r.stdout}\n${r.stderr}`);
+
+  // .maestro-skill must be "work" (fell open), not "followup".
+  const skillFile = path.join(base, 'tasks', ticket, '.maestro-skill');
+  assert.equal(fs.readFileSync(skillFile, 'utf8').trim(), 'work');
+
+  // stderr must announce the fall-open.
+  assert.match(
+    r.stderr,
+    /unknown skill 'followup'/,
+    `stderr must warn about unknown skill; got:\n${r.stderr}`
+  );
+
+  // Tmux launcher must use /work, not /followup.
+  const argv = r.newSessionCalls.join('\n');
+  assert.match(argv, /\/work GH-9001/);
+  assert.doesNotMatch(argv, /\/followup GH-9001/);
+});
+
 test('Bootstrap default (no --skill, no env) preserves /work behavior bit-for-bit', () => {
   const { wrapper, base, fakeHome, helperLog } = makeSandbox();
   const ticket = 'GH-9001';
