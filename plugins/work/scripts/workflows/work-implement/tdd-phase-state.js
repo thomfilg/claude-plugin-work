@@ -54,6 +54,7 @@ const ALLOWED_AGENTS = [
 // Subcommands that require token verification
 const GATED_SUBCOMMANDS = [
   'record-red',
+  'record-skip-red',
   'record-green',
   'record-refactor',
   'transition',
@@ -703,6 +704,57 @@ function cmdRecordRedSynthesized(ticketId, args, cmd, taskNum, opts) {
   });
 }
 
+/**
+ * record-skip-red — tests-only Type RED-skipped contract (GH-528 item 4).
+ *
+ * Type=tests-only tasks add tests against code that already works, so the
+ * "failing test → passing impl" cycle is incoherent — RED is impossible by
+ * design. This subcommand persists an intentional skip so the audit trail
+ * clearly distinguishes a skipped-by-design cycle from a fabricated one
+ * (see [[no-fake-tdd-evidence]]).
+ *
+ * Contract:
+ *   - --reason is required (empty → BYPASS line, no state change).
+ *   - Current phase must be `red`.
+ *   - Persists `cycle.red = { skipped: true, reason, timestamp }` and
+ *     transitions currentPhase RED → GREEN in the same write.
+ *   - Does NOT run any --cmd; the skip is a contract, not a verification.
+ */
+function cmdRecordSkipRed(ticketId, args) {
+  if (!ticketId) errorExit('Missing ticket ID.');
+  const taskNum = safeParseTask(args);
+  const opts = taskNum ? { taskNum } : undefined;
+
+  const reasonIdx = args.indexOf('--reason');
+  const reason = reasonIdx !== -1 && reasonIdx + 1 < args.length ? args[reasonIdx + 1] : undefined;
+  if (!reason || !reason.trim()) {
+    process.stderr.write(
+      'BYPASS: tdd-phase-state.js record-skip-red --reason "<why RED is intentionally skipped>"\n'
+    );
+    process.exit(1);
+  }
+
+  const state = readState(ticketId, opts);
+  if (!state) errorExit('No TDD phase state found. Run "init" first.');
+  if (state.currentPhase !== 'red') {
+    errorExit(
+      'Cannot record skip-red: current phase is "' +
+        state.currentPhase +
+        '". record-skip-red only valid during red phase.'
+    );
+  }
+
+  const record = getCurrentCycleRecord(state);
+  record.red = {
+    skipped: true,
+    reason,
+    timestamp: new Date().toISOString(),
+  };
+  state.currentPhase = 'green';
+  writeState(ticketId, state, opts);
+  successOut({ ok: true, phase: 'green', cycle: state.currentCycle, skipped: true, reason });
+}
+
 function cmdRecordGreen(ticketId, args) {
   if (!ticketId) errorExit('Missing ticket ID.');
   const cmd = parseCmd(args);
@@ -1049,6 +1101,9 @@ switch (subcommand) {
   case 'record-red':
     cmdRecordRed(ticketId, args.slice(2));
     break;
+  case 'record-skip-red':
+    cmdRecordSkipRed(ticketId, args.slice(2));
+    break;
   case 'record-green':
     cmdRecordGreen(ticketId, args.slice(2));
     break;
@@ -1064,6 +1119,6 @@ switch (subcommand) {
   default:
     errorExit(
       `Unknown subcommand: ${subcommand}. ` +
-        'Valid: init, current, record-red, record-green, record-refactor, transition, exception'
+        'Valid: init, current, record-red, record-skip-red, record-green, record-refactor, transition, exception'
     );
 }

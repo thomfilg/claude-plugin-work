@@ -412,6 +412,113 @@ function mintCompanionToken() {
 }
 
 // eslint-disable-next-line max-lines-per-function, complexity -- allowlisted pre-existing; see .quality-exceptions
+/**
+ * Persist an intentional RED skip via `tdd-phase-state.js record-skip-red`.
+ *
+ * Used for Type=tests-only tasks where RED is incoherent by design (no
+ * failing-test → passing-impl loop exists). Mirrors the spawn pattern of
+ * `recordEvidence` so token re-minting / token verification stay aligned
+ * across all phase writes. Returns `{ ok, out, exitCode }`.
+ */
+/**
+ * Return the subset of changed (vs HEAD + staged + untracked) files that are
+ * test/spec files AND fall under the task's declared scope. Used by the
+ * tests-only GREEN gate to ensure the agent actually wrote new test code
+ * (not a no-op cycle).
+ *
+ * Scope match is intentionally lenient: any changed test file whose POSIX
+ * path starts with a scope-listed directory, or matches a scope-listed file
+ * exactly, counts. Glob expansion is out of scope — Pass D enforces the
+ * planner-side allowlist.
+ */
+function detectChangedTestFilesInScope(repoRoot, scope) {
+  const out = [];
+  let diff = '';
+  let staged = '';
+  let untracked = '';
+  try {
+    diff =
+      spawnSync('git', ['diff', '--name-only'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).stdout || '';
+    staged =
+      spawnSync('git', ['diff', '--cached', '--name-only'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).stdout || '';
+    untracked =
+      spawnSync('git', ['ls-files', '--others', '--exclude-standard'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).stdout || '';
+  } catch {
+    /* git unavailable — treat as empty */
+  }
+  const changed = new Set(
+    [...diff.split('\n'), ...staged.split('\n'), ...untracked.split('\n')]
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+  const scopeList = Array.isArray(scope) ? scope : [];
+  for (const rel of changed) {
+    if (!/\.(test|spec)\.[jt]sx?$/i.test(rel)) continue;
+    const inScope = scopeList.some((s) => {
+      if (!s) return false;
+      if (rel === s) return true;
+      if (rel.startsWith(s.replace(/\/+$/, '') + '/')) return true;
+      return false;
+    });
+    // If scope is empty/file-only, treat any changed test file as in-scope.
+    if (scopeList.length === 0 || inScope) out.push(rel);
+  }
+  return out;
+}
+
+function recordSkipRed(ticket, taskNum, reason, cwd) {
+  mintCompanionToken();
+  const args = [TDD_CLI, 'record-skip-red', ticket, '--task', String(taskNum), '--reason', reason];
+  // Auto-init the state file the first time, mirroring recordEvidence().
+  function runOnce() {
+    mintCompanionToken();
+    return spawnSync(process.execPath, args, {
+      cwd,
+      stdio: 'pipe',
+      encoding: 'utf8',
+      env: { ...process.env },
+    });
+  }
+  let r = runOnce();
+  if (r.status !== 0) {
+    const combined = (r.stdout || '') + (r.stderr || '');
+    if (/No TDD phase state found/i.test(combined)) {
+      mintCompanionToken();
+      const initRes = spawnSync(
+        process.execPath,
+        [TDD_CLI, 'init', ticket, '--task', String(taskNum)],
+        { cwd, stdio: 'pipe', encoding: 'utf8', env: { ...process.env } }
+      );
+      if (initRes.status !== 0) {
+        return {
+          ok: false,
+          out:
+            combined +
+            '\n--- auto-init failed ---\n' +
+            (initRes.stdout || '') +
+            (initRes.stderr || ''),
+          exitCode: initRes.status,
+        };
+      }
+      r = runOnce();
+    }
+  }
+  return {
+    ok: r.status === 0,
+    out: (r.stdout || '') + (r.stderr || ''),
+    exitCode: r.status,
+  };
+}
+
 function recordEvidence(phase, ticket, taskNum, cmd, cwd, scope, opts = {}) {
   // Delegate to tdd-phase-state.js — the only authorized writer. Forward
   // `--task N` so the recorder resolves the per-task state path. Records
@@ -779,6 +886,7 @@ function main() {
   const taskTestCmd = parseTaskTestCommand(section);
   const docsExempt = isDocsExempt(type);
   const visualOnly = isVisualOnlyTask(scope);
+  const testsOnly = type === 'tests-only';
 
   // Checkpoint tasks are verification-only — no source change, no test
   // authorship, no gherkin scenarios. Asking the agent to satisfy a TDD
@@ -887,6 +995,32 @@ function main() {
     );
   }
 
+  // Task 4 (GH-528): Type=tests-only RED-skipped contract. Tests-only tasks
+  // add coverage for code that already works — there is no "failing test →
+  // passing impl" loop, so RED is incoherent by design. Skip straight to
+  // GREEN via the dedicated record-skip-red subcommand, which persists a
+  // structured `{skipped: true, reason}` marker so the audit trail shows
+  // an intentional skip (not faked evidence — see [[no-fake-tdd-evidence]]).
+  // Verifier (test command) is then re-run by the GREEN branch below as the
+  // first real validation step.
+  if (testsOnly && phase === TDD_PHASES.red) {
+    const skip = recordSkipRed(ticket, taskNum, 'tests-only: Type contract', repoRoot);
+    if (!skip.ok) {
+      process.stdout.write(
+        `task-next: ${ticket} task${taskNum} — ${taskTitle}\n` +
+          `  state file: ${tddPath}\n` +
+          `  result:     BLOCKED in red (tests-only skip failed)\n\n` +
+          `## Why you did not advance\n\n${skip.out}\n\n`
+      );
+      process.exit(2);
+    }
+    process.stdout.write(
+      `task-next: RED skipped via tests-only Type contract; ` +
+        `cycle red slot persisted with {skipped: true}. Re-invoke me for GREEN.\n`
+    );
+    process.exit(0);
+  }
+
   // Run the test command.
   const run = runTest(testCmd, repoRoot, scope);
   const passed = run.exitCode === 0;
@@ -973,6 +1107,40 @@ function main() {
   } else if (phase === TDD_PHASES.green) {
     if (!passed) {
       blockReason = `Test command still failing (exit ${run.exitCode}). Last output:\n\n${run.combined}`;
+    } else if (testsOnly) {
+      // Task 4 (GH-528): tests-only GREEN gate. Beyond the verifier exiting
+      // 0, require (a) scope contains ONLY test files (planner-side Pass D
+      // also checks this — defense in depth), and (b) at least one in-scope
+      // test file was actually modified vs. HEAD. Without (b) the agent
+      // could no-op into GREEN.
+      const nonTestInScope = scope.filter((p) => p && !/\.(test|spec)\.[jt]sx?$/i.test(p));
+      if (nonTestInScope.length > 0) {
+        blockReason =
+          `Type=tests-only requires scope to contain ONLY *.test.* / *.spec.* files. ` +
+          `Non-test entries in scope: ${nonTestInScope.join(', ')}. ` +
+          `Move source edits to a tdd-code task, or change Type.`;
+      } else {
+        const changedTestFiles = detectChangedTestFilesInScope(repoRoot, scope);
+        if (changedTestFiles.length === 0) {
+          blockReason =
+            'Type=tests-only GREEN requires at least one in-scope test file to be modified. ' +
+            'No `*.test.*` / `*.spec.*` file under scope has changes vs. HEAD.';
+        } else {
+          const rec = recordEvidence(TDD_PHASES.green, ticket, taskNum, testCmd, repoRoot, scope, {
+            docsExempt: true,
+          });
+          if (!rec.ok) {
+            blockReason = `Could not record GREEN evidence:\n${rec.out}`;
+          } else {
+            advanced = true;
+            phase = TDD_PHASES.refactor;
+            process.stdout.write(
+              `task-next: GREEN accepted via tests-only contract; ` +
+                `${changedTestFiles.length} in-scope test file(s) modified.\n`
+            );
+          }
+        }
+      }
     } else {
       // Task 4 (GH-528): GREEN docs-exempt fallback (sibling of RED block
       // at ~lines 904-921). When the verification command exits 0 silently
