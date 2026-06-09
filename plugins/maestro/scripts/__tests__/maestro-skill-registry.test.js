@@ -14,20 +14,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const REGISTRY_LIB = path.resolve(
-  __dirname,
-  '..',
-  'lib',
-  'maestro-conduct',
-  'skill-registry.js'
-);
-const WORKSTATE_LIB = path.resolve(
-  __dirname,
-  '..',
-  'lib',
-  'maestro-conduct',
-  'workstate.js'
-);
+const REGISTRY_LIB = path.resolve(__dirname, '..', 'lib', 'maestro-conduct', 'skill-registry.js');
+const WORKSTATE_LIB = path.resolve(__dirname, '..', 'lib', 'maestro-conduct', 'workstate.js');
 
 function freshRegistry(tasksBase) {
   for (const k of Object.keys(require.cache)) {
@@ -85,6 +73,27 @@ test('writeTicketSkill: rejects names that fail the whitelist regex', () => {
   assert.throws(() => reg.writeTicketSkill('GH-9004', 'evil; rm -rf /'));
   assert.throws(() => reg.writeTicketSkill('GH-9004', 'UPPER'));
   assert.throws(() => reg.writeTicketSkill('GH-9004', ''));
+});
+
+test('writeTicketSkill: rejects regex-valid but registry-unknown names (PR #561 review)', () => {
+  // 'followup' is a typo for 'follow-up' — passes the regex but isn't in the
+  // registry. Persisting it would let bootstrap launch /followup while the
+  // conductor falls open to /work (split state).
+  const tasksBase = mkTasksBase();
+  const reg = freshRegistry(tasksBase);
+  assert.throws(
+    () => reg.writeTicketSkill('GH-9006', 'followup'),
+    /registry-unknown skill/,
+    'unknown skill must be rejected with a registry-unknown error'
+  );
+  assert.throws(
+    () => reg.writeTicketSkill('GH-9006', 'check'),
+    /registry-unknown skill/,
+    'arbitrary unregistered names must also be rejected'
+  );
+  // .maestro-skill must NOT have been written.
+  const p = path.join(tasksBase, 'GH-9006', '.maestro-skill');
+  assert.equal(fs.existsSync(p), false, '.maestro-skill must NOT be created for rejected writes');
 });
 
 test('writeTicketSkill: persists a valid skill name as single-line file', () => {

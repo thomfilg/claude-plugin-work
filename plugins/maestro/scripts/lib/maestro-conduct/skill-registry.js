@@ -74,6 +74,16 @@ function writeTicketSkill(ticket, name) {
         `(must match ${SKILL_NAME_REGEX})`
     );
   }
+  // PR #561 review: regex validity is not enough. Without the registry check
+  // we'd persist `.maestro-skill = 'followup'` (typo), then `readTicketSkill`
+  // and `autoRestart` would fall open to `'work'`, recreating the split-state
+  // bug the bootstrap typo guard fixed.
+  if (!isKnownSkill(name)) {
+    throw new Error(
+      `skill-registry: refusing to write registry-unknown skill ${JSON.stringify(name)} ` +
+        `(known: ${Object.keys(REGISTRY).join(', ')})`
+    );
+  }
   const dir = path.join(tasksBase(), ticket);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, TICKET_SKILL_BASENAME), `${name}\n`);
