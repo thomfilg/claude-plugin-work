@@ -7,15 +7,37 @@ const {
   isTestFilePath,
 } = require('./task-types');
 
-const DOCS_EXEMPTION_PATTERNS = Object.freeze([
-  /documentation[\s-]*exempt/i,
-  /docs[-\s]?only/i,
-  /no\s+RED[\/\s]GREEN(?:[\/\s]REFACTOR)?\s+(?:cycle\s+)?required/i,
-  /documentation\/manifest only/i,
-  /config[-\s]?only/i,
-  /manifest[-\s]?only/i,
-  /no\s+test(?:able)?\s+surface/i,
+// Types that legitimately have no RED/GREEN cycle (exempt from TDD).
+// Used to determine when a docs-exemption phrase aligns with the declared Type.
+const EXEMPT_TYPES_ANY = Object.freeze([
+  'docs',
+  'config',
+  'ci',
+  'tests-only',
+  'mechanical-refactor',
+  'file-move',
 ]);
+
+// Each exemption phrase pairs with the set of Types it legitimately aligns
+// with. The lint warns only when the declared Type is NOT in that set.
+const DOCS_EXEMPTION_RULES = Object.freeze([
+  { pattern: /documentation[\s-]*exempt/i, alignedTypes: Object.freeze(['docs']) },
+  { pattern: /docs[-\s]?only/i, alignedTypes: Object.freeze(['docs']) },
+  {
+    pattern: /no\s+RED[\/\s]GREEN(?:[\/\s]REFACTOR)?\s+(?:cycle\s+)?required/i,
+    alignedTypes: EXEMPT_TYPES_ANY,
+  },
+  { pattern: /documentation\/manifest only/i, alignedTypes: Object.freeze(['docs', 'file-move']) },
+  { pattern: /config[-\s]?only/i, alignedTypes: Object.freeze(['docs', 'config']) },
+  {
+    pattern: /manifest[-\s]?only/i,
+    alignedTypes: Object.freeze(['docs', 'config', 'file-move']),
+  },
+  { pattern: /no\s+test(?:able)?\s+surface/i, alignedTypes: EXEMPT_TYPES_ANY },
+]);
+
+// Backward-compatible export — list of just the regex patterns.
+const DOCS_EXEMPTION_PATTERNS = Object.freeze(DOCS_EXEMPTION_RULES.map((r) => r.pattern));
 
 // "new behavior" markers that should not appear in a tests-only / docs /
 // mechanical-refactor / file-move AC. These tasks describe existing-behavior
@@ -79,6 +101,19 @@ function findOffendingAcLine(acLines) {
   return null;
 }
 
+// Returns { line, alignedTypes } for the first AC line that matches a
+// docs-exemption rule, or null if none match.
+function findOffendingAcRule(acLines) {
+  if (!Array.isArray(acLines)) return null;
+  for (const line of acLines) {
+    if (typeof line !== 'string') continue;
+    for (const rule of DOCS_EXEMPTION_RULES) {
+      if (rule.pattern.test(line)) return { line, alignedTypes: rule.alignedTypes };
+    }
+  }
+  return null;
+}
+
 function findNewBehaviorLine(acLines) {
   if (!Array.isArray(acLines)) return null;
   for (const line of acLines) {
@@ -97,15 +132,16 @@ function makeWarning({ file, taskNumber, message, hint }) {
 // ── Per-Type checks ─────────────────────────────────────────────────────────
 
 function checkDocsExemptionTypeMismatch({ file, taskNumber, section, acceptanceCriteria }) {
-  const acLine = findOffendingAcLine(acceptanceCriteria);
-  if (!acLine) return null;
+  const offender = findOffendingAcRule(acceptanceCriteria);
+  if (!offender) return null;
   const declaredType = parseTaskType(section);
-  if (declaredType === 'docs') return null;
+  // Suppress when the declared Type is among the phrase's aligned types.
+  if (declaredType && offender.alignedTypes.includes(declaredType)) return null;
   return {
     kind: 'D',
     file,
     message:
-      `Task ${taskNumber}: Acceptance Criteria "${acLine}" declares ` +
+      `Task ${taskNumber}: Acceptance Criteria "${offender.line}" declares ` +
       `docs-exemption but Type is "${declaredType || 'unknown'}".`,
     hint: 'propose Type: docs',
   };
