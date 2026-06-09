@@ -333,6 +333,116 @@ describe('Pass D — lintTypeAcConsistency backward compat', () => {
   });
 });
 
+// GH-528 round-2 follow-up ITEM 4: tune acForbidNewBehavior regex.
+//
+// Strategy (a): NEW_BEHAVIOR_PATTERNS now only checks the first AC bullet
+// (the summary line). Supporting bullets can legitimately use low-level
+// verbs like "implement"/"fix" — e.g. mechanical-refactor describing
+// "implement the rename across N import paths".
+//
+// Boundary cases:
+//   - First bullet describes the task's purpose → patterns fire (warn).
+//   - Supporting bullets use refactor-safe phrasings → patterns DO NOT fire.
+describe('Pass D — acForbidNewBehavior scoped to summary line (ITEM 4)', () => {
+  it('TRUE positive: first AC bullet says "implement the new /users endpoint" → warns (tests-only)', () => {
+    const ws = lintAllPassD(
+      buildModel({
+        type: 'tests-only',
+        scope: ['src/foo.test.js'],
+        acLines: ['implement the new /users endpoint', 'verify status codes'],
+      })
+    );
+    assert.ok(
+      ws.some((w) => /new behavior/.test(w.message)),
+      `expected new-behavior warning; got ${JSON.stringify(ws)}`
+    );
+  });
+
+  it('TRUE positive: first AC bullet says "add a feature flag for X" → warns (docs)', () => {
+    const ws = lintAllPassD(
+      buildModel({
+        type: 'docs',
+        scope: ['README.md'],
+        acLines: ['add a feature flag for X', 'document toggle'],
+      })
+    );
+    assert.ok(
+      ws.some((w) => /promises behavior change/.test(w.message)),
+      `expected behavior-change warning; got ${JSON.stringify(ws)}`
+    );
+  });
+
+  it('TRUE positive: first AC bullet says "fix the auth-token expiry bug" → warns (tests-only)', () => {
+    const ws = lintAllPassD(
+      buildModel({
+        type: 'tests-only',
+        scope: ['src/auth.test.js'],
+        acLines: ['fix the auth-token expiry bug', 'add coverage'],
+      })
+    );
+    assert.ok(
+      ws.some((w) => /new behavior/.test(w.message)),
+      `expected new-behavior warning; got ${JSON.stringify(ws)}`
+    );
+  });
+
+  it('FALSE positive STOPS: supporting bullet says "implement the rename across 18 import paths" (mechanical-refactor)', () => {
+    // First bullet (the summary) is refactor-safe; "implement" appears only
+    // in a supporting bullet, which is now ignored by the regex.
+    const ws = lintAllPassD(
+      buildModel({
+        type: 'mechanical-refactor',
+        scope: ['src/foo.js', 'src/bar.js'],
+        acLines: [
+          'rename `oldName` to `newName` codebase-wide',
+          'implement the rename across 18 import paths',
+        ],
+      })
+    );
+    assert.equal(
+      ws.filter((w) => /new behavior|behavior change/.test(w.message)).length,
+      0,
+      `mechanical-refactor supporting bullet should NOT warn; got ${JSON.stringify(ws)}`
+    );
+  });
+
+  it('FALSE positive STOPS: supporting bullet says "fix the import paths in callers after the move" (file-move)', () => {
+    const ws = lintAllPassD(
+      buildModel({
+        type: 'file-move',
+        scope: ['src/old/foo.js', 'src/new/foo.js'],
+        acLines: [
+          'move `src/old/foo.js` to `src/new/foo.js`',
+          'fix the import paths in callers after the move',
+        ],
+      })
+    );
+    assert.equal(
+      ws.filter((w) => /new behavior|behavior change/.test(w.message)).length,
+      0,
+      `file-move supporting bullet should NOT warn; got ${JSON.stringify(ws)}`
+    );
+  });
+
+  it('FALSE positive STOPS: tests-only with summary "add coverage for the existing X behavior"', () => {
+    // "add" alone is not in NEW_BEHAVIOR_PATTERNS (the pattern is
+    // `add (a/new) (feature|endpoint|api|capability)`); verify this stays
+    // true and the summary line is refactor-safe.
+    const ws = lintAllPassD(
+      buildModel({
+        type: 'tests-only',
+        scope: ['src/foo.test.js'],
+        acLines: ['add coverage for the existing X behavior', 'cover undefined-input branch'],
+      })
+    );
+    assert.equal(
+      ws.filter((w) => /new behavior/.test(w.message)).length,
+      0,
+      `existing-behavior wording should NOT warn; got ${JSON.stringify(ws)}`
+    );
+  });
+});
+
 describe('Pass D — parseFilesInScope helper', () => {
   it('reads bulleted scope entries, strips backticks and trailing comments', () => {
     const section = [

@@ -43,10 +43,24 @@ const DOCS_EXEMPTION_PATTERNS = Object.freeze(DOCS_EXEMPTION_RULES.map((r) => r.
 // "new behavior" markers that should not appear in a tests-only / docs /
 // mechanical-refactor / file-move AC. These tasks describe existing-behavior
 // coverage or pure transforms, not new feature work.
+//
+// GH-528 round-2 follow-up ITEM 4 — scope and tuning:
+//   findNewBehaviorLine applies these patterns ONLY to the SUMMARY bullet
+//   (first AC bullet under `### Acceptance Criteria`). The summary line
+//   describes the task's purpose, so "implement"/"fix"/"introduce" there
+//   imply real behavior work. Supporting bullets legitimately use the same
+//   verbs as low-level steps — "implement the rename across N import paths"
+//   is fine in a mechanical-refactor task as long as the SUMMARY says
+//   "rename codebase-wide". This kills the false-positive class flagged in
+//   the round-2 review without weakening the contract for the summary.
+//
+//   Patterns are also kept narrow enough to skip refactor-safe phrasings:
+//   "rename", "move", "extract" never match; "fix … bug" allows free-form
+//   words between fix and bug to catch "fix the auth-token expiry bug".
 const NEW_BEHAVIOR_PATTERNS = Object.freeze([
   /\bimplement\b/i,
-  /\badd\s+(?:a\s+)?(?:new\s+)?(?:feature|endpoint|api|capability)\b/i,
-  /\bfix\s+(?:a\s+)?bug\b/i,
+  /\badd\s+(?:a\s+)?(?:new\s+)?(?:feature|endpoint|api|capability|flag)\b/i,
+  /\bfix\s+(?:\w[\w-]*\s+){0,5}?bug\b/i,
   /\bnew\s+behavior\b/i,
   /\bintroduce\s+(?:a\s+)?(?:new\s+)?\w+/i,
 ]);
@@ -115,13 +129,16 @@ function findOffendingAcRule(acLines) {
   return null;
 }
 
+// GH-528 round-2 ITEM 4: scope to the SUMMARY bullet only (first AC bullet).
+// Supporting bullets can legitimately use "implement"/"fix" as low-level
+// verbs without flipping the task's Type semantics. See NEW_BEHAVIOR_PATTERNS
+// docblock above for the rationale.
 function findNewBehaviorLine(acLines) {
   if (!Array.isArray(acLines)) return null;
-  for (const line of acLines) {
-    if (typeof line !== 'string') continue;
-    for (const pattern of NEW_BEHAVIOR_PATTERNS) {
-      if (pattern.test(line)) return line;
-    }
+  const summary = acLines.find((l) => typeof l === 'string' && l.trim().length > 0);
+  if (!summary) return null;
+  for (const pattern of NEW_BEHAVIOR_PATTERNS) {
+    if (pattern.test(summary)) return summary;
   }
   return null;
 }
