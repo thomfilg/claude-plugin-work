@@ -428,7 +428,7 @@ function handleSnapshot(prNumber) {
               line: cm.line || cm.original_line || null,
               original_line: cm.original_line || null,
               priority: classifyCommentPriority(author, body),
-              status: previousStatus ? previousStatus.status : defaultStatus,
+              status: previousStatus?.status || defaultStatus,
               commitSha: previousStatus?.commitSha || null,
               resolution: previousStatus?.resolution || defaultResolution,
               threadId: commentIdToThreadId.get(cm.id) || previousStatus?.threadId || null,
