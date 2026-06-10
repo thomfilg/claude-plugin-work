@@ -86,7 +86,8 @@ function injectedCount(ledger, name) {
 // Write `n` memories named `a`, `b`, … that all match the prompt token
 // `BUDGETTRIGGER`. Each body is sized to `sizes[i]` and stamped with a unique
 // sentinel `SENTINEL-<name>`.
-function seedMatchedMemories(storeDir, names, sizes) {
+function seedMatchedMemories(storeDir, names, sizes, opts = {}) {
+  const fireMode = opts.fireMode || 'always';
   names.forEach((name, i) => {
     writeMemory(
       storeDir,
@@ -97,7 +98,7 @@ function seedMatchedMemories(storeDir, names, sizes) {
         events: 'UserPromptSubmit',
         trigger_prompt: 'BUDGETTRIGGER',
         inject: 'full',
-        fire_mode: 'always',
+        fire_mode: fireMode,
       },
       makeBody(`SENTINEL-${name}`, sizes[i])
     );
@@ -208,9 +209,13 @@ describe('dispatcher 16k budget + demote-instead-of-drop (GH-588 Task 2)', () =>
     );
   });
 
-  it('G5 demotion does not bump ledger; same matched set re-fires the demoted memory as full next time', () => {
-    // Three 7000-char memories → total 21000, must demote two on round 1.
-    seedMatchedMemories(fixture.storeDir, ['m1', 'm2', 'm3'], [7000, 7000, 7000]);
+  it('G5 demotion does not bump ledger; demoted memory injects full on next match', () => {
+    // fire_mode: once + two 9000-char memories. Round 1: total 18000 > 16000,
+    // reverse-walk demotes m2 (m1 stays full because rotation guarantee +
+    // reverse order). Round 2: decideInjection sees m1.count=1 → reminder,
+    // m2.count=0 → full. Total = full(m2≈9000) + reminderLine(m1) ≈ 9100,
+    // well under 16000 → no demotion → m2 emitted in FULL, proving rotation.
+    seedMatchedMemories(fixture.storeDir, ['m1', 'm2'], [9000, 9000], { fireMode: 'once' });
     const round1 = runDispatcher({
       event: 'UserPromptSubmit',
       payload: promptPayload('BUDGETTRIGGER round1', fixture.cwd),
@@ -218,25 +223,32 @@ describe('dispatcher 16k budget + demote-instead-of-drop (GH-588 Task 2)', () =>
     });
     assert.equal(round1.status, 0);
     assert.match(round1.stderr, /memories summarized to fit/);
+    assert.match(round1.stdout, /SENTINEL-m1/, 'm1 full body in round 1');
+    assert.match(
+      round1.stdout,
+      /\[synapsys:active\] m2 \(fired earlier; full body in this session\)/,
+      'm2 demoted to reminder in round 1'
+    );
     const ledger1 = readLedger(fixture.home);
-    // Reverse-walk: m3 demoted first, then m2; m1 stays full.
     assert.equal(injectedCount(ledger1, 'm1'), 1, 'm1 full → ledger bump');
-    assert.equal(injectedCount(ledger1, 'm3'), 0, 'm3 demoted → no ledger bump');
+    assert.equal(injectedCount(ledger1, 'm2'), 0, 'm2 demoted → no ledger bump');
 
-    // Round 2 with the same matched set: demoted entry's injectedCount is still
-    // 0 so decideInjection (fire_mode=always here, count irrelevant) emits full,
-    // budget demotion happens again from a clean ledger slate for the demoted.
+    // Round 2 — same matched set, same session
     const round2 = runDispatcher({
       event: 'UserPromptSubmit',
       payload: promptPayload('BUDGETTRIGGER round2', fixture.cwd),
       home: fixture.home,
     });
     assert.equal(round2.status, 0);
-    // m3's stable sentinel can appear in round-2 stdout when budget permits,
-    // OR appears as full when reverse-walk demotes someone else. Either way
-    // round 2's ledger for m3 is still 0 (because it gets demoted again) OR 1
-    // (because it got promoted). Critical: m3 was NOT bumped after round 1.
-    void round2; // placeholder, real assertion is the round-1 zero above
+    assert.doesNotMatch(round2.stderr, /memories summarized to fit/, 'round 2 fits — no alert');
+    assert.match(round2.stdout, /SENTINEL-m2/, 'm2 now injects FULL (rotation guarantee)');
+    assert.match(
+      round2.stdout,
+      /\[synapsys:active\] m1 \(fired earlier; full body in this session\)/,
+      'm1 now reminder via decideInjection (once + count=1)'
+    );
+    const ledger2 = readLedger(fixture.home);
+    assert.equal(injectedCount(ledger2, 'm2'), 1, 'm2 full in round 2 → ledger bump');
   });
 
   it('G6 decideInjection-driven reminder still bumps the ledger; stderr lacks demotion alert', () => {
