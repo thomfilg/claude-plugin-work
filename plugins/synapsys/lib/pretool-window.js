@@ -155,16 +155,15 @@ function resolveExpectation(sessionId, observedCommand) {
     if (state.expectations.size === 0) {
       return { divergent: false, expectations: [] };
     }
-    // First check for any pattern match — match clears that one entry.
-    let matchedName = null;
+    // Clear EVERY expectation whose pattern matches the observed command.
+    // Otherwise a single satisfying command would clear only the first match
+    // and the rest would age to false divergence on later PreToolUse events.
+    const matchedNames = [];
     for (const [name, entry] of state.expectations) {
-      if (matchesPattern(entry.expected, observedCommand)) {
-        matchedName = name;
-        break;
-      }
+      if (matchesPattern(entry.expected, observedCommand)) matchedNames.push(name);
     }
-    if (matchedName) {
-      state.expectations.delete(matchedName);
+    if (matchedNames.length > 0) {
+      for (const name of matchedNames) state.expectations.delete(name);
       saveSession(sessionId, state);
       return { divergent: false, expectations: [] };
     }
