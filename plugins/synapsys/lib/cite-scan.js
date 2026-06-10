@@ -245,7 +245,7 @@ function emitBehaviorHit(hit, payload, sessionId) {
   }
 }
 
-function runBehaviorScan(payload, memories) {
+function runBehaviorScan(payload, memories, sessionId) {
   try {
     const responseText = extractResponseText(payload);
     if (!responseText) return;
@@ -256,11 +256,14 @@ function runBehaviorScan(payload, memories) {
     if (!candidates.length) return;
     const hits = scanForSignalList(candidates, responseText, (m) => m.behaviorSignals);
     const seen = new Set();
-    const sessionId = resolveSessionId(payload);
+    // Use caller-supplied sessionId (dispatcher passes the inject-ledger id used
+    // by path A) so both paths share the same dedup store. Fall back to
+    // telemetry resolution only when the dispatcher didn't pass one.
+    const sid = sessionId != null ? sessionId : resolveSessionId(payload);
     for (const hit of hits) {
       if (!hit || !hit.memory || seen.has(hit.memory.name)) continue;
       seen.add(hit.memory.name);
-      emitBehaviorHit(hit, payload, sessionId);
+      emitBehaviorHit(hit, payload, sid);
     }
   } catch {
     // fail-open

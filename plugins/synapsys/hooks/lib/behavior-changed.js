@@ -30,9 +30,14 @@ function expectedCommandFor(memory) {
     .trim();
 }
 
+// Match the matcher's surface: trigger_pretool regexes test the serialized
+// tool_input blob, so divergence resolution must compare against the same
+// shape — not just `tool_input.command`. Otherwise a pattern that matches the
+// JSON form but not the bare command would falsely emit `behavior_changed`
+// when the agent ran a compliant follow-up.
 function observedFromPayload(payload) {
   const toolInput = (payload && payload.tool_input) || {};
-  return typeof toolInput.command === 'string' ? toolInput.command : JSON.stringify(toolInput);
+  return JSON.stringify(toolInput);
 }
 
 function indexMemoriesByName(memories) {

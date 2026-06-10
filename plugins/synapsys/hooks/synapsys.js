@@ -326,7 +326,7 @@ function runStopScans(payload, memories, sessionId) {
     // fail-open
   }
   try {
-    runBehaviorScan(payload, memories);
+    runBehaviorScan(payload, memories, sessionId);
   } catch {
     // fail-open
   }

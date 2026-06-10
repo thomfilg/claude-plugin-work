@@ -124,7 +124,10 @@ function enforceCap(expectations) {
 
 function matchesPattern(pattern, observed) {
   try {
-    return new RegExp(pattern).test(observed);
+    // Mirror the matcher's `safeRegex(pattern, 'i')` so a follow-up command
+    // that matches the trigger case-insensitively is treated as fulfillment,
+    // not divergence.
+    return new RegExp(pattern, 'i').test(observed);
   } catch (_e) {
     return pattern === observed;
   }

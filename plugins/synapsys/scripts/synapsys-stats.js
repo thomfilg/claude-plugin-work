@@ -180,8 +180,11 @@ function selectNoiseCandidates(perMemory) {
 }
 
 function selectNeverFired(perMemory) {
+  // Exclude memories with behavior_changed telemetry — a memory that changed
+  // behavior at least once is not "never fired" even if no `fired` row exists
+  // (Stop self-report can land a `changed` event without a paired fire).
   return perMemory
-    .filter((m) => m.known && m.fired === 0 && m.cited === 0)
+    .filter((m) => m.known && m.fired === 0 && m.cited === 0 && m.changed === 0)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
