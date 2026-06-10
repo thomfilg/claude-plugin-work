@@ -98,9 +98,10 @@ function collectStopOnlyMemoryNames(stores) {
 
 function tallyEvent(counts, ev) {
   if (!ev || !ev.memory || !ev.event) return;
-  const c = counts.get(ev.memory) || { fired: 0, cited: 0 };
+  const c = counts.get(ev.memory) || { fired: 0, cited: 0, changed: 0 };
   if (ev.event === 'fired') c.fired += 1;
   else if (ev.event === 'cited') c.cited += 1;
+  else if (ev.event === 'behavior_changed') c.changed += 1;
   counts.set(ev.memory, c);
 }
 
@@ -117,13 +118,14 @@ function aggregate(cwd, { windowMs }) {
 
   // Include zero-fire known memories so Never-fired can list them.
   for (const name of known) {
-    if (!counts.has(name)) counts.set(name, { fired: 0, cited: 0 });
+    if (!counts.has(name)) counts.set(name, { fired: 0, cited: 0, changed: 0 });
   }
 
   const perMemory = Array.from(counts.entries()).map(([name, c]) => ({
     name,
     fired: c.fired,
     cited: c.cited,
+    changed: c.changed || 0,
     known: known.has(name),
     stopOnly: stopOnly.has(name),
   }));
@@ -131,8 +133,34 @@ function aggregate(cwd, { windowMs }) {
   return { perMemory, known: Array.from(known) };
 }
 
-function formatSections(stats, { color = false } = {}) {
+function formatBehaviorChangers(perMemory) {
+  const changers = perMemory
+    .filter((m) => m.known && (m.changed || 0) > 0 && m.fired > 0)
+    .map((m) => ({ ...m, ratio: m.changed / m.fired }))
+    .sort((a, b) => {
+      if (b.ratio !== a.ratio) return b.ratio - a.ratio;
+      return b.changed - a.changed;
+    });
+  const lines = [];
+  lines.push('Behavior-changers (sorted by changed/fired ratio):');
+  lines.push('  name   fired   cited   changed   verdict');
+  if (changers.length === 0) lines.push('  (none)');
+  for (const m of changers) {
+    const verdict = m.ratio >= 0.5 ? 'keep' : 'review';
+    lines.push(
+      `  ${m.name}   fired:${m.fired}   cited:${m.cited}   changed:${m.changed}   ${verdict}`
+    );
+  }
+  return lines;
+}
+
+function formatSections(stats, { color = false, changersOnly = false } = {}) {
   const { perMemory } = stats;
+
+  if (changersOnly) {
+    void color;
+    return formatBehaviorChangers(perMemory).join('\n') + '\n';
+  }
 
   // All three sections must restrict to memories discovered via --cwd
   // (`m.known`). The global ~/.claude/synapsys/.telemetry/ aggregates events
@@ -150,7 +178,14 @@ function formatSections(stats, { color = false } = {}) {
   // "tighten triggers" advice does not apply to them, so they're excluded
   // from noise classification regardless of fired count.
   const noise = perMemory
-    .filter((m) => m.known && !m.stopOnly && m.fired >= NOISE_FIRED_THRESHOLD && m.cited === 0)
+    .filter(
+      (m) =>
+        m.known &&
+        !m.stopOnly &&
+        m.fired >= NOISE_FIRED_THRESHOLD &&
+        m.cited === 0 &&
+        m.changed === 0
+    )
     .sort((a, b) => b.fired - a.fired);
 
   const never = perMemory
@@ -176,6 +211,8 @@ function formatSections(stats, { color = false } = {}) {
   for (const m of never) {
     lines.push(`  ${m.name}   fired:0  cited:0`);
   }
+  lines.push('');
+  for (const line of formatBehaviorChangers(perMemory)) lines.push(line);
   void color;
   return lines.join('\n') + '\n';
 }
@@ -184,6 +221,7 @@ function main() {
   const { flag, cwd } = setupCli();
   const windowMs = parseWindow(flag('last') || '7d');
   const useColor = !flag('no-color');
+  const changersOnly = !!flag('changers-only');
   let stats;
   try {
     stats = aggregate(cwd, { windowMs });
@@ -194,7 +232,7 @@ function main() {
   if (flag('json')) {
     process.stdout.write(JSON.stringify(stats, null, 2) + '\n');
   } else {
-    process.stdout.write(formatSections(stats, { color: useColor }));
+    process.stdout.write(formatSections(stats, { color: useColor, changersOnly }));
   }
   process.exit(0);
 }

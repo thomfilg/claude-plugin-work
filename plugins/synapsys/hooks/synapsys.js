@@ -23,8 +23,11 @@ const { selectForEvent } = require(path.join(__dirname, '..', 'lib', 'matcher'))
 const { buildActiveDomains } = require(path.join(__dirname, '..', 'lib', 'active-domains'));
 const { saveStickyState } = require(path.join(__dirname, '..', 'lib', 'sticky-state'));
 const injectLedger = require('../lib/inject-ledger');
-const { recordFired } = require(path.join(__dirname, '..', 'lib', 'telemetry'));
-const { runCiteScan } = require(path.join(__dirname, '..', 'lib', 'cite-scan'));
+const { recordFired, recordBehaviorChanged, isDisabled } = require(
+  path.join(__dirname, '..', 'lib', 'telemetry')
+);
+const { runCiteScan, runBehaviorScan } = require(path.join(__dirname, '..', 'lib', 'cite-scan'));
+const pretoolWindow = require(path.join(__dirname, '..', 'lib', 'pretool-window'));
 const { demoteToFit } = require('../lib/budget');
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -266,7 +269,20 @@ function formatMatchedOutput(matched, sessionId) {
   return renderMatchedMemories(matched, sessionId);
 }
 
-function emitMatched(matched, payload, event) {
+// Derive the "expected command" from a matched memory's first
+// `trigger_pretool` spec (`"Tool:pattern"` → `"pattern"`). Used by path A
+// (heuristic divergence) to record an expectation for this turn.
+function expectedCommandFor(memory) {
+  if (!memory || !Array.isArray(memory.triggerPretool) || memory.triggerPretool.length === 0) {
+    return '';
+  }
+  const spec = memory.triggerPretool[0];
+  const colon = String(spec).indexOf(':');
+  if (colon === -1) return '';
+  return String(spec).slice(colon + 1).trim();
+}
+
+function emitMatched(matched, payload, event, sessionId) {
   if (!matched.length) return;
   for (const m of matched) {
     try {
@@ -274,6 +290,54 @@ function emitMatched(matched, payload, event) {
     } catch {
       // fail-open
     }
+    // Path A: when a memory with a trigger_pretool rule fires on PreToolUse,
+    // record the expected command so a subsequent divergent PreToolUse can
+    // surface a one-off behavior_changed event.
+    if (event === 'PreToolUse' && !isDisabled(m)) {
+      const expected = expectedCommandFor(m);
+      if (expected) {
+        try {
+          pretoolWindow.recordExpectation(sessionId, m.name, expected);
+        } catch {
+          // fail-open
+        }
+      }
+    }
+  }
+}
+
+// Path A: on every PreToolUse, age existing expectations against the observed
+// command. Each divergent entry produces at most one behavior_changed event
+// per `(session, memory)` per Stop turn (per-turn dedup via markBehaviorChanged).
+function resolveAndEmitDivergences(payload, memories, sessionId) {
+  try {
+    const toolInput = (payload && payload.tool_input) || {};
+    const observed =
+      typeof toolInput.command === 'string'
+        ? toolInput.command
+        : JSON.stringify(toolInput);
+    const result = pretoolWindow.resolveExpectation(sessionId, observed);
+    if (!result || !result.divergent) return;
+    const byName = new Map();
+    for (const m of memories || []) {
+      if (m && m.name) byName.set(m.name, m);
+    }
+    for (const entry of result.expectations) {
+      const mem = byName.get(entry.memoryName);
+      if (!mem || isDisabled(mem)) continue;
+      if (!pretoolWindow.markBehaviorChanged(sessionId, mem.name)) continue;
+      const evidence = `expected=${entry.expected} got=${observed}`;
+      try {
+        recordBehaviorChanged(mem, payload, {
+          reason: 'pretool-divergence',
+          evidence,
+        });
+      } catch {
+        // fail-open
+      }
+    }
+  } catch {
+    // fail-open
   }
 }
 
@@ -328,8 +392,30 @@ function emitMatched(matched, payload, event) {
     // assistant response, so attributing citations to them would be a
     // false positive (the response cannot reference a memory that wasn't
     // yet injected at the time it was written).
-    if (event === 'Stop') runCiteScan(payload, memories);
-    emitMatched(matched, payload, event);
+    // Path A on PreToolUse: resolve pending expectations against the observed
+    // command BEFORE recording new ones, so a memory firing this turn does not
+    // immediately get aged out by its own observed command.
+    if (event === 'PreToolUse') {
+      resolveAndEmitDivergences(payload, memories, sessionId);
+    }
+    if (event === 'Stop') {
+      try {
+        runCiteScan(payload, memories);
+      } catch {
+        // fail-open
+      }
+      try {
+        runBehaviorScan(payload, memories);
+      } catch {
+        // fail-open
+      }
+      try {
+        pretoolWindow.clearTurnDedup(sessionId);
+      } catch {
+        // fail-open
+      }
+    }
+    emitMatched(matched, payload, event, sessionId);
 
     process.stdout.write(formatMatchedOutput(matched, sessionId));
     process.exit(0);
