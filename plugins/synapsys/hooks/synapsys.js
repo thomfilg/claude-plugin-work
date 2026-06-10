@@ -266,6 +266,45 @@ function formatMatchedOutput(matched, sessionId) {
   return renderMatchedMemories(matched, sessionId);
 }
 
+// collectSubagentMatches — GH-497 R3/R6. When a PreToolUse payload spawns a
+// subagent (`tool_name` is 'Task' or 'Agent') carrying a string
+// `tool_input.prompt`, run the prompt-scope matchers (UserPromptSubmit, plus
+// SessionStart/Stop per P1 R6) against a synthetic prompt payload so the
+// subagent inherits prompt-scope memories in its initial context. Strictly
+// fail-open: any matcher throw is swallowed per-call, never blocking the tool.
+const SUBAGENT_TOOLS = new Set(['Task', 'Agent']);
+const SUBAGENT_PROMPT_EVENTS = ['UserPromptSubmit', 'SessionStart', 'Stop'];
+
+function collectSubagentMatches(payload, memories, selectOpts) {
+  const toolName = payload && payload.tool_name;
+  const promptText = payload && payload.tool_input && payload.tool_input.prompt;
+  if (!SUBAGENT_TOOLS.has(toolName) || typeof promptText !== 'string') return [];
+  const synthetic = { ...payload, prompt: promptText };
+  const collected = [];
+  for (const ev of SUBAGENT_PROMPT_EVENTS) {
+    try {
+      const hits = selectForEvent(memories, ev, synthetic, selectOpts);
+      if (Array.isArray(hits)) collected.push(...hits);
+    } catch {
+      /* fail-open: a matcher throw never blocks the subagent spawn */
+    }
+  }
+  return collected;
+}
+
+// unionByName — append `extra` matches onto `primary`, skipping any whose
+// `memory.name` already appears in `primary` (dedupe-by-name; GH-497 R3 G5).
+function unionByName(primary, extra) {
+  const seen = new Set(primary.map((m) => m.name));
+  const merged = primary.slice();
+  for (const m of extra) {
+    if (seen.has(m.name)) continue;
+    seen.add(m.name);
+    merged.push(m);
+  }
+  return merged;
+}
+
 function emitMatched(matched, payload, event) {
   if (!matched.length) return;
   for (const m of matched) {
@@ -274,6 +313,46 @@ function emitMatched(matched, payload, event) {
     } catch {
       // fail-open
     }
+  }
+}
+
+// Resolve session id once (ledger reset + per-memory render). Publish to
+// `.current` so out-of-process callers (synapsys-list CLI) share it. Fail-open.
+function resolveSession(payload) {
+  try {
+    const sessionId = injectLedger.resolveSessionId(payload);
+    injectLedger.publishCurrentSessionId(sessionId);
+    return sessionId;
+  } catch {
+    return '';
+  }
+}
+
+// GH-497 R3/R6: on a PreToolUse subagent spawn (Task/Agent), union the
+// prompt-scope matches (deduped by name) so a memory matching both injects once.
+function computeMatched(event, memories, payload, selectOpts) {
+  let matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
+  if (event === 'PreToolUse' && memories.length) {
+    const subagentMatches = collectSubagentMatches(payload, memories, selectOpts);
+    if (subagentMatches.length) matched = unionByName(matched, subagentMatches);
+  }
+  return matched;
+}
+
+// GH-497 R1/R2: branch the on-match write by event. PreToolUse emits the
+// injection as `hookSpecificOutput.additionalContext` JSON (additive context, also
+// to subagents); other events keep raw stdout. Empty guard = no-match identity.
+function writeMatchedOutput(event, matched, sessionId) {
+  const out = formatMatchedOutput(matched, sessionId);
+  if (!out) return;
+  if (event === 'PreToolUse') {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: out },
+      })
+    );
+  } else {
+    process.stdout.write(out);
   }
 }
 
@@ -287,22 +366,9 @@ function emitMatched(matched, payload, event) {
     const stores = discoverStores(cwd);
     const memories = stores.flatMap(listMemoriesFromStore);
 
-    // Resolve session id once; used for both ledger reset (SessionStart) and
-    // the per-memory render path. Fail-open: any throw → noop and the rest of
-    // the dispatcher behaves like the pre-ledger code path.
-    let sessionId;
-    try {
-      sessionId = injectLedger.resolveSessionId(payload);
-      // Publish the resolved id to `.current` so out-of-process callers
-      // (synapsys-list CLI) read the same session ledger the dispatcher
-      // writes to. Fail-open: a write error never blocks the dispatcher.
-      injectLedger.publishCurrentSessionId(sessionId);
-    } catch {
-      sessionId = '';
-    }
+    const sessionId = resolveSession(payload);
 
-    // SessionStart resets the per-session ledger (brief AC-4 / spec §3.3) and
-    // opportunistically GCs stale ledger files older than 7 days (spec §4.2).
+    // SessionStart resets the ledger (brief AC-4 / spec §3.3) + GCs files >7d old (spec §4.2). Fail-open.
     if (event === 'SessionStart') {
       try {
         injectLedger.resetLedgerForSession(sessionId);
@@ -318,20 +384,15 @@ function emitMatched(matched, payload, event) {
       process.exit(0);
     }
 
-    // Build activeDomains FIRST so UserPromptSubmit advances sticky-state
-    // even when the memory list is empty. Fail-open: on any error, omit
-    // `opts.activeDomains` to preserve pre-classifier behavior.
+    // Build activeDomains FIRST so UserPromptSubmit advances sticky-state even with an empty memory list. Fail-open.
     const selectOpts = buildActiveDomainsForPayload(event, payload);
-    const matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
-    // On Stop the cite scan must read the session JSONL state from BEFORE
-    // this turn's Stop-time fired writes; Stop-injections happen after the
-    // assistant response, so attributing citations to them would be a
-    // false positive (the response cannot reference a memory that wasn't
-    // yet injected at the time it was written).
+    const matched = computeMatched(event, memories, payload, selectOpts);
+    // On Stop the cite scan reads session JSONL from BEFORE this turn's fired
+    // writes; Stop-injections land after the response, so crediting them = FP.
     if (event === 'Stop') runCiteScan(payload, memories);
     emitMatched(matched, payload, event);
 
-    process.stdout.write(formatMatchedOutput(matched, sessionId));
+    writeMatchedOutput(event, matched, sessionId);
     process.exit(0);
   } catch {
     process.exit(0);
