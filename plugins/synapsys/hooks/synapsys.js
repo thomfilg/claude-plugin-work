@@ -266,6 +266,45 @@ function formatMatchedOutput(matched, sessionId) {
   return renderMatchedMemories(matched, sessionId);
 }
 
+// collectSubagentMatches — GH-497 R3/R6. When a PreToolUse payload spawns a
+// subagent (`tool_name` is 'Task' or 'Agent') carrying a string
+// `tool_input.prompt`, run the prompt-scope matchers (UserPromptSubmit, plus
+// SessionStart/Stop per P1 R6) against a synthetic prompt payload so the
+// subagent inherits prompt-scope memories in its initial context. Strictly
+// fail-open: any matcher throw is swallowed per-call, never blocking the tool.
+const SUBAGENT_TOOLS = new Set(['Task', 'Agent']);
+const SUBAGENT_PROMPT_EVENTS = ['UserPromptSubmit', 'SessionStart', 'Stop'];
+
+function collectSubagentMatches(payload, memories, selectOpts) {
+  const toolName = payload && payload.tool_name;
+  const promptText = payload && payload.tool_input && payload.tool_input.prompt;
+  if (!SUBAGENT_TOOLS.has(toolName) || typeof promptText !== 'string') return [];
+  const synthetic = { ...payload, prompt: promptText };
+  const collected = [];
+  for (const ev of SUBAGENT_PROMPT_EVENTS) {
+    try {
+      const hits = selectForEvent(memories, ev, synthetic, selectOpts);
+      if (Array.isArray(hits)) collected.push(...hits);
+    } catch {
+      /* fail-open: a matcher throw never blocks the subagent spawn */
+    }
+  }
+  return collected;
+}
+
+// unionByName — append `extra` matches onto `primary`, skipping any whose
+// `memory.name` already appears in `primary` (dedupe-by-name; GH-497 R3 G5).
+function unionByName(primary, extra) {
+  const seen = new Set(primary.map((m) => m.name));
+  const merged = primary.slice();
+  for (const m of extra) {
+    if (seen.has(m.name)) continue;
+    seen.add(m.name);
+    merged.push(m);
+  }
+  return merged;
+}
+
 function emitMatched(matched, payload, event) {
   if (!matched.length) return;
   for (const m of matched) {
@@ -322,7 +361,15 @@ function emitMatched(matched, payload, event) {
     // even when the memory list is empty. Fail-open: on any error, omit
     // `opts.activeDomains` to preserve pre-classifier behavior.
     const selectOpts = buildActiveDomainsForPayload(event, payload);
-    const matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
+    let matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
+    // GH-497 R3/R6: on a PreToolUse subagent spawn (Task/Agent), union the
+    // prompt-scope matches from `tool_input.prompt` into `matched`, deduped by
+    // memory name so a memory matching BOTH the PreTool pattern and the prompt
+    // injects exactly once.
+    if (event === 'PreToolUse' && memories.length) {
+      const subagentMatches = collectSubagentMatches(payload, memories, selectOpts);
+      if (subagentMatches.length) matched = unionByName(matched, subagentMatches);
+    }
     // On Stop the cite scan must read the session JSONL state from BEFORE
     // this turn's Stop-time fired writes; Stop-injections happen after the
     // assistant response, so attributing citations to them would be a
@@ -331,7 +378,24 @@ function emitMatched(matched, payload, event) {
     if (event === 'Stop') runCiteScan(payload, memories);
     emitMatched(matched, payload, event);
 
-    process.stdout.write(formatMatchedOutput(matched, sessionId));
+    // GH-497 R1/R2: branch the single on-match write by event. PreToolUse must
+    // emit the rendered injection as `hookSpecificOutput.additionalContext` JSON
+    // so Claude Code surfaces it as additive context to the tool call (and to
+    // spawned subagents); every other event keeps the prior raw-stdout contract.
+    // The empty-string guard preserves byte-identical no-match behavior (no
+    // empty-additionalContext noise on a no-match PreToolUse).
+    const out = formatMatchedOutput(matched, sessionId);
+    if (out) {
+      if (event === 'PreToolUse') {
+        process.stdout.write(
+          JSON.stringify({
+            hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: out },
+          })
+        );
+      } else {
+        process.stdout.write(out);
+      }
+    }
     process.exit(0);
   } catch {
     process.exit(0);
