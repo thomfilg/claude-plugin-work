@@ -126,15 +126,19 @@ const STRATEGY_TASKS_MD_BAD_CUSTOM = [
   '',
 ].join('\n');
 
-function withFlag(value, fn) {
+function withFlag(value, fn, workDir) {
   const prev = process.env.WORK_TEST_STRATEGY_VALIDATOR;
+  const prevWork = process.env.WORK_DRAFT_WORKDIR;
   if (value === undefined) delete process.env.WORK_TEST_STRATEGY_VALIDATOR;
   else process.env.WORK_TEST_STRATEGY_VALIDATOR = value;
+  if (workDir) process.env.WORK_DRAFT_WORKDIR = workDir;
   try {
     return fn();
   } finally {
     if (prev === undefined) delete process.env.WORK_TEST_STRATEGY_VALIDATOR;
     else process.env.WORK_TEST_STRATEGY_VALIDATOR = prev;
+    if (prevWork === undefined) delete process.env.WORK_DRAFT_WORKDIR;
+    else process.env.WORK_DRAFT_WORKDIR = prevWork;
   }
 }
 
@@ -157,11 +161,7 @@ test('flag-off: legacy ### Test Command path still passes draft validation', () 
   writeTasks(dir, LEGACY_TASKS_MD);
 
   const errors = withFlag('0', () => draft.validateArtifacts(dir));
-  assert.deepEqual(
-    errors,
-    [],
-    `flag-off legacy path should pass; got: ${JSON.stringify(errors)}`
-  );
+  assert.deepEqual(errors, [], `flag-off legacy path should pass; got: ${JSON.stringify(errors)}`);
 });
 
 test('flag-on: valid kind=unit ### Test Strategy passes draft validation', () => {
@@ -177,7 +177,7 @@ test('flag-on: valid kind=unit ### Test Strategy passes draft validation', () =>
     'utf8'
   );
 
-  const errors = withFlag('1', () => draft.validateArtifacts(dir));
+  const errors = withFlag('1', () => draft.validateArtifacts(dir), dir);
   assert.deepEqual(
     errors,
     [],
@@ -198,7 +198,7 @@ test('flag-on: custom body "pnpm dev:typecheck && grep -q foo bar.ts" emits both
     'utf8'
   );
 
-  const errors = withFlag('1', () => draft.validateArtifacts(dir));
+  const errors = withFlag('1', () => draft.validateArtifacts(dir), dir);
   const joined = errors.join('\n');
   assert.ok(
     /dev:typecheck/.test(joined),

@@ -171,15 +171,19 @@ const CHAIN_TASKS_MD_CITATION = [
   '',
 ].join('\n');
 
-function withFlag(value, fn) {
+function withFlag(value, fn, workDir) {
   const prev = process.env.WORK_TEST_STRATEGY_VALIDATOR;
+  const prevWork = process.env.WORK_DRAFT_WORKDIR;
   if (value === undefined) delete process.env.WORK_TEST_STRATEGY_VALIDATOR;
   else process.env.WORK_TEST_STRATEGY_VALIDATOR = value;
+  if (workDir) process.env.WORK_DRAFT_WORKDIR = workDir;
   try {
     return fn();
   } finally {
     if (prev === undefined) delete process.env.WORK_TEST_STRATEGY_VALIDATOR;
     else process.env.WORK_TEST_STRATEGY_VALIDATOR = prev;
+    if (prevWork === undefined) delete process.env.WORK_DRAFT_WORKDIR;
+    else process.env.WORK_DRAFT_WORKDIR = prevWork;
   }
 }
 
@@ -193,7 +197,7 @@ test('flag-on: ECHO-5815 chain without wiring-citation raises orphan diagnostic 
   fs.writeFileSync(path.join(dir, 'src/barrel-placeholder.test.ts'), '// noop\n', 'utf8');
   writeTasks(dir, CHAIN_TASKS_MD_ORPHAN);
 
-  const errors = withFlag('1', () => draft.validateArtifacts(dir));
+  const errors = withFlag('1', () => draft.validateArtifacts(dir), dir);
   const joined = errors.join('\n');
   assert.ok(
     /src\/barrel\.ts/.test(joined),
@@ -211,7 +215,7 @@ test('flag-on: ECHO-5815 chain with wiring-citation peer reference passes', () =
   writeRepoSkeleton(dir);
   writeTasks(dir, CHAIN_TASKS_MD_CITATION);
 
-  const errors = withFlag('1', () => draft.validateArtifacts(dir));
+  const errors = withFlag('1', () => draft.validateArtifacts(dir), dir);
   const joined = errors.join('\n');
   assert.ok(
     !/src\/barrel\.ts/.test(joined) || !/orphan/i.test(joined),

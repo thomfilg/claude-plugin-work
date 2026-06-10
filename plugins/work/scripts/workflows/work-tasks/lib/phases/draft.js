@@ -161,7 +161,25 @@ function strategyFlagOn() {
   }
 }
 
+/**
+ * Resolve the code worktree root for command-existence validation. The tasks
+ * directory (`tasks/<TICKET>/`) is NOT a valid root for `pnpm <script>` lookup
+ * or `node|bash <file>` existence checks — those must resolve against the
+ * repo worktree (where `package.json`, sources, and `.envrc` live). Tests can
+ * pin the worktree via `WORK_DRAFT_WORKDIR` so fixtures stay self-contained;
+ * production callers fall through to `process.cwd()` (the directory the user
+ * invoked `/work` from).
+ *
+ * @returns {string}
+ */
+function resolveWorkDir() {
+  const explicit = process.env.WORK_DRAFT_WORKDIR;
+  if (explicit && typeof explicit === 'string') return explicit;
+  return process.cwd();
+}
+
 function loadStrategyContext(tasksDir) {
+  const workDir = resolveWorkDir();
   let parsedTasks = null;
   if (parseTasks) {
     try {
@@ -173,7 +191,7 @@ function loadStrategyContext(tasksDir) {
   let envrc = null;
   if (envrcModule && typeof envrcModule.findNearestEnvrc === 'function') {
     try {
-      envrc = envrcModule.findNearestEnvrc(tasksDir);
+      envrc = envrcModule.findNearestEnvrc(workDir);
     } catch {
       envrc = null;
     }
@@ -181,12 +199,12 @@ function loadStrategyContext(tasksDir) {
   let packageJson = null;
   if (envrcModule && typeof envrcModule.findNearestPackageJson === 'function') {
     try {
-      packageJson = envrcModule.findNearestPackageJson(tasksDir) || null;
+      packageJson = envrcModule.findNearestPackageJson(workDir) || null;
     } catch {
       packageJson = null;
     }
   }
-  return { parsedTasks, envrc, packageJson };
+  return { parsedTasks, envrc, packageJson, workDir };
 }
 
 function taskHeadingFor(task) {
@@ -208,9 +226,7 @@ function taskHeadingFor(task) {
 function extractRawStrategyBody(rawContent) {
   if (typeof rawContent !== 'string' || !rawContent) return null;
   // Locate `### Test Strategy` section body.
-  const m = rawContent.match(
-    /(?:^|\n)###\s+Test Strategy[^\n]*\n([\s\S]*?)(?=\n###|\n## |$)/
-  );
+  const m = rawContent.match(/(?:^|\n)###\s+Test Strategy[^\n]*\n([\s\S]*?)(?=\n###|\n## |$)/);
   if (!m) return null;
   const body = m[1];
   // Walk fenced blocks and return the first non-empty body that does NOT
@@ -260,6 +276,7 @@ function validateTestStrategy(tasksDir, ctx) {
 
   const envrc = (ctx && ctx.envrc) || null;
   const packageJson = (ctx && ctx.packageJson) || null;
+  const workDir = (ctx && ctx.workDir) || resolveWorkDir();
 
   for (const task of parsedTasks) {
     let strategy = task && task.testStrategy;
@@ -298,7 +315,11 @@ function validateTestStrategy(tasksDir, ctx) {
     if (!command) continue; // verified-by / wiring-citation skip synthesis.
 
     const dispatchCtx = {
-      worktree: tasksDir,
+      // Resolve `node|bash <file>` and pnpm-script existence against the code
+      // worktree, NOT the tasks directory. The tasks dir only contains
+      // tasks.md/spec.md/brief.md; walking up from it would find an unrelated
+      // package.json or .envrc above the repo.
+      worktree: workDir,
       packageJson,
       envrc,
       taskHeading: heading,
