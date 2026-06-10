@@ -16,6 +16,7 @@ const { fileMatchesScope } = require('./task-scope-globs');
 const KINDS = Object.freeze({
   UNIT: 'unit',
   INTEGRATION: 'integration',
+  E2E: 'e2e',
   VERIFIED_BY: 'verified-by',
   WIRING_CITATION: 'wiring-citation',
   CUSTOM: 'custom',
@@ -24,6 +25,7 @@ const KINDS = Object.freeze({
 const ENVELOPE_VAR_BY_KIND = Object.freeze({
   [KINDS.UNIT]: 'TEST_UNIT_COMMAND',
   [KINDS.INTEGRATION]: 'TEST_INTEGRATION_COMMAND',
+  [KINDS.E2E]: 'TEST_E2E_COMMAND',
 });
 
 /**
@@ -47,7 +49,8 @@ function resolveEnvelope(envrc, kind) {
  *   set, else `pnpm test <entry>` as the pre-envelope fallback.
  * - `verified-by` / `wiring-citation`: returns `null` — no command to run
  *   (the citing task piggybacks on a peer's tests).
- * - `custom`: returns `strategy.customBody` verbatim.
+ * - `custom`: returns `strategy.command` (preferred) or `strategy.customBody`
+ *   (legacy fenced-bash body) verbatim.
  */
 function synthesizeCommand(strategy, envrc) {
   if (!strategy || typeof strategy !== 'object') return null;
@@ -58,10 +61,13 @@ function synthesizeCommand(strategy, envrc) {
   }
 
   if (kind === KINDS.CUSTOM) {
+    if (typeof strategy.command === 'string' && strategy.command.length > 0) {
+      return strategy.command;
+    }
     return typeof strategy.customBody === 'string' ? strategy.customBody : null;
   }
 
-  if (kind === KINDS.UNIT || kind === KINDS.INTEGRATION) {
+  if (kind === KINDS.UNIT || kind === KINDS.INTEGRATION || kind === KINDS.E2E) {
     const entry = strategy.entry;
     if (typeof entry !== 'string' || entry.length === 0) return null;
 
@@ -158,9 +164,7 @@ function validatePeerCitation(strategy, allTasks, citingTask) {
 
   const peerTask = findTaskByHeading(allTasks, peer);
   if (!peerTask) {
-    errors.push(
-      `${citingHeading}: Test Strategy peer "${peer}" not found in tasks.md`
-    );
+    errors.push(`${citingHeading}: Test Strategy peer "${peer}" not found in tasks.md`);
     return errors;
   }
 

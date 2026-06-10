@@ -99,6 +99,36 @@ describe('lib/test-strategy.js', () => {
         'pnpm dev:typecheck && grep -q foo bar.ts'
       );
     });
+
+    it('prefers strategy.command (canonical) over strategy.customBody (legacy) for kind=custom', () => {
+      const { synthesizeCommand } = loadModule();
+      const strategy = {
+        kind: 'custom',
+        command: 'pnpm dev:check',
+        customBody: 'stale legacy body',
+      };
+      assert.equal(synthesizeCommand(strategy, { vars: {} }), 'pnpm dev:check');
+    });
+
+    it('returns envelope with CHANGED_FILES=entry when $TEST_E2E_COMMAND is set (kind=e2e)', () => {
+      const { synthesizeCommand } = loadModule();
+      const envrc = {
+        vars: {
+          TEST_E2E_COMMAND: 'pnpm test:e2e -- $CHANGED_FILES',
+        },
+      };
+      const strategy = { kind: 'e2e', entry: 'tests/e2e/foo.spec.ts' };
+      const out = synthesizeCommand(strategy, envrc);
+      assert.match(out, /CHANGED_FILES=("|')tests\/e2e\/foo\.spec\.ts("|')/);
+      assert.match(out, /\$TEST_E2E_COMMAND/);
+    });
+  });
+
+  describe('AC1 — KINDS.E2E', () => {
+    it('exports KINDS.E2E === "e2e"', () => {
+      const { KINDS } = loadModule();
+      assert.equal(KINDS.E2E, 'e2e');
+    });
   });
 
   describe('AC11 — validatePeerCitation', () => {

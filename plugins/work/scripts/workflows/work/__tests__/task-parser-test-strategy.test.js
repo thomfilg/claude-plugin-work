@@ -53,10 +53,7 @@ pnpm test foo
     const strategy = extractTestStrategy(body);
     assert.ok(strategy, 'strategy should not be null');
     assert.equal(strategy.kind, 'unit');
-    assert.equal(
-      strategy.entry,
-      'plugins/work/scripts/workflows/lib/__tests__/foo.test.js'
-    );
+    assert.equal(strategy.entry, 'plugins/work/scripts/workflows/lib/__tests__/foo.test.js');
   });
 
   it('returns {kind: "verified-by", verifiedBy} for verified-by peer reference', () => {
@@ -89,6 +86,70 @@ pnpm dev:typecheck && grep -q foo bar.ts
       `customBody should contain the custom command, got: ${JSON.stringify(strategy.customBody)}`
     );
     assert.ok(strategy.customBody.includes('grep -q foo bar.ts'));
+  });
+
+  it('parses `peer:` key (canonical authoring) into strategy.peer', () => {
+    const body = `### Test Strategy
+\`\`\`yaml
+kind: verified-by
+peer: Task 7
+cites: server/api/admin/general-settings.router.ts
+\`\`\`
+`;
+    const strategy = extractTestStrategy(body);
+    assert.ok(strategy);
+    assert.equal(strategy.kind, 'verified-by');
+    assert.equal(strategy.peer, 'Task 7');
+    assert.equal(strategy.cites, 'server/api/admin/general-settings.router.ts');
+    // Back-compat alias: verifiedBy mirrors peer when only peer: is provided.
+    assert.equal(strategy.verifiedBy, 'Task 7');
+  });
+
+  it('prefers `peer:` over legacy `verified-by:` when both are present', () => {
+    const body = `### Test Strategy
+\`\`\`yaml
+kind: verified-by
+peer: Task 9
+verified-by: Task 7
+\`\`\`
+`;
+    const strategy = extractTestStrategy(body);
+    assert.ok(strategy);
+    assert.equal(strategy.peer, 'Task 9');
+  });
+
+  it('parses inline `command:` key for kind=custom into strategy.command', () => {
+    const body = `### Test Strategy
+\`\`\`yaml
+kind: custom
+command: CHANGED_FILES="$(git diff --name-only HEAD)" eval "$TEST_UNIT_COMMAND"
+\`\`\`
+`;
+    const strategy = extractTestStrategy(body);
+    assert.ok(strategy);
+    assert.equal(strategy.kind, 'custom');
+    assert.equal(
+      strategy.command,
+      'CHANGED_FILES="$(git diff --name-only HEAD)" eval "$TEST_UNIT_COMMAND"'
+    );
+    // customBody alias preserved for legacy synthesizers.
+    assert.equal(strategy.customBody, strategy.command);
+  });
+
+  it('accepts `kind: e2e` with `entry:` path', () => {
+    const body = `### Test Strategy
+\`\`\`yaml
+kind: e2e
+entry: tests/e2e/specs/workbook-detail/workbook-detail-subscriptions-tab.spec.ts
+\`\`\`
+`;
+    const strategy = extractTestStrategy(body);
+    assert.ok(strategy);
+    assert.equal(strategy.kind, 'e2e');
+    assert.equal(
+      strategy.entry,
+      'tests/e2e/specs/workbook-detail/workbook-detail-subscriptions-tab.spec.ts'
+    );
   });
 
   it('returns null when only legacy `### Test Command` is present (no Test Strategy block)', () => {
