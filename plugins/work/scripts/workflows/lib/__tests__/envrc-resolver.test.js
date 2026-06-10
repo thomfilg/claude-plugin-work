@@ -1,4 +1,4 @@
-const { describe, it, before, after } = require('node:test');
+const { describe, it, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -57,7 +57,7 @@ describe('lib/envrc-resolver.js', () => {
         if (result !== null) {
           assert.ok(
             !result.path.startsWith(root),
-            'no .envrc was created under the tmp root; resolver must not invent one',
+            'no .envrc was created under the tmp root; resolver must not invent one'
           );
         }
       } finally {
@@ -70,7 +70,7 @@ describe('lib/envrc-resolver.js', () => {
       try {
         fs.writeFileSync(
           path.join(root, '.envrc'),
-          ['export FOO=hello', 'BAR=world', '# a comment', ''].join('\n'),
+          ['export FOO=hello', 'BAR=world', '# a comment', ''].join('\n')
         );
         const { findNearestEnvrc } = loadModule();
         const result = findNearestEnvrc(root);
@@ -87,24 +87,14 @@ describe('lib/envrc-resolver.js', () => {
       try {
         fs.writeFileSync(
           path.join(root, '.envrc'),
-          [
-            'export GOOD=ok',
-            'export BAD1=$(date)',
-            'export BAD2=`hostname`',
-          ].join('\n'),
+          ['export GOOD=ok', 'export BAD1=$(date)', 'export BAD2=`hostname`'].join('\n')
         );
         const { findNearestEnvrc } = loadModule();
         const result = findNearestEnvrc(root);
         assert.ok(result);
         assert.equal(result.vars.GOOD, 'ok');
-        assert.ok(
-          !('BAD1' in result.vars),
-          'command substitution $(...) must be rejected',
-        );
-        assert.ok(
-          !('BAD2' in result.vars),
-          'backtick substitution must be rejected',
-        );
+        assert.ok(!('BAD1' in result.vars), 'command substitution $(...) must be rejected');
+        assert.ok(!('BAD2' in result.vars), 'backtick substitution must be rejected');
       } finally {
         fs.rmSync(root, { recursive: true, force: true });
       }
@@ -152,7 +142,7 @@ describe('lib/envrc-resolver.js', () => {
         const pkgPath = path.join(root, 'package.json');
         fs.writeFileSync(
           pkgPath,
-          JSON.stringify({ name: 'tmp', scripts: { test: 'node --test' } }),
+          JSON.stringify({ name: 'tmp', scripts: { test: 'node --test' } })
         );
 
         const { findNearestPackageJson } = loadModule();
@@ -165,17 +155,10 @@ describe('lib/envrc-resolver.js', () => {
         // Memoization contract (AC9): a second call for the same start dir
         // should not re-read from disk. We assert by mutating the file on
         // disk and confirming the returned manifest is the cached value.
-        fs.writeFileSync(
-          pkgPath,
-          JSON.stringify({ name: 'CHANGED', scripts: {} }),
-        );
+        fs.writeFileSync(pkgPath, JSON.stringify({ name: 'CHANGED', scripts: {} }));
         const second = findNearestPackageJson(child);
         assert.ok(second);
-        assert.equal(
-          second.manifest.name,
-          'tmp',
-          'manifest must be cached per call site (AC9)',
-        );
+        assert.equal(second.manifest.name, 'tmp', 'manifest must be cached per call site (AC9)');
       } finally {
         fs.rmSync(root, { recursive: true, force: true });
       }
