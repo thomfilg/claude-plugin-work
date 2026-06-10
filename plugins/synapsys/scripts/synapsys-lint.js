@@ -20,6 +20,7 @@
 
 const path = require('node:path');
 const { setupCli, listMemories } = require('../lib/script-bootstrap');
+const { getDomains, firstShared } = require('../lib/lint/domain-utils');
 const { parseArgs } = require('../lib/lint/parse-args');
 const {
   scorePair,
@@ -67,47 +68,6 @@ function filterMemories(memories, scope, boundDir) {
     if (scope === 'project') return kind !== 'shared';
     return true;
   });
-}
-
-/**
- * Coerce a frontmatter domain value (string, array, or unknown) into the
- * `out` Set. Whitespace-only entries are dropped.
- */
-function addDomainValue(value, out) {
-  if (typeof value === 'string') {
-    const t = value.trim();
-    if (t) out.add(t);
-    return;
-  }
-  if (!Array.isArray(value)) return;
-  for (const v of value) {
-    if (typeof v !== 'string') continue;
-    const t = v.trim();
-    if (t) out.add(t);
-  }
-}
-
-/**
- * Return the memory's domain tag(s) as a Set of non-empty strings. Reads
- * canonical `memory.domain` (parsed list) first; falls back to raw
- * `memory.meta.domain` (string or array). Empty Set when none declared.
- */
-function getDomains(memory) {
-  const out = new Set();
-  if (!memory) return out;
-  addDomainValue(memory.domain, out);
-  if (out.size === 0) addDomainValue(memory.meta && memory.meta.domain, out);
-  return out;
-}
-
-function setsIntersect(a, b) {
-  for (const x of a) if (b.has(x)) return true;
-  return false;
-}
-
-function firstShared(a, b) {
-  for (const x of a) if (b.has(x)) return x;
-  return null;
 }
 
 function extractLinkRefs(body) {

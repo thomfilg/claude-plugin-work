@@ -14,42 +14,10 @@ const {
   triggerMatchesBody,
 } = require('../shared/trigger-tokens');
 
+const { getDomains, setsIntersect, forEachPair } = require('./domain-utils');
+
 const OVERLAP_REPORT_FLOOR = 0.25;
 const BODY_DENSITY_FLOOR = 2;
-
-function addDomainValue(value, out) {
-  if (typeof value === 'string') {
-    const t = value.trim();
-    if (t) out.add(t);
-    return;
-  }
-  if (!Array.isArray(value)) return;
-  for (const v of value) {
-    if (typeof v !== 'string') continue;
-    const t = v.trim();
-    if (t) out.add(t);
-  }
-}
-
-/**
- * Return the memory's domain tag(s) as a Set of non-empty strings. Reads the
- * canonical `memory.domain` list first (memory-store coerces both scalar
- * `domain: x` and bracket-tag `domain: [a, b]` frontmatter into an array
- * there); falls back to raw `memory.meta.domain` for shapes that skipped the
- * parser. Returns an empty Set when no domain is declared.
- */
-function getDomains(memory) {
-  const out = new Set();
-  if (!memory) return out;
-  addDomainValue(memory.domain, out);
-  if (out.size === 0) addDomainValue(memory.meta && memory.meta.domain, out);
-  return out;
-}
-
-function setsIntersect(a, b) {
-  for (const x of a) if (b.has(x)) return true;
-  return false;
-}
 
 /**
  * scorePair — raw Jaccard overlap of two alternation-token sets.
@@ -89,31 +57,26 @@ function computeTriggerPairs(
   applyIntentionalDowngrades
 ) {
   const pairs = [];
-  for (let i = 0; i < memories.length; i++) {
-    for (let j = i + 1; j < memories.length; j++) {
-      const a = memories[i];
-      const b = memories[j];
-      if (onlyInvolving && a.name !== onlyInvolving && b.name !== onlyInvolving) continue;
-      const { score } = scorePair(a, b);
-      const { severity, intentional } = classifyPair(
-        a,
-        b,
-        score,
-        overlapThreshold,
-        applyIntentionalDowngrades
-      );
-      if (severity === null) continue;
-      pairs.push({
-        rule: 'trigger-overlap',
-        a: a.name,
-        b: b.name,
-        severity,
-        score,
-        suggestion: null,
-        intentional,
-      });
-    }
-  }
+  forEachPair(memories, onlyInvolving, (a, b) => {
+    const { score } = scorePair(a, b);
+    const { severity, intentional } = classifyPair(
+      a,
+      b,
+      score,
+      overlapThreshold,
+      applyIntentionalDowngrades
+    );
+    if (severity === null) return;
+    pairs.push({
+      rule: 'trigger-overlap',
+      a: a.name,
+      b: b.name,
+      severity,
+      score,
+      suggestion: null,
+      intentional,
+    });
+  });
   return pairs;
 }
 

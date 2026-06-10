@@ -209,15 +209,11 @@ function computePairForMemories(a, b, out, applyIntentionalDowngrades) {
  * Domain + `[[link]]` downgrades are applied via the caller-supplied helper.
  */
 function computePretoolPairs(memories, onlyInvolving, applyIntentionalDowngrades) {
+  const { forEachPair } = require('./domain-utils');
   const pairs = [];
-  for (let i = 0; i < memories.length; i++) {
-    for (let j = i + 1; j < memories.length; j++) {
-      const a = memories[i];
-      const b = memories[j];
-      if (onlyInvolving && a.name !== onlyInvolving && b.name !== onlyInvolving) continue;
-      computePairForMemories(a, b, pairs, applyIntentionalDowngrades);
-    }
-  }
+  forEachPair(memories, onlyInvolving, (a, b) => {
+    computePairForMemories(a, b, pairs, applyIntentionalDowngrades);
+  });
   return pairs;
 }
 
