@@ -1,0 +1,230 @@
+'use strict';
+
+/**
+ * Task 11 (GH-590) — integration tests for `draft.js` wiring of
+ * `validateTestStrategy` + `validateTddOwnership` behind the
+ * `WORK_TEST_STRATEGY_VALIDATOR` feature flag.
+ *
+ * RED phase: these tests are expected to fail because `draft.js` does not yet
+ * export `validateTestStrategy` or `validateTddOwnership`, and `validateArtifacts`
+ * does not yet consult them.
+ *
+ * Covers:
+ *  - AC9  (collected failures surfaced through draft phase)
+ *  - AC12 (relax cross-task-test rule)
+ *  - AC17 (gated on WORK_TEST_STRATEGY_VALIDATOR)
+ *  - AC14 (custom body emits dev:typecheck miss + grep resolve)
+ */
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const draft = require('../../../lib/phases/draft');
+
+function mkTasksDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'gh590-task11-'));
+}
+
+function writeTasks(dir, body) {
+  fs.writeFileSync(path.join(dir, 'tasks.md'), body, 'utf8');
+}
+
+function writeSpec(dir, body = '## Component Shape Decision\n\n_No generic split._\n') {
+  fs.writeFileSync(path.join(dir, 'spec.md'), body, 'utf8');
+}
+
+const LEGACY_TASKS_MD = [
+  '## Extracted Requirements',
+  '',
+  '- R1',
+  '',
+  '## Task 1 — legacy shape with ### Test Command only',
+  '',
+  '### Type',
+  'backend',
+  '',
+  '### Dependencies',
+  'none',
+  '',
+  '### Requirements Covered',
+  '- R1',
+  '',
+  '### Acceptance Criteria',
+  '- does the thing',
+  '',
+  '### Files in scope',
+  '- `src/foo.ts`',
+  '- `src/foo.test.ts`',
+  '',
+  '### Test Command',
+  '```bash',
+  'CHANGED_FILES="src/foo.test.ts" eval "$TEST_UNIT_COMMAND"',
+  '```',
+  '',
+].join('\n');
+
+const STRATEGY_TASKS_MD_VALID = [
+  '## Extracted Requirements',
+  '',
+  '- R1',
+  '',
+  '## Task 1 — module under test',
+  '',
+  '### Type',
+  'backend',
+  '',
+  '### Dependencies',
+  'none',
+  '',
+  '### Requirements Covered',
+  '- R1',
+  '',
+  '### Acceptance Criteria',
+  '- does the thing',
+  '',
+  '### Files in scope',
+  '- `src/foo.ts`',
+  '- `src/foo.test.ts`',
+  '',
+  '### Test Strategy',
+  '```yaml',
+  'kind: unit',
+  'entry: src/foo.test.ts',
+  '```',
+  '',
+].join('\n');
+
+const STRATEGY_TASKS_MD_BAD_CUSTOM = [
+  '## Extracted Requirements',
+  '',
+  '- R1',
+  '',
+  '## Task 1 — custom body that should collect both AC14 errors',
+  '',
+  '### Type',
+  'backend',
+  '',
+  '### Dependencies',
+  'none',
+  '',
+  '### Requirements Covered',
+  '- R1',
+  '',
+  '### Acceptance Criteria',
+  '- does the thing',
+  '',
+  '### Files in scope',
+  '- `bar.ts`',
+  '',
+  '### Test Strategy',
+  '```bash',
+  'pnpm dev:typecheck && grep -q foo bar.ts',
+  '```',
+  '',
+].join('\n');
+
+function withFlag(value, fn) {
+  const prev = process.env.WORK_TEST_STRATEGY_VALIDATOR;
+  if (value === undefined) delete process.env.WORK_TEST_STRATEGY_VALIDATOR;
+  else process.env.WORK_TEST_STRATEGY_VALIDATOR = value;
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete process.env.WORK_TEST_STRATEGY_VALIDATOR;
+    else process.env.WORK_TEST_STRATEGY_VALIDATOR = prev;
+  }
+}
+
+test('draft.js exports the two new strategy validators (Task 11 wiring)', () => {
+  assert.equal(
+    typeof draft.validateTestStrategy,
+    'function',
+    'expected draft.js to export `validateTestStrategy` (Task 11 — wiring)'
+  );
+  assert.equal(
+    typeof draft.validateTddOwnership,
+    'function',
+    'expected draft.js to export `validateTddOwnership` (Task 11 — wiring)'
+  );
+});
+
+test('flag-off: legacy ### Test Command path still passes draft validation', () => {
+  const dir = mkTasksDir();
+  writeSpec(dir);
+  writeTasks(dir, LEGACY_TASKS_MD);
+
+  const errors = withFlag('0', () => draft.validateArtifacts(dir));
+  assert.deepEqual(
+    errors,
+    [],
+    `flag-off legacy path should pass; got: ${JSON.stringify(errors)}`
+  );
+});
+
+test('flag-on: valid kind=unit ### Test Strategy passes draft validation', () => {
+  const dir = mkTasksDir();
+  writeSpec(dir);
+  writeTasks(dir, STRATEGY_TASKS_MD_VALID);
+  // Make the entry resolvable so command synthesis does not flag it.
+  fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'src/foo.test.ts'), '// noop\n', 'utf8');
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({ name: 'fixture', scripts: { test: 'node --test' } }),
+    'utf8'
+  );
+
+  const errors = withFlag('1', () => draft.validateArtifacts(dir));
+  assert.deepEqual(
+    errors,
+    [],
+    `flag-on valid strategy should pass; got: ${JSON.stringify(errors)}`
+  );
+});
+
+test('flag-on: custom body "pnpm dev:typecheck && grep -q foo bar.ts" emits both AC14 errors', () => {
+  const dir = mkTasksDir();
+  writeSpec(dir);
+  writeTasks(dir, STRATEGY_TASKS_MD_BAD_CUSTOM);
+  fs.writeFileSync(path.join(dir, 'bar.ts'), '// noop\n', 'utf8');
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    // Intentionally NO dev:typecheck script — AC14 expects a "missing" error
+    // with Levenshtein top-3 nearest matches.
+    JSON.stringify({ name: 'fixture', scripts: { test: 'node --test', 'dev:test': 'x' } }),
+    'utf8'
+  );
+
+  const errors = withFlag('1', () => draft.validateArtifacts(dir));
+  const joined = errors.join('\n');
+  assert.ok(
+    /dev:typecheck/.test(joined),
+    `expected an error naming "dev:typecheck" missing from manifest; got: ${joined}`
+  );
+  assert.ok(
+    errors.length >= 2,
+    `expected at least two collected errors (no short-circuit per AC9); got ${errors.length}: ${joined}`
+  );
+});
+
+test('flag-on no-op when validator flag is off — same fixture, no strategy errors', () => {
+  const dir = mkTasksDir();
+  writeSpec(dir);
+  writeTasks(dir, STRATEGY_TASKS_MD_BAD_CUSTOM);
+  fs.writeFileSync(path.join(dir, 'bar.ts'), '// noop\n', 'utf8');
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({ name: 'fixture', scripts: { test: 'node --test' } }),
+    'utf8'
+  );
+
+  const errors = withFlag('0', () => draft.validateArtifacts(dir));
+  const joined = errors.join('\n');
+  assert.ok(
+    !/dev:typecheck/.test(joined),
+    `flag-off must NOT run the new strategy/dispatcher validators; got: ${joined}`
+  );
+});

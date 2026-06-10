@@ -227,6 +227,10 @@ function parseTasks(tasksDir) {
     // backticks. Concatenates lines joined by trailing `\` continuations.
     const testCommand = extractTestCommand(body);
 
+    // GH-590: extract ### Test Strategy (enum-driven). Returns null for tasks
+    // using the legacy `### Test Command` path only.
+    const testStrategy = extractTestStrategy(body);
+
     const isCheckpoint = type === 'checkpoint' || /checkpoint/i.test(title);
 
     tasks.push({
@@ -243,6 +247,7 @@ function parseTasks(tasksDir) {
       filesOutOfScope,
       crossTaskDeps,
       testCommand,
+      testStrategy,
       rawContent: `## Task ${num} ${body}`,
     });
   }
@@ -369,4 +374,122 @@ function buildTaskPrompt(task, tasksDir, allTasks, taskState) {
   return lines.join('\n');
 }
 
-module.exports = { parseTasks, buildTaskPrompt };
+/**
+ * GH-590: Extract the `### Test Strategy` block from a task body.
+ *
+ * Returns `{ kind, entry, verifiedBy, customBody }` or `null` when the
+ * section is absent (e.g. the task still uses the legacy `### Test Command`).
+ *
+ * Recognized shape (yaml-ish, line-based):
+ *   ### Test Strategy
+ *   ```yaml
+ *   kind: unit|integration|verified-by|wiring-citation|custom
+ *   entry: <path>             # required for kind: unit | integration
+ *   verified-by: Task N       # required for kind: verified-by | wiring-citation
+ *   ```
+ *   ```bash                   # only for kind: custom — free-form body
+ *   <command lines>
+ *   ```
+ *
+ * @param {string} taskBody
+ * @returns {{kind: string, entry: (string|null), verifiedBy: (string|null), customBody: (string|null)} | null}
+ */
+function extractTestStrategy(taskBody) {
+  if (typeof taskBody !== 'string' || !taskBody) return null;
+  const section = extractSectionByHeading(taskBody, '### Test Strategy');
+  if (!section) return null;
+  const rawBody = section[1];
+
+  // Walk all fenced blocks inside the section. The first non-empty fenced
+  // block carries the yaml-ish key/value pairs; any subsequent fenced block
+  // is the `kind: custom` free-form body.
+  const fences = _extractFencedBlocks(rawBody);
+  let kind = null;
+  let entry = null;
+  let verifiedBy = null;
+  let customBody = null;
+
+  if (fences.length === 0) {
+    // No fence: try to parse the prose lines directly (lenient).
+    const parsed = _parseStrategyKeys(rawBody);
+    kind = parsed.kind;
+    entry = parsed.entry;
+    verifiedBy = parsed.verifiedBy;
+  } else {
+    const parsed = _parseStrategyKeys(fences[0].content);
+    kind = parsed.kind;
+    entry = parsed.entry;
+    verifiedBy = parsed.verifiedBy;
+    if (fences.length > 1) {
+      customBody = fences
+        .slice(1)
+        .map((f) => f.content.trim())
+        .filter(Boolean)
+        .join('\n');
+      if (!customBody) customBody = null;
+    }
+  }
+
+  if (!kind) return null;
+  return { kind, entry, verifiedBy, customBody };
+}
+
+/**
+ * Split a markdown body into its fenced ``` blocks. Returns an array of
+ * `{ lang, content }` where `content` excludes the fence lines themselves.
+ * @param {string} body
+ * @returns {Array<{lang: string, content: string}>}
+ */
+function _extractFencedBlocks(body) {
+  const out = [];
+  const lines = body.split('\n');
+  let inFence = false;
+  let lang = '';
+  let buf = [];
+  for (const raw of lines) {
+    const fenceMatch = raw.match(/^\s*```(\S*)\s*$/);
+    if (fenceMatch) {
+      if (!inFence) {
+        inFence = true;
+        lang = fenceMatch[1] || '';
+        buf = [];
+      } else {
+        out.push({ lang, content: buf.join('\n') });
+        inFence = false;
+        lang = '';
+        buf = [];
+      }
+      continue;
+    }
+    if (inFence) buf.push(raw);
+  }
+  return out;
+}
+
+/**
+ * Pull `kind:` / `entry:` / `verified-by:` out of a yaml-ish key/value body.
+ * Tolerates inline-code backticks around values and leading list markers.
+ * @param {string} body
+ * @returns {{kind: (string|null), entry: (string|null), verifiedBy: (string|null)}}
+ */
+function _parseStrategyKeys(body) {
+  let kind = null;
+  let entry = null;
+  let verifiedBy = null;
+  for (const raw of body.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const stripped = line.replace(/^[-*+]\s+/, '').trim();
+    const m = stripped.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*:\s*(.+?)\s*$/);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    const value = m[2].replace(/^`+|`+$/g, '').trim();
+    if (!value) continue;
+    if (key === 'kind') kind = value;
+    else if (key === 'entry') entry = value;
+    else if (key === 'verified-by' || key === 'verifiedby') verifiedBy = value;
+  }
+  return { kind, entry, verifiedBy };
+}
+
+module.exports = { parseTasks, buildTaskPrompt, extractTestStrategy };

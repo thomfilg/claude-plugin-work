@@ -12,6 +12,7 @@ const path = require('node:path');
 
 const { TASKS_PHASES } = require('../../tasks-phase-registry');
 const { parseShapeFromSpec } = require('../../../work-spec/lib/component-shape');
+const { getConfig } = require('../../../lib/config');
 
 let parseTasks;
 try {
@@ -19,6 +20,37 @@ try {
 } catch {
   parseTasks = null;
 }
+
+// GH-590 Task 11: feature-flagged Test Strategy + TDD-ownership validators.
+// Loaded lazily and tolerantly so the legacy path keeps working if any of
+// the helper modules are unavailable.
+let strategyModule = null;
+let dispatcherModule = null;
+let ownershipModule = null;
+let envrcModule = null;
+try {
+  strategyModule = require('../../../lib/test-strategy');
+} catch {
+  strategyModule = null;
+}
+try {
+  dispatcherModule = require('../../../lib/command-existence-dispatcher');
+} catch {
+  dispatcherModule = null;
+}
+try {
+  ownershipModule = require('../../../lib/tdd-ownership-graph');
+} catch {
+  ownershipModule = null;
+}
+try {
+  envrcModule = require('../../../lib/envrc-resolver');
+} catch {
+  envrcModule = null;
+}
+
+const STRATEGY_FLAG_KEY = 'WORK_TEST_STRATEGY_VALIDATOR';
+const STRATEGY_FLAG_ON_VALUE = '1';
 
 const REQUIRED_SUBSECTIONS = [
   'Type',
@@ -120,6 +152,247 @@ function validateSharedComponentOrdering(tasksDir, taskBlocks) {
   return errors;
 }
 
+function strategyFlagOn() {
+  try {
+    const v = getConfig(STRATEGY_FLAG_KEY);
+    return v === STRATEGY_FLAG_ON_VALUE;
+  } catch {
+    return process.env[STRATEGY_FLAG_KEY] === STRATEGY_FLAG_ON_VALUE;
+  }
+}
+
+function loadStrategyContext(tasksDir) {
+  let parsedTasks = null;
+  if (parseTasks) {
+    try {
+      parsedTasks = parseTasks(tasksDir);
+    } catch {
+      parsedTasks = null;
+    }
+  }
+  let envrc = null;
+  if (envrcModule && typeof envrcModule.findNearestEnvrc === 'function') {
+    try {
+      envrc = envrcModule.findNearestEnvrc(tasksDir);
+    } catch {
+      envrc = null;
+    }
+  }
+  let packageJson = null;
+  if (envrcModule && typeof envrcModule.findNearestPackageJson === 'function') {
+    try {
+      packageJson = envrcModule.findNearestPackageJson(tasksDir) || null;
+    } catch {
+      packageJson = null;
+    }
+  }
+  return { parsedTasks, envrc, packageJson };
+}
+
+function taskHeadingFor(task) {
+  if (!task) return '<unknown task>';
+  if (task.title) return `Task ${task.num} — ${task.title}`;
+  return `Task ${task.num}`;
+}
+
+/**
+ * Extract the raw bash/shell fence body inside a task's `### Test Strategy`
+ * section when the parser did not classify it as a recognized kind. This
+ * mirrors the `kind: custom` synthesis at the integration layer so authors
+ * who drop a single bash fence under `### Test Strategy` still get the
+ * command-existence dispatcher's enforcement.
+ *
+ * @param {string} rawContent
+ * @returns {string|null}
+ */
+function extractRawStrategyBody(rawContent) {
+  if (typeof rawContent !== 'string' || !rawContent) return null;
+  // Locate `### Test Strategy` section body.
+  const m = rawContent.match(
+    /(?:^|\n)###\s+Test Strategy[^\n]*\n([\s\S]*?)(?=\n###|\n## |$)/
+  );
+  if (!m) return null;
+  const body = m[1];
+  // Walk fenced blocks and return the first non-empty body that does NOT
+  // look like a yaml `kind:` key block.
+  const lines = body.split('\n');
+  let inFence = false;
+  let buf = [];
+  for (const raw of lines) {
+    if (/^\s*```/.test(raw)) {
+      if (!inFence) {
+        inFence = true;
+        buf = [];
+      } else {
+        const content = buf.join('\n').trim();
+        if (content && !/^\s*kind\s*:/m.test(content)) return content;
+        inFence = false;
+        buf = [];
+      }
+      continue;
+    }
+    if (inFence) buf.push(raw);
+  }
+  return null;
+}
+
+/**
+ * GH-590 Task 11 / AC9 + AC14: feature-flagged Test Strategy validator.
+ *
+ * Walks every parsed task's `testStrategy`, synthesizes the runnable command
+ * (or treats the custom body verbatim), and dispatches it through the
+ * command-existence checker. Collects all errors — does NOT short-circuit.
+ *
+ * No-op when WORK_TEST_STRATEGY_VALIDATOR !== '1' (AC17) or when any
+ * required helper module is missing.
+ *
+ * @param {string} tasksDir
+ * @param {{ parsedTasks: object[]|null, envrc: object|null, manifest: object|null }} ctx
+ * @returns {string[]}
+ */
+function validateTestStrategy(tasksDir, ctx) {
+  const errors = [];
+  if (!strategyFlagOn()) return errors;
+  if (!strategyModule || !dispatcherModule) return errors;
+
+  const parsedTasks = (ctx && ctx.parsedTasks) || null;
+  if (!Array.isArray(parsedTasks)) return errors;
+
+  const envrc = (ctx && ctx.envrc) || null;
+  const packageJson = (ctx && ctx.packageJson) || null;
+
+  for (const task of parsedTasks) {
+    let strategy = task && task.testStrategy;
+    const heading = taskHeadingFor(task);
+
+    // Integration-layer fallback: if the task declares a `### Test Strategy`
+    // block whose first fence is a raw shell body (no `kind:` line), treat
+    // it as `kind: custom` so the command-existence dispatcher still fires.
+    // This mirrors the AC8 intent (empty/prose-only rejection) and AC14
+    // (custom-body dispatch) for authors using the minimal fence shape.
+    if (!strategy || typeof strategy !== 'object') {
+      const rawBody = task && task.rawContent ? extractRawStrategyBody(task.rawContent) : null;
+      if (rawBody) {
+        strategy = { kind: 'custom', customBody: rawBody };
+      } else {
+        continue;
+      }
+    }
+
+    // Peer-citation validation (AC11) for verified-by / wiring-citation.
+    if (typeof strategyModule.validatePeerCitation === 'function') {
+      try {
+        const peerErrors = strategyModule.validatePeerCitation(strategy, parsedTasks, task) || [];
+        for (const e of peerErrors) errors.push(e);
+      } catch {
+        /* peer-citation helper unstable — keep going */
+      }
+    }
+
+    let command = null;
+    try {
+      command = strategyModule.synthesizeCommand(strategy, envrc);
+    } catch {
+      command = null;
+    }
+    if (!command) continue; // verified-by / wiring-citation skip synthesis.
+
+    const dispatchCtx = {
+      worktree: tasksDir,
+      packageJson,
+      envrc,
+      taskHeading: heading,
+    };
+    try {
+      const result = dispatcherModule.dispatch(command, dispatchCtx);
+      if (result && Array.isArray(result.errors)) {
+        for (const e of result.errors) errors.push(e);
+      }
+    } catch (err) {
+      errors.push(`${heading}: command-existence dispatcher failed: ${err && err.message}`);
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * GH-590 Task 11 / AC10: feature-flagged TDD-ownership graph validator.
+ *
+ * Builds the coverage graph from parsed tasks and reports orphaned paths
+ * (paths declared in `### Files in scope` that no task's strategy exercises).
+ *
+ * No-op when WORK_TEST_STRATEGY_VALIDATOR !== '1'.
+ *
+ * @param {string} _tasksDir
+ * @param {{ parsedTasks: object[]|null }} ctx
+ * @returns {string[]}
+ */
+function validateTddOwnership(_tasksDir, ctx) {
+  const errors = [];
+  if (!strategyFlagOn()) return errors;
+  if (!ownershipModule) return errors;
+
+  const parsedTasks = (ctx && ctx.parsedTasks) || null;
+  if (!Array.isArray(parsedTasks) || parsedTasks.length === 0) return errors;
+
+  let graph = null;
+  try {
+    graph = ownershipModule.buildCoverageGraph(parsedTasks);
+  } catch {
+    return errors;
+  }
+  let orphans = [];
+  try {
+    orphans = ownershipModule.findOrphanedPaths(parsedTasks, graph) || [];
+  } catch {
+    return errors;
+  }
+
+  // GH-590 Task 11 wiring: narrow the bare-graph orphan set so legitimate
+  // test-source pairings (e.g. `entry: foo.test.ts` covering `foo.ts`) do
+  // NOT false-positive at the integration layer. We strip the `.test.` /
+  // `.spec.` infix and the `__tests__/` segment from any task's entry and
+  // compare to the orphan path — mirroring the same mapping that
+  // test-strategy.entryReferencesScope applies internally.
+  const realOrphans = orphans.filter((o) => {
+    if (!o || !o.path) return false;
+    for (const t of parsedTasks) {
+      const strat = t && t.testStrategy;
+      if (!strat || typeof strat !== 'object') continue;
+      const entry = strat.entry;
+      if (typeof entry !== 'string' || !entry) continue;
+      if (entry === o.path) return false;
+      const stripped = entry.replace(/\.(?:test|spec)(\.[a-zA-Z0-9]+)$/, '$1');
+      if (stripped === o.path) return false;
+      const noTestsDir = stripped.replace(/(^|\/)__tests__\//, '$1');
+      if (noTestsDir === o.path) return false;
+    }
+    return true;
+  });
+
+  for (const orphan of realOrphans) {
+    if (!orphan || !orphan.path) continue;
+    const heading = `Task ${orphan.owner}`;
+    const remediation = Array.isArray(orphan.remediation)
+      ? orphan.remediation.map((r) => `  - ${r}`).join('\n')
+      : '';
+    errors.push(
+      `${heading}: \`${orphan.path}\` is owned by ${heading} but no task's Test Strategy entry transitively touches it. Remediation options:\n${remediation}`
+    );
+  }
+  return errors;
+}
+
+function runStrategyValidators(tasksDir) {
+  if (!strategyFlagOn()) return [];
+  const ctx = loadStrategyContext(tasksDir);
+  const errors = [];
+  errors.push(...validateTestStrategy(tasksDir, ctx));
+  errors.push(...validateTddOwnership(tasksDir, ctx));
+  return errors;
+}
+
 function validateArtifacts(tasksDir) {
   const errors = [];
   const p = path.join(tasksDir, 'tasks.md');
@@ -153,6 +426,8 @@ function validateArtifacts(tasksDir) {
   // This is the ECHO-4452 lesson translated into an implementation-order rule.
   const taskBlocks = parseTaskBlocks(text);
   errors.push(...validateSharedComponentOrdering(tasksDir, taskBlocks));
+  // GH-590 Task 11: feature-flagged validators. No-op when flag off (AC17).
+  errors.push(...runStrategyValidators(tasksDir));
   return errors;
 }
 
@@ -257,3 +532,6 @@ module.exports.parseTaskBlocks = parseTaskBlocks;
 module.exports.extractFilesInScope = extractFilesInScope;
 module.exports.validateSharedComponentOrdering = validateSharedComponentOrdering;
 module.exports.SHARED_PATH_RE = SHARED_PATH_RE;
+module.exports.validateTestStrategy = validateTestStrategy;
+module.exports.validateTddOwnership = validateTddOwnership;
+module.exports.WORK_TEST_STRATEGY_VALIDATOR = STRATEGY_FLAG_KEY;

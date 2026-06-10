@@ -252,7 +252,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/workflows/work-implement/tdd-phase-state.js c
 if [ -n "$LINT_COMMAND$TYPECHECK_COMMAND$TEST_COMMAND" ]; then
   bash ${CLAUDE_PLUGIN_ROOT}/scripts/dev-check/dev-check.sh
 else
-  pnpm dev:check   # Runs: dev:lint → dev:typecheck → dev:test
+  CHANGED_FILES="$(git diff --name-only HEAD)" eval "$TEST_UNIT_COMMAND"  # Routes through $TEST_UNIT_COMMAND envelope
 fi
 ```
 
