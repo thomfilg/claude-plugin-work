@@ -316,6 +316,46 @@ function emitMatched(matched, payload, event) {
   }
 }
 
+// Resolve session id once (ledger reset + per-memory render). Publish to
+// `.current` so out-of-process callers (synapsys-list CLI) share it. Fail-open.
+function resolveSession(payload) {
+  try {
+    const sessionId = injectLedger.resolveSessionId(payload);
+    injectLedger.publishCurrentSessionId(sessionId);
+    return sessionId;
+  } catch {
+    return '';
+  }
+}
+
+// GH-497 R3/R6: on a PreToolUse subagent spawn (Task/Agent), union the
+// prompt-scope matches (deduped by name) so a memory matching both injects once.
+function computeMatched(event, memories, payload, selectOpts) {
+  let matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
+  if (event === 'PreToolUse' && memories.length) {
+    const subagentMatches = collectSubagentMatches(payload, memories, selectOpts);
+    if (subagentMatches.length) matched = unionByName(matched, subagentMatches);
+  }
+  return matched;
+}
+
+// GH-497 R1/R2: branch the on-match write by event. PreToolUse emits the
+// injection as `hookSpecificOutput.additionalContext` JSON (additive context, also
+// to subagents); other events keep raw stdout. Empty guard = no-match identity.
+function writeMatchedOutput(event, matched, sessionId) {
+  const out = formatMatchedOutput(matched, sessionId);
+  if (!out) return;
+  if (event === 'PreToolUse') {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: out },
+      })
+    );
+  } else {
+    process.stdout.write(out);
+  }
+}
+
 (async () => {
   try {
     const event = process.argv[2];
@@ -326,22 +366,9 @@ function emitMatched(matched, payload, event) {
     const stores = discoverStores(cwd);
     const memories = stores.flatMap(listMemoriesFromStore);
 
-    // Resolve session id once; used for both ledger reset (SessionStart) and
-    // the per-memory render path. Fail-open: any throw → noop and the rest of
-    // the dispatcher behaves like the pre-ledger code path.
-    let sessionId;
-    try {
-      sessionId = injectLedger.resolveSessionId(payload);
-      // Publish the resolved id to `.current` so out-of-process callers
-      // (synapsys-list CLI) read the same session ledger the dispatcher
-      // writes to. Fail-open: a write error never blocks the dispatcher.
-      injectLedger.publishCurrentSessionId(sessionId);
-    } catch {
-      sessionId = '';
-    }
+    const sessionId = resolveSession(payload);
 
-    // SessionStart resets the per-session ledger (brief AC-4 / spec §3.3) and
-    // opportunistically GCs stale ledger files older than 7 days (spec §4.2).
+    // SessionStart resets the ledger (brief AC-4 / spec §3.3) + GCs files >7d old (spec §4.2). Fail-open.
     if (event === 'SessionStart') {
       try {
         injectLedger.resetLedgerForSession(sessionId);
@@ -357,45 +384,15 @@ function emitMatched(matched, payload, event) {
       process.exit(0);
     }
 
-    // Build activeDomains FIRST so UserPromptSubmit advances sticky-state
-    // even when the memory list is empty. Fail-open: on any error, omit
-    // `opts.activeDomains` to preserve pre-classifier behavior.
+    // Build activeDomains FIRST so UserPromptSubmit advances sticky-state even with an empty memory list. Fail-open.
     const selectOpts = buildActiveDomainsForPayload(event, payload);
-    let matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
-    // GH-497 R3/R6: on a PreToolUse subagent spawn (Task/Agent), union the
-    // prompt-scope matches from `tool_input.prompt` into `matched`, deduped by
-    // memory name so a memory matching BOTH the PreTool pattern and the prompt
-    // injects exactly once.
-    if (event === 'PreToolUse' && memories.length) {
-      const subagentMatches = collectSubagentMatches(payload, memories, selectOpts);
-      if (subagentMatches.length) matched = unionByName(matched, subagentMatches);
-    }
-    // On Stop the cite scan must read the session JSONL state from BEFORE
-    // this turn's Stop-time fired writes; Stop-injections happen after the
-    // assistant response, so attributing citations to them would be a
-    // false positive (the response cannot reference a memory that wasn't
-    // yet injected at the time it was written).
+    const matched = computeMatched(event, memories, payload, selectOpts);
+    // On Stop the cite scan reads session JSONL from BEFORE this turn's fired
+    // writes; Stop-injections land after the response, so crediting them = FP.
     if (event === 'Stop') runCiteScan(payload, memories);
     emitMatched(matched, payload, event);
 
-    // GH-497 R1/R2: branch the single on-match write by event. PreToolUse must
-    // emit the rendered injection as `hookSpecificOutput.additionalContext` JSON
-    // so Claude Code surfaces it as additive context to the tool call (and to
-    // spawned subagents); every other event keeps the prior raw-stdout contract.
-    // The empty-string guard preserves byte-identical no-match behavior (no
-    // empty-additionalContext noise on a no-match PreToolUse).
-    const out = formatMatchedOutput(matched, sessionId);
-    if (out) {
-      if (event === 'PreToolUse') {
-        process.stdout.write(
-          JSON.stringify({
-            hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: out },
-          })
-        );
-      } else {
-        process.stdout.write(out);
-      }
-    }
+    writeMatchedOutput(event, matched, sessionId);
     process.exit(0);
   } catch {
     process.exit(0);
