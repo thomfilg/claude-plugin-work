@@ -12,7 +12,7 @@ const path = require('node:path');
 
 const { TASKS_PHASES } = require('../../tasks-phase-registry');
 const { parseShapeFromSpec } = require('../../../work-spec/lib/component-shape');
-const { getConfig } = require('../../../lib/config');
+const config = require('../../../lib/config');
 
 let parseTasks;
 try {
@@ -153,12 +153,12 @@ function validateSharedComponentOrdering(tasksDir, taskBlocks) {
 }
 
 function strategyFlagOn() {
-  try {
-    const v = getConfig(STRATEGY_FLAG_KEY);
-    return v === STRATEGY_FLAG_ON_VALUE;
-  } catch {
-    return process.env[STRATEGY_FLAG_KEY] === STRATEGY_FLAG_ON_VALUE;
-  }
+  // Read process.env directly so runtime overrides (tests, ad-hoc invocations)
+  // are honored; config.js snapshots process.env at module-load time and
+  // wouldn't reflect later changes. config[KEY] remains as the dotenv-loaded
+  // fallback when process.env isn't set.
+  const v = process.env[STRATEGY_FLAG_KEY] ?? config[STRATEGY_FLAG_KEY];
+  return v === STRATEGY_FLAG_ON_VALUE;
 }
 
 /**
