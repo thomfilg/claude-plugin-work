@@ -154,30 +154,20 @@ function formatBehaviorChangers(perMemory) {
   return lines;
 }
 
-function formatSections(stats, { color = false, changersOnly = false } = {}) {
-  const { perMemory } = stats;
-
-  if (changersOnly) {
-    void color;
-    return formatBehaviorChangers(perMemory).join('\n') + '\n';
-  }
-
-  // All three sections must restrict to memories discovered via --cwd
-  // (`m.known`). The global ~/.claude/synapsys/.telemetry/ aggregates events
-  // from every project, so without this filter Top influencers and Noise
-  // candidates would surface deleted or other-project memories that the
-  // current store no longer (or never) owned.
-  const top = perMemory
+function selectTopInfluencers(perMemory) {
+  return perMemory
     .filter((m) => m.known && m.cited > 0)
     .sort((a, b) => {
       if (b.cited !== a.cited) return b.cited - a.cited;
       return b.fired * b.cited - a.fired * a.cited;
     });
+}
 
+function selectNoiseCandidates(perMemory) {
   // Stop-only memories fire on every assistant turn by design; the
   // "tighten triggers" advice does not apply to them, so they're excluded
   // from noise classification regardless of fired count.
-  const noise = perMemory
+  return perMemory
     .filter(
       (m) =>
         m.known &&
@@ -187,33 +177,64 @@ function formatSections(stats, { color = false, changersOnly = false } = {}) {
         m.changed === 0
     )
     .sort((a, b) => b.fired - a.fired);
+}
 
-  const never = perMemory
+function selectNeverFired(perMemory) {
+  return perMemory
     .filter((m) => m.known && m.fired === 0 && m.cited === 0)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
 
-  const lines = [];
-  lines.push('Top influencers (fired × cited):');
+function formatTopSection(top) {
+  const lines = ['Top influencers (fired × cited):'];
   if (top.length === 0) lines.push('  (none)');
   for (const m of top) {
     const ratio = m.fired === 0 ? 0 : (m.cited / m.fired).toFixed(2);
     lines.push(`  ${m.name}   fired:${m.fired}  cited:${m.cited}  influence:${ratio}  keep`);
   }
-  lines.push('');
-  lines.push('Noise candidates (fired ≥10, cited:0):');
+  return lines;
+}
+
+function formatNoiseSection(noise) {
+  const lines = ['Noise candidates (fired ≥10, cited:0):'];
   if (noise.length === 0) lines.push('  (none)');
   for (const m of noise) {
     lines.push(`  ${m.name}   fired:${m.fired}  cited:${m.cited}  narrow trigger or delete`);
   }
-  lines.push('');
-  lines.push('Never-fired (consider deletion or session-start docs instead):');
+  return lines;
+}
+
+function formatNeverSection(never) {
+  const lines = ['Never-fired (consider deletion or session-start docs instead):'];
   if (never.length === 0) lines.push('  (none)');
   for (const m of never) {
     lines.push(`  ${m.name}   fired:0  cited:0`);
   }
-  lines.push('');
-  for (const line of formatBehaviorChangers(perMemory)) lines.push(line);
+  return lines;
+}
+
+function formatSections(stats, { color = false, changersOnly = false } = {}) {
+  const { perMemory } = stats;
   void color;
+
+  if (changersOnly) {
+    return formatBehaviorChangers(perMemory).join('\n') + '\n';
+  }
+
+  // All three sections must restrict to memories discovered via --cwd
+  // (`m.known`). The global ~/.claude/synapsys/.telemetry/ aggregates events
+  // from every project, so without this filter Top influencers and Noise
+  // candidates would surface deleted or other-project memories that the
+  // current store no longer (or never) owned.
+  const lines = [
+    ...formatTopSection(selectTopInfluencers(perMemory)),
+    '',
+    ...formatNoiseSection(selectNoiseCandidates(perMemory)),
+    '',
+    ...formatNeverSection(selectNeverFired(perMemory)),
+    '',
+    ...formatBehaviorChangers(perMemory),
+  ];
   return lines.join('\n') + '\n';
 }
 

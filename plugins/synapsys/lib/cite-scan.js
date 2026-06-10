@@ -130,30 +130,42 @@ function parseCiteSignalsList(frontmatterText) {
 // `key: value` lines). Generalized over `(key, field)`: `key` is the
 // frontmatter key (e.g. `cite_signals`), `field` is the normalized memory
 // property (e.g. `citeSignals`). Fail-open.
+function nonEmptyStrings(arr) {
+  return Array.isArray(arr) ? arr.filter((s) => typeof s === 'string' && s.length > 0) : [];
+}
+
+function hasExistingSignals(memory, key, field) {
+  const meta = memory.meta;
+  const fromMeta = meta && Array.isArray(meta[key]) ? nonEmptyStrings(meta[key]) : [];
+  const fromField = nonEmptyStrings(memory[field]);
+  return fromMeta.length > 0 || fromField.length > 0;
+}
+
+function readFrontmatterSignals(memoryFile, key) {
+  const raw = fs.readFileSync(memoryFile, 'utf8');
+  const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!fm) return [];
+  return parseSignalsList(fm[1], key);
+}
+
+function shouldRecoverSignals(memory, key, field) {
+  if (!memory || !memory.file) return false;
+  if (!key || !field) return false;
+  if (hasExistingSignals(memory, key, field)) return false;
+  return true;
+}
+
 function recoverSignals(memory, opts) {
   try {
-    if (!memory || !memory.file) return memory;
     const key = opts && opts.key;
     const field = opts && opts.field;
-    if (!key || !field) return memory;
-    const meta = memory.meta;
-    const existingMeta =
-      meta && Array.isArray(meta[key])
-        ? meta[key].filter((s) => typeof s === 'string' && s.length > 0)
-        : [];
-    const existingField = Array.isArray(memory[field])
-      ? memory[field].filter((s) => typeof s === 'string' && s.length > 0)
-      : [];
-    if (existingMeta.length > 0 || existingField.length > 0) return memory;
-    const raw = fs.readFileSync(memory.file, 'utf8');
-    const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!fm) return memory;
-    const found = parseSignalsList(fm[1], key);
+    if (!shouldRecoverSignals(memory, key, field)) return memory;
+    const found = readFrontmatterSignals(memory.file, key);
     if (!found.length) return memory;
     return {
       ...memory,
       [field]: found.slice(),
-      meta: { ...(meta || {}), [key]: found.slice() },
+      meta: { ...(memory.meta || {}), [key]: found.slice() },
     };
   } catch {
     return memory;

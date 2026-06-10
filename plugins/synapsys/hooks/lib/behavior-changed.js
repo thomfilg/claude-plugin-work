@@ -1,0 +1,81 @@
+'use strict';
+
+/**
+ * Helpers for the Path A (heuristic divergence) behavior_changed flow.
+ *
+ * Extracted from hooks/synapsys.js to keep that dispatcher under the
+ * project's max-lines / per-function complexity caps. All helpers are
+ * fail-open: any internal throw degrades to a no-op, never propagates.
+ */
+
+const path = require('node:path');
+
+const pretoolWindow = require(path.join(__dirname, '..', '..', 'lib', 'pretool-window'));
+const { recordBehaviorChanged, isDisabled } = require(
+  path.join(__dirname, '..', '..', 'lib', 'telemetry')
+);
+
+// Derive the "expected command" from a matched memory's first
+// `trigger_pretool` spec (`"Tool:pattern"` → `"pattern"`). Used by path A
+// (heuristic divergence) to record an expectation for this turn.
+function expectedCommandFor(memory) {
+  if (!memory || !Array.isArray(memory.triggerPretool) || memory.triggerPretool.length === 0) {
+    return '';
+  }
+  const spec = memory.triggerPretool[0];
+  const colon = String(spec).indexOf(':');
+  if (colon === -1) return '';
+  return String(spec)
+    .slice(colon + 1)
+    .trim();
+}
+
+function observedFromPayload(payload) {
+  const toolInput = (payload && payload.tool_input) || {};
+  return typeof toolInput.command === 'string' ? toolInput.command : JSON.stringify(toolInput);
+}
+
+function indexMemoriesByName(memories) {
+  const byName = new Map();
+  for (const m of memories || []) {
+    if (m && m.name) byName.set(m.name, m);
+  }
+  return byName;
+}
+
+function emitDivergence(entry, byName, payload, observed, sessionId) {
+  const mem = byName.get(entry.memoryName);
+  if (!mem || isDisabled(mem)) return;
+  if (!pretoolWindow.markBehaviorChanged(sessionId, mem.name)) return;
+  const evidence = `expected=${entry.expected} got=${observed}`;
+  try {
+    recordBehaviorChanged(mem, payload, {
+      reason: 'pretool-divergence',
+      evidence,
+    });
+  } catch {
+    // fail-open
+  }
+}
+
+// Path A: on every PreToolUse, age existing expectations against the observed
+// command. Each divergent entry produces at most one behavior_changed event
+// per `(session, memory)` per Stop turn (per-turn dedup via markBehaviorChanged).
+function resolveAndEmitDivergences(payload, memories, sessionId) {
+  try {
+    const observed = observedFromPayload(payload);
+    const result = pretoolWindow.resolveExpectation(sessionId, observed);
+    if (!result || !result.divergent) return;
+    const byName = indexMemoriesByName(memories);
+    for (const entry of result.expectations) {
+      emitDivergence(entry, byName, payload, observed, sessionId);
+    }
+  } catch {
+    // fail-open
+  }
+}
+
+module.exports = {
+  expectedCommandFor,
+  resolveAndEmitDivergences,
+};

@@ -192,6 +192,20 @@ function findFirstSignal(signals, responseText) {
  * memories whose getSignals returns a non-array. Signals are capped at
  * MATCH_CAP characters (parallel to scanForCitations behavior).
  */
+function matchMemorySignal(memory, responseText, getSignals) {
+  if (!memory || isDisabled(memory)) return undefined;
+  let signals;
+  try {
+    signals = getSignals(memory);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(signals) || signals.length === 0) return undefined;
+  const matched = findFirstSignal(signals, responseText);
+  if (matched === undefined) return undefined;
+  return matched.length > MATCH_CAP ? matched.slice(0, MATCH_CAP) : matched;
+}
+
 function scanForSignalList(memories, responseText, getSignals) {
   const results = [];
   if (typeof responseText !== 'string' || responseText.length === 0) return results;
@@ -199,19 +213,8 @@ function scanForSignalList(memories, responseText, getSignals) {
   if (typeof getSignals !== 'function') return results;
 
   for (const memory of memories) {
-    if (!memory || isDisabled(memory)) continue;
-    let signals;
-    try {
-      signals = getSignals(memory);
-    } catch {
-      continue;
-    }
-    if (!Array.isArray(signals) || signals.length === 0) continue;
-    const matched = findFirstSignal(signals, responseText);
-    if (matched !== undefined) {
-      const capped = matched.length > MATCH_CAP ? matched.slice(0, MATCH_CAP) : matched;
-      results.push({ memory, signal: capped });
-    }
+    const capped = matchMemorySignal(memory, responseText, getSignals);
+    if (capped !== undefined) results.push({ memory, signal: capped });
   }
   return results;
 }
