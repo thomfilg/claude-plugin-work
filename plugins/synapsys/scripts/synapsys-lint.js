@@ -69,11 +69,45 @@ function filterMemories(memories, scope, boundDir) {
   });
 }
 
-function getDomain(memory) {
-  const d = memory && memory.meta && memory.meta.domain;
-  if (typeof d !== 'string') return null;
-  const trimmed = d.trim();
-  return trimmed.length > 0 ? trimmed : null;
+/**
+ * Coerce a frontmatter domain value (string, array, or unknown) into the
+ * `out` Set. Whitespace-only entries are dropped.
+ */
+function addDomainValue(value, out) {
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (t) out.add(t);
+    return;
+  }
+  if (!Array.isArray(value)) return;
+  for (const v of value) {
+    if (typeof v !== 'string') continue;
+    const t = v.trim();
+    if (t) out.add(t);
+  }
+}
+
+/**
+ * Return the memory's domain tag(s) as a Set of non-empty strings. Reads
+ * canonical `memory.domain` (parsed list) first; falls back to raw
+ * `memory.meta.domain` (string or array). Empty Set when none declared.
+ */
+function getDomains(memory) {
+  const out = new Set();
+  if (!memory) return out;
+  addDomainValue(memory.domain, out);
+  if (out.size === 0) addDomainValue(memory.meta && memory.meta.domain, out);
+  return out;
+}
+
+function setsIntersect(a, b) {
+  for (const x of a) if (b.has(x)) return true;
+  return false;
+}
+
+function firstShared(a, b) {
+  for (const x of a) if (b.has(x)) return x;
+  return null;
 }
 
 function extractLinkRefs(body) {
@@ -99,12 +133,12 @@ function hasMutualLink(a, b) {
  * cap at `low` (with `intentional.link = true`).
  */
 function applyIntentionalDowngrades(a, b, severity) {
-  const aDomain = getDomain(a);
-  const bDomain = getDomain(b);
-  const sameDomain = aDomain && bDomain && aDomain === bDomain;
+  const aDomains = getDomains(a);
+  const bDomains = getDomains(b);
+  const shared = firstShared(aDomains, bDomains);
   const intentional = {};
-  if (sameDomain) {
-    intentional.domain = aDomain;
+  if (shared) {
+    intentional.domain = shared;
     severity = 'low';
   }
   if (hasMutualLink(a, b)) {

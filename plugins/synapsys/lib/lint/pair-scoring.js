@@ -17,11 +17,38 @@ const {
 const OVERLAP_REPORT_FLOOR = 0.25;
 const BODY_DENSITY_FLOOR = 2;
 
-function getDomain(memory) {
-  const d = memory && memory.meta && memory.meta.domain;
-  if (typeof d !== 'string') return null;
-  const trimmed = d.trim();
-  return trimmed.length > 0 ? trimmed : null;
+function addDomainValue(value, out) {
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (t) out.add(t);
+    return;
+  }
+  if (!Array.isArray(value)) return;
+  for (const v of value) {
+    if (typeof v !== 'string') continue;
+    const t = v.trim();
+    if (t) out.add(t);
+  }
+}
+
+/**
+ * Return the memory's domain tag(s) as a Set of non-empty strings. Reads the
+ * canonical `memory.domain` list first (memory-store coerces both scalar
+ * `domain: x` and bracket-tag `domain: [a, b]` frontmatter into an array
+ * there); falls back to raw `memory.meta.domain` for shapes that skipped the
+ * parser. Returns an empty Set when no domain is declared.
+ */
+function getDomains(memory) {
+  const out = new Set();
+  if (!memory) return out;
+  addDomainValue(memory.domain, out);
+  if (out.size === 0) addDomainValue(memory.meta && memory.meta.domain, out);
+  return out;
+}
+
+function setsIntersect(a, b) {
+  for (const x of a) if (b.has(x)) return true;
+  return false;
 }
 
 /**
@@ -39,9 +66,10 @@ function scorePair(a, b) {
  */
 function classifyPair(a, b, score, overlapThreshold, applyIntentionalDowngrades) {
   if (score < OVERLAP_REPORT_FLOOR) return { severity: null, intentional: {} };
-  const aDomain = getDomain(a);
-  const bDomain = getDomain(b);
-  const isCrossDomain = !!(aDomain && bDomain && aDomain !== bDomain);
+  const aDomains = getDomains(a);
+  const bDomains = getDomains(b);
+  const isCrossDomain =
+    aDomains.size > 0 && bDomains.size > 0 && !setsIntersect(aDomains, bDomains);
   let severity;
   if (score >= overlapThreshold) {
     severity = isCrossDomain ? 'high' : 'medium';
