@@ -8,7 +8,15 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { recordCited, scanForCitations, resolveSessionId, telemetryDir } = require('./telemetry');
+const {
+  recordCited,
+  recordBehaviorChanged,
+  scanForCitations,
+  scanForSignalList,
+  resolveSessionId,
+  telemetryDir,
+  isDisabled,
+} = require('./telemetry');
 
 // Read names of memories with event:"fired" from the session JSONL.
 // Fail-open: any error returns an empty Set.
@@ -85,14 +93,16 @@ function extractResponseText(payload) {
   return '';
 }
 
-// Parse a YAML block-list under `cite_signals:` from raw frontmatter text.
-// Returns [] when no list is present.
-function parseCiteSignalsList(frontmatterText) {
+// Parse a YAML block-list under `<key>:` from raw frontmatter text.
+// Returns [] when no list is present. Generalized over the key so both
+// `cite_signals` and `behavior_signals` (and future signals) reuse it.
+function parseSignalsList(frontmatterText, key) {
   const lines = frontmatterText.split(/\r?\n/);
   const found = [];
   let inList = false;
+  const header = new RegExp(`^${key}\\s*:\\s*$`);
   for (const line of lines) {
-    if (/^cite_signals\s*:\s*$/.test(line)) {
+    if (header.test(line)) {
       inList = true;
       continue;
     }
@@ -110,31 +120,49 @@ function parseCiteSignalsList(frontmatterText) {
   return found;
 }
 
-// Re-parse `cite_signals` from a memory's raw file to recover YAML-list
-// frontmatter the simple memory-store parser drops (it only handles
-// inline `key: value` lines). Fail-open.
-function recoverCiteSignals(memory) {
+// Back-compat thin wrapper around the generalized parser.
+function parseCiteSignalsList(frontmatterText) {
+  return parseSignalsList(frontmatterText, 'cite_signals');
+}
+
+// Re-parse a signals list from a memory's raw file to recover YAML-list
+// frontmatter the simple memory-store parser drops (it only handles inline
+// `key: value` lines). Generalized over `(key, field)`: `key` is the
+// frontmatter key (e.g. `cite_signals`), `field` is the normalized memory
+// property (e.g. `citeSignals`). Fail-open.
+function recoverSignals(memory, opts) {
   try {
     if (!memory || !memory.file) return memory;
+    const key = opts && opts.key;
+    const field = opts && opts.field;
+    if (!key || !field) return memory;
     const meta = memory.meta;
-    const existing =
-      meta && Array.isArray(meta.cite_signals)
-        ? meta.cite_signals.filter((s) => typeof s === 'string' && s.length > 0)
+    const existingMeta =
+      meta && Array.isArray(meta[key])
+        ? meta[key].filter((s) => typeof s === 'string' && s.length > 0)
         : [];
-    if (existing.length > 0) return memory;
+    const existingField = Array.isArray(memory[field])
+      ? memory[field].filter((s) => typeof s === 'string' && s.length > 0)
+      : [];
+    if (existingMeta.length > 0 || existingField.length > 0) return memory;
     const raw = fs.readFileSync(memory.file, 'utf8');
     const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!fm) return memory;
-    const found = parseCiteSignalsList(fm[1]);
+    const found = parseSignalsList(fm[1], key);
     if (!found.length) return memory;
     return {
       ...memory,
-      citeSignals: found.slice(),
-      meta: { ...(meta || {}), cite_signals: found.slice() },
+      [field]: found.slice(),
+      meta: { ...(meta || {}), [key]: found.slice() },
     };
   } catch {
     return memory;
   }
+}
+
+// Back-compat thin wrapper for cite_signals.
+function recoverCiteSignals(memory) {
+  return recoverSignals(memory, { key: 'cite_signals', field: 'citeSignals' });
 }
 
 // Dedupe scanForCitations hits per memory and emit recordCited; fail-open.
@@ -175,13 +203,53 @@ function runCiteScan(payload, memories) {
   }
 }
 
+// Stop-only: scan response text for declared `behavior_signals` matches and
+// emit one `behavior_changed` per matched memory (per-call dedup). Honors
+// `isDisabled(memory)` and never auto-extracts: memories with no
+// `behaviorSignals` produce zero events. Fail-open.
+function runBehaviorScan(payload, memories) {
+  try {
+    const responseText = extractResponseText(payload);
+    if (!responseText) return;
+    const candidates = (memories || [])
+      .filter((m) => m && !isDisabled(m))
+      .map((m) => recoverSignals(m, { key: 'behavior_signals', field: 'behaviorSignals' }))
+      .filter(
+        (m) =>
+          m &&
+          Array.isArray(m.behaviorSignals) &&
+          m.behaviorSignals.some((s) => typeof s === 'string' && s.length > 0)
+      );
+    if (!candidates.length) return;
+    const hits = scanForSignalList(candidates, responseText, (m) => m.behaviorSignals);
+    const seen = new Set();
+    for (const hit of hits) {
+      if (!hit || !hit.memory || seen.has(hit.memory.name)) continue;
+      seen.add(hit.memory.name);
+      try {
+        recordBehaviorChanged(hit.memory, payload, {
+          reason: 'self-report',
+          evidence: hit.signal,
+        });
+      } catch {
+        // fail-open
+      }
+    }
+  } catch {
+    // fail-open
+  }
+}
+
 module.exports = {
   readFiredMemoryNames,
   transcriptRowToText,
   extractFromTranscript,
   extractResponseText,
+  parseSignalsList,
   parseCiteSignalsList,
+  recoverSignals,
   recoverCiteSignals,
   emitCitations,
   runCiteScan,
+  runBehaviorScan,
 };
