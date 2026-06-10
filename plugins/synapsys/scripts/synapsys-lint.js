@@ -218,14 +218,14 @@ function classifyPair(a, b, score, overlapThreshold) {
 
   const aDomain = getDomain(a);
   const bDomain = getDomain(b);
-  const eitherDomainKnown = !!(aDomain || bDomain);
+  const isCrossDomain = !!(aDomain && bDomain && aDomain !== bDomain);
 
   let severity;
   if (score >= overlapThreshold) {
-    severity = eitherDomainKnown ? 'high' : 'medium';
+    severity = isCrossDomain ? 'high' : 'medium';
   } else {
     // 0.25 <= score < overlapThreshold
-    severity = eitherDomainKnown ? 'medium' : 'low';
+    severity = isCrossDomain ? 'medium' : 'low';
   }
 
   return applyIntentionalDowngrades(a, b, severity);
