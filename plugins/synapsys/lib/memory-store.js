@@ -117,6 +117,8 @@ const BRACKET_LIST_KEYS = new Set([
   'trigger_pretool',
   'trigger_pretool_content',
   'trigger_pretool_content_not',
+  'trigger_posttool_content',
+  'trigger_posttool_content_not',
   'cite_signals',
   'exclude_pretool',
   'exclude_preset',
@@ -237,6 +239,13 @@ function _truthy(value) {
   return value === true || value === 'true';
 }
 
+// Inject mode is 'full' only when explicitly requested; everything else
+// (including missing) falls back to 'summary'. Extracted as a named helper to
+// keep readMemoryFile under the complexity gate.
+function _parseInject(value) {
+  return value === 'full' ? 'full' : 'summary';
+}
+
 function readMemoryFile(store, name) {
   if (!name.endsWith('.md') || SKIP_FILES.has(name)) return null;
   const file = path.join(store.dir, name);
@@ -262,10 +271,15 @@ function readMemoryFile(store, name) {
     triggerPretool: toList(meta.trigger_pretool),
     triggerPretoolContent: toList(meta.trigger_pretool_content),
     triggerPretoolContentNot: toList(meta.trigger_pretool_content_not),
+    triggerPosttoolContent: toList(meta.trigger_posttool_content),
+    triggerPosttoolContentNot: toList(meta.trigger_posttool_content_not),
+    // Scalar (not a list): `?? null` preserves a literal `0` / `"zero"` exit
+    // target — `|| null` would coerce the falsy `0` to null and lose the gate.
+    triggerPosttoolExit: meta.trigger_posttool_exit ?? null,
     triggerStopResponse: meta.trigger_stop_response || '',
     triggerSession: _truthy(meta.trigger_session),
     domain: toList(meta.domain),
-    inject: meta.inject === 'full' ? 'full' : 'summary',
+    inject: _parseInject(meta.inject),
     disabled: _truthy(meta.disabled),
     expired: parseExpired(meta.expires),
     fireMode: parseFireMode(meta.fire_mode, memoryName),

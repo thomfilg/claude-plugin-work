@@ -32,7 +32,13 @@ const { resolveSessionId: ledgerResolveSessionId } = require(
   path.join(__dirname, '..', 'lib', 'inject-ledger')
 );
 
-const VALID_EVENTS = new Set(['UserPromptSubmit', 'PreToolUse', 'SessionStart', 'Stop']);
+const VALID_EVENTS = new Set([
+  'UserPromptSubmit',
+  'PreToolUse',
+  'PostToolUse',
+  'SessionStart',
+  'Stop',
+]);
 
 const REASON_COL_MAX = 24;
 
@@ -120,6 +126,9 @@ function evaluateMemory(memory, event, payload, activeDomains) {
   if (event === 'PreToolUse') {
     return matcher.matchPreTool(memory, payload);
   }
+  if (event === 'PostToolUse') {
+    return matcher.matchPostTool(memory, payload);
+  }
   if (event === 'SessionStart') {
     return matcher.matchSession(memory);
   }
@@ -178,18 +187,40 @@ function stopTriggerSource(memory) {
   return '(unconditional on Stop)';
 }
 
+// Render the PreToolUse trigger surface (tool/path target + input content).
+// Extracted from eventTriggerSource to keep it under the complexity gate.
+function preToolTriggerSource(memory) {
+  const parts = [];
+  if (memory.triggerPretool && memory.triggerPretool.length) {
+    parts.push(`pretool: ${memory.triggerPretool.join(', ')}`);
+  }
+  if (memory.triggerPretoolContent && memory.triggerPretoolContent.length) {
+    parts.push(`content: ${memory.triggerPretoolContent.join(', ')}`);
+  }
+  return parts.join(' | ');
+}
+
+// Render the PostToolUse trigger surface (tool/path target + output content +
+// exit gate). Extracted from eventTriggerSource to keep it under the
+// complexity gate.
+function postToolTriggerSource(memory) {
+  const parts = [];
+  if (memory.triggerPretool && memory.triggerPretool.length) {
+    parts.push(`pretool: ${memory.triggerPretool.join(', ')}`);
+  }
+  if (memory.triggerPosttoolContent && memory.triggerPosttoolContent.length) {
+    parts.push(`content: ${memory.triggerPosttoolContent.join(', ')}`);
+  }
+  if (memory.triggerPosttoolExit !== null && memory.triggerPosttoolExit !== undefined) {
+    parts.push(`exit: ${memory.triggerPosttoolExit}`);
+  }
+  return parts.join(' | ');
+}
+
 function eventTriggerSource(memory, event) {
   if (event === 'UserPromptSubmit') return memory.triggerPrompt || '';
-  if (event === 'PreToolUse') {
-    const parts = [];
-    if (memory.triggerPretool && memory.triggerPretool.length) {
-      parts.push(`pretool: ${memory.triggerPretool.join(', ')}`);
-    }
-    if (memory.triggerPretoolContent && memory.triggerPretoolContent.length) {
-      parts.push(`content: ${memory.triggerPretoolContent.join(', ')}`);
-    }
-    return parts.join(' | ');
-  }
+  if (event === 'PreToolUse') return preToolTriggerSource(memory);
+  if (event === 'PostToolUse') return postToolTriggerSource(memory);
   if (event === 'SessionStart') return `trigger_session: ${memory.triggerSession}`;
   if (event === 'Stop') return stopTriggerSource(memory);
   return '';
@@ -201,6 +232,9 @@ const MATCHED_LABELS = [
   ['pretool_pattern', 'matched.pretool_pattern'],
   ['content_pattern', 'matched.content_pattern'],
   ['content_substring', 'matched.content_substring'],
+  ['posttool_content_pattern', 'matched.posttool_content_pattern'],
+  ['posttool_content_substring', 'matched.posttool_content_substring'],
+  ['posttool_exit', 'matched.posttool_exit'],
   ['excluded_pattern', 'matched.excluded_pattern'],
 ];
 
@@ -306,12 +340,16 @@ function applyOnlyFilter(memories, only) {
   return memories.filter((m) => onlySet.has(m.name));
 }
 
-function buildPayload(event, prompt, tool, toolInput, cwd, response) {
+function buildPayload(event, prompt, tool, toolInput, cwd, response, toolResponse) {
   return {
     hook_event_name: event,
     prompt: prompt === true ? '' : prompt || '',
     tool_name: tool === true ? '' : tool || '',
     tool_input: toolInput || {},
+    // PostToolUse matching inspects the tool OUTPUT surface (tool_response +
+    // exit code). Carry it through from the raw stdin payload so matchPostTool
+    // sees the same shape the dispatcher hook would.
+    tool_response: toolResponse,
     response: response === true ? '' : response || '',
     cwd,
   };
@@ -332,7 +370,15 @@ function main() {
 
   const stores = loadStore(flag('store'), cwd);
   const memories = applyOnlyFilter(loadMemories(stores), only);
-  const payload = buildPayload(event, prompt, tool, toolInput, cwd, response);
+  const payload = buildPayload(
+    event,
+    prompt,
+    tool,
+    toolInput,
+    cwd,
+    response,
+    stdinPayload.tool_response
+  );
 
   const activeDomains = computeActiveDomainsForExplain(event, payload);
   const results = memories.map((memory) => ({
