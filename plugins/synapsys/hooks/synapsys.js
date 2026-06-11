@@ -13,6 +13,19 @@
  *
  * Fail-open: any error → exit 0 with no output. Memory injection must
  * never block the user's prompt or tool call.
+ *
+ * Cortex auto-recall (Task 9, R1/R7/R13/R14/R18):
+ *   - SessionStart fires a detached, fire-and-forget background recall of up to
+ *     two queries (the ticket id + a derived keyword query) via
+ *     `cortex-recall.scheduleRecall`. Results land in a session-cache file.
+ *   - UserPromptSubmit consumes that cache and prepends a `[cortex:auto-recall]`
+ *     block to the normal injection output, then deletes the cache (single
+ *     consume).
+ *   - Any fired memory carrying a `cortex_query` frontmatter field triggers an
+ *     inline recall whose formatted results are appended below the memory body.
+ *     This path is additive: memories without the field are byte-for-byte
+ *     unchanged, and the whole feature degrades silently when cortex is
+ *     unavailable.
  */
 
 const path = require('node:path');
@@ -115,13 +128,13 @@ function commitInjection(ledger, sessionId, memory, isFull) {
 //                                                  in full on the next match).
 // The whole call is wrapped in `try` so any throw falls open to the plain
 // formatMemory join — memory injection must never block the user (spec §Security).
-function buildEntry(memory, ledgerMemories) {
+function buildEntry(memory, ledgerMemories, cortexCtx) {
   const kind = decideInjection(memory, ledgerMemories[memory.name]).kind;
   return {
     memory,
     initialKind: kind,
     finalKind: kind,
-    fullText: formatMemory(memory),
+    fullText: formatMemoryForRender(memory, cortexCtx),
     summaryText: reminderLine(memory),
   };
 }
@@ -164,14 +177,14 @@ function emitBudgetAlerts(demotedCount, bodyLength, activeBudget) {
   }
 }
 
-function renderMatchedMemories(matched, sessionId) {
+function renderMatchedMemories(matched, sessionId, cortexCtx) {
   try {
     const ledger = injectLedger.loadLedger(sessionId);
     if (!ledger.memories || typeof ledger.memories !== 'object') {
       ledger.memories = {};
     }
     const activeBudget = resolveActiveBudget();
-    const entries = matched.map((m) => buildEntry(m, ledger.memories));
+    const entries = matched.map((m) => buildEntry(m, ledger.memories, cortexCtx));
     demoteToFit(entries, {
       limit: activeBudget,
       sep: SEP,
@@ -181,9 +194,13 @@ function renderMatchedMemories(matched, sessionId) {
     emitBudgetAlerts(demotedCount, body.length, activeBudget);
     return body;
   } catch {
-    return matched.map(formatMemory).join(SEP);
+    return matched.map((m) => formatMemoryForRender(m, null)).join(SEP);
   }
 }
+
+const cortexHook = require(path.join(__dirname, '..', 'lib', 'cortex-hook'));
+const { scheduleSessionRecall, consumeAutoRecall, cortexQueryContext, appendCortexQuery } =
+  cortexHook;
 
 const VALID_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop']);
 
@@ -217,34 +234,7 @@ function formatMemory(m) {
   return `${header}\n  source: ${m.file}`;
 }
 
-const SETUP_REQUIRED_HINT =
-  '[synapsys:setup-required] No Synapsys memory store is configured for this repo/worktree.\n\n' +
-  'AGENT: As your FIRST action this session, surface this to the user and offer to run `/synapsys:install`. Recommend the kind based on context:\n' +
-  '  - If `git worktree list` shows >1 entry → recommend `worktree` (shared across all worktrees of this repo)\n' +
-  '  - Otherwise → recommend `local`\n' +
-  '  - Mention `global` (per-project, survives worktree deletion) and `shared` (one store reused across ALL projects) as options\n\n' +
-  'Do NOT install without asking — present the recommendation via `AskUserQuestion` so the user can confirm or choose differently. If the user declines, set SYNAPSYS_NO_SETUP_HINT=1 to silence this prompt for future sessions.';
-
-function emptyStoreHint(stores) {
-  const dirs = stores.map((s) => `${s.kind} (${s.dir})`).join(', ');
-  return (
-    `[synapsys:empty-store] Memory store(s) ready: ${dirs}. No memories yet.\n\n` +
-    'AGENT: Mention this to the user and offer two paths:\n' +
-    "  - `/synapsys:crystallize` — import Claude's existing auto-memories (if any exist for this repo)\n" +
-    '  - `/synapsys:memorize "<what to remember>"` — add a memory manually\n\n' +
-    'Do not auto-run either — let the user pick. If they decline, set SYNAPSYS_NO_SETUP_HINT=1 to silence.'
-  );
-}
-
-// Returns a hint string when SessionStart fires with no store or no memories.
-// Returns null when no hint should be emitted (hint disabled or store + memories present).
-function getSessionStartHint(event, stores, memories) {
-  if (event !== 'SessionStart') return null;
-  if (process.env.SYNAPSYS_NO_SETUP_HINT === '1') return null;
-  if (!stores.length) return SETUP_REQUIRED_HINT;
-  if (!memories.length) return emptyStoreHint(stores);
-  return null;
-}
+const { getSessionStartHint } = require(path.join(__dirname, '..', 'lib', 'setup-hints'));
 
 // Build the activeDomains opts for selectForEvent. Delegates to the
 // shared resolver so synapsys-explain stays in lockstep. Uses the
@@ -262,8 +252,8 @@ function buildActiveDomainsForPayload(event, payload) {
 // Pass-through wrapper retained for call-site symmetry. The renderer now owns
 // the budget pass (demote-instead-of-drop), so no slice fallback is needed —
 // brief P0 R8 / spec §P0 #8 explicitly forbids silent truncation.
-function formatMatchedOutput(matched, sessionId) {
-  return renderMatchedMemories(matched, sessionId);
+function formatMatchedOutput(matched, sessionId, payload) {
+  return renderMatchedMemories(matched, sessionId, cortexQueryContext(payload));
 }
 
 function emitMatched(matched, payload, event) {
@@ -277,62 +267,126 @@ function emitMatched(matched, payload, event) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Cortex auto-recall wiring lives in lib/cortex-hook.js (extracted to keep this
+// dispatcher under the static-gate line budget). The dispatcher consumes the
+// destructured entry points pulled in at the top of this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a memory's full body, augmented with its Phase 2 cortex_query block
+ * when one applies. `cortexCtx` is built once per dispatch by
+ * `cortexQueryContext`; a null ctx (e.g. fail-open fallback paths) yields the
+ * plain body. This is the body fed into the budget-aware renderer so cortex
+ * recall output is governed by the same injection budget as memory text.
+ */
+function formatMemoryForRender(memory, cortexCtx) {
+  const base = formatMemory(memory);
+  if (!cortexCtx || !cortexCtx.recall) return base;
+  return appendCortexQuery(base, memory, cortexCtx);
+}
+
+// ---------------------------------------------------------------------------
+// Dispatcher entry point
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the session id for the dispatch and publish it to `.current` so
+ * out-of-process callers (synapsys-list CLI) read the same ledger. Fail-open:
+ * any throw → '' and the dispatcher behaves like the pre-ledger code path.
+ */
+function resolveDispatchSessionId(payload) {
+  try {
+    const sessionId = injectLedger.resolveSessionId(payload);
+    injectLedger.publishCurrentSessionId(sessionId);
+    return sessionId;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * SessionStart housekeeping: reset the per-session ledger (brief AC-4 / spec
+ * §3.3) and opportunistically GC stale ledger files older than 7 days (spec
+ * §4.2). Fail-open.
+ */
+function resetSessionLedger(sessionId) {
+  try {
+    injectLedger.resetLedgerForSession(sessionId);
+    injectLedger.gcStaleLedgers({ maxAgeMs: SEVEN_DAYS_MS });
+  } catch {
+    /* fail-open */
+  }
+}
+
+/**
+ * Select the fired memories for this event and record telemetry. On `Stop` the
+ * cite scan reads the session JSONL state from BEFORE this turn's Stop-time
+ * fired writes (Stop-injections happen after the assistant response, so
+ * attributing citations to them would be a false positive).
+ */
+function selectAndRecord(memories, event, payload) {
+  const selectOpts = buildActiveDomainsForPayload(event, payload);
+  const matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
+  if (event === 'Stop') runCiteScan(payload, memories);
+  emitMatched(matched, payload, event);
+  return matched;
+}
+
+/**
+ * Assemble the final injection text: the Phase 1 auto-recall block (prepended)
+ * plus the budget-aware rendered memory output. Returns '' when neither
+ * produces content. Both halves are independently budget-governed.
+ */
+function buildOutput(autoBlock, matched, sessionId, payload) {
+  const sections = [];
+  if (autoBlock) sections.push(autoBlock);
+  const memOutput = matched.length ? formatMatchedOutput(matched, sessionId, payload) : '';
+  if (memOutput) sections.push(memOutput);
+  return sections.join(SEP);
+}
+
+async function dispatch() {
+  const event = process.argv[2];
+  if (!VALID_EVENTS.has(event)) process.exit(0);
+
+  const payload = parsePayload(await readStdin());
+  const cwd = payload.cwd || process.cwd();
+
+  // SessionStart: kick off the detached background recall before anything else.
+  if (event === 'SessionStart') scheduleSessionRecall(payload);
+
+  const stores = discoverStores(cwd);
+  const memories = stores.flatMap(listMemoriesFromStore);
+
+  const sessionId = resolveDispatchSessionId(payload);
+  if (event === 'SessionStart') resetSessionLedger(sessionId);
+
+  // UserPromptSubmit: the Phase 1 auto-recall block is prepended to any memory
+  // output (consumes + deletes the background recall cache).
+  const autoBlock = event === 'UserPromptSubmit' ? consumeAutoRecall(payload) : '';
+
+  const sessionHint = getSessionStartHint(event, stores, memories);
+  if (sessionHint) {
+    process.stdout.write(sessionHint);
+    process.exit(0);
+  }
+
+  const matched = selectAndRecord(memories, event, payload);
+  const output = buildOutput(autoBlock, matched, sessionId, payload);
+
+  if (!output) process.exit(0);
+  // Memory text is already governed by the budget-aware renderer (demote, don't
+  // truncate); the Phase 1 auto-recall block is independently bounded by the
+  // cortex config. No hard clamp here — that would contradict the
+  // graceful-demotion contract (dispatcher-budget).
+  process.stdout.write(output);
+  process.exit(0);
+}
+
 (async () => {
   try {
-    const event = process.argv[2];
-    if (!VALID_EVENTS.has(event)) process.exit(0);
-
-    const payload = parsePayload(await readStdin());
-    const cwd = payload.cwd || process.cwd();
-    const stores = discoverStores(cwd);
-    const memories = stores.flatMap(listMemoriesFromStore);
-
-    // Resolve session id once; used for both ledger reset (SessionStart) and
-    // the per-memory render path. Fail-open: any throw → noop and the rest of
-    // the dispatcher behaves like the pre-ledger code path.
-    let sessionId;
-    try {
-      sessionId = injectLedger.resolveSessionId(payload);
-      // Publish the resolved id to `.current` so out-of-process callers
-      // (synapsys-list CLI) read the same session ledger the dispatcher
-      // writes to. Fail-open: a write error never blocks the dispatcher.
-      injectLedger.publishCurrentSessionId(sessionId);
-    } catch {
-      sessionId = '';
-    }
-
-    // SessionStart resets the per-session ledger (brief AC-4 / spec §3.3) and
-    // opportunistically GCs stale ledger files older than 7 days (spec §4.2).
-    if (event === 'SessionStart') {
-      try {
-        injectLedger.resetLedgerForSession(sessionId);
-        injectLedger.gcStaleLedgers({ maxAgeMs: SEVEN_DAYS_MS });
-      } catch {
-        /* fail-open */
-      }
-    }
-
-    const sessionHint = getSessionStartHint(event, stores, memories);
-    if (sessionHint) {
-      process.stdout.write(sessionHint);
-      process.exit(0);
-    }
-
-    // Build activeDomains FIRST so UserPromptSubmit advances sticky-state
-    // even when the memory list is empty. Fail-open: on any error, omit
-    // `opts.activeDomains` to preserve pre-classifier behavior.
-    const selectOpts = buildActiveDomainsForPayload(event, payload);
-    const matched = memories.length ? selectForEvent(memories, event, payload, selectOpts) : [];
-    // On Stop the cite scan must read the session JSONL state from BEFORE
-    // this turn's Stop-time fired writes; Stop-injections happen after the
-    // assistant response, so attributing citations to them would be a
-    // false positive (the response cannot reference a memory that wasn't
-    // yet injected at the time it was written).
-    if (event === 'Stop') runCiteScan(payload, memories);
-    emitMatched(matched, payload, event);
-
-    process.stdout.write(formatMatchedOutput(matched, sessionId));
-    process.exit(0);
+    await dispatch();
   } catch {
     process.exit(0);
   }
