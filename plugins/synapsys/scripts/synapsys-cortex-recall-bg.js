@@ -96,24 +96,37 @@ function parseArgs(argv) {
     const name = eq === -1 ? arg.replace(/^--/, '') : arg.slice(2, eq);
     const inline = eq === -1 ? undefined : arg.slice(eq + 1);
     const value = inline !== undefined ? inline : argv[++i];
-    switch (name) {
-      case 'query':
-        if (value) out.queries.push(value);
-        break;
-      case 'projectId':
-        out.projectId = value || '';
-        break;
-      case 'sessionId':
-        out.sessionId = value || '';
-        break;
-      case 'home':
-        out.home = value || '';
-        break;
-      default:
-        break;
-    }
+    applyArg(out, name, value);
   }
   return out;
+}
+
+/**
+ * Assign a single parsed `--name value` pair onto the accumulator. `--query`
+ * collects into an array (ignoring empties); the single-value flags coerce a
+ * missing value to ''. Unknown flags are ignored.
+ *
+ * @param {{ queries: string[], projectId: string, sessionId: string, home: string }} out
+ * @param {string} name flag name (without leading `--`)
+ * @param {string|undefined} value flag value
+ */
+function applyArg(out, name, value) {
+  switch (name) {
+    case 'query':
+      if (value) out.queries.push(value);
+      break;
+    case 'projectId':
+      out.projectId = value || '';
+      break;
+    case 'sessionId':
+      out.sessionId = value || '';
+      break;
+    case 'home':
+      out.home = value || '';
+      break;
+    default:
+      break;
+  }
 }
 
 /**

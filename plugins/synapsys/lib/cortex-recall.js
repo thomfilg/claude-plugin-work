@@ -170,9 +170,20 @@ function deriveKeywords({ ticketId, cwd = process.cwd() } = {}, opts = {}) {
   const titleTokens = ticketTitleTokens(ticketId, cwd, exec);
   const stemTokens = fileStemTokens(cwd, exec);
 
+  return dedupeKeywords([...titleTokens, ...stemTokens], maxKeywords);
+}
+
+/**
+ * Drop stopwords + duplicates from a token stream, capped at `maxKeywords`.
+ *
+ * @param {string[]} tokens candidate tokens (already lowercased)
+ * @param {number} maxKeywords cap on the returned list length
+ * @returns {string[]} the filtered keyword tokens
+ */
+function dedupeKeywords(tokens, maxKeywords) {
   const seen = new Set();
   const out = [];
-  for (const token of [...titleTokens, ...stemTokens]) {
+  for (const token of tokens) {
     if (!token || STOPWORDS.has(token) || seen.has(token)) continue;
     seen.add(token);
     out.push(token);
@@ -259,16 +270,7 @@ function scheduleRecall({ queries = [], projectId, sessionId, home, spawn } = {}
   const bounded = queries.filter(Boolean).slice(0, MAX_QUERIES);
   if (bounded.length === 0) return false;
 
-  const args = [
-    BG_SCRIPT,
-    '--projectId',
-    String(projectId || ''),
-    '--sessionId',
-    String(sessionId || ''),
-    '--home',
-    String(home || ''),
-    ...bounded.flatMap((q) => ['--query', q]),
-  ];
+  const args = buildRecallArgs({ bounded, projectId, sessionId, home });
 
   try {
     const child = launch(process.execPath, args, {
@@ -281,6 +283,26 @@ function scheduleRecall({ queries = [], projectId, sessionId, home, spawn } = {}
     // Graceful degrade — never propagate (R14).
     return false;
   }
+}
+
+/**
+ * Build the detached-spawn argv for the background recall script: the script
+ * path, the single-value flags, and one repeated `--query` flag per query.
+ *
+ * @param {{ bounded: string[], projectId?: string, sessionId?: string, home?: string }} args
+ * @returns {string[]} the argv passed to `node`
+ */
+function buildRecallArgs({ bounded, projectId, sessionId, home }) {
+  return [
+    BG_SCRIPT,
+    '--projectId',
+    String(projectId || ''),
+    '--sessionId',
+    String(sessionId || ''),
+    '--home',
+    String(home || ''),
+    ...bounded.flatMap((q) => ['--query', q]),
+  ];
 }
 
 /**
@@ -303,16 +325,7 @@ function consumeCache(sessionId, { home, config = {} } = {}) {
     return '';
   }
 
-  let block = '';
-  try {
-    block = formatBlock({
-      queries: record.queries,
-      maxAgeDays: config.max_age_days ?? 180,
-      maxChars: config.max_chars_per_memory ?? 500,
-    });
-  } catch {
-    block = '';
-  }
+  const block = formatRecallBlock(record.queries, config);
 
   try {
     cache.delete(sessionId, { home });
@@ -320,6 +333,26 @@ function consumeCache(sessionId, { home, config = {} } = {}) {
     // Ignore — best-effort cleanup.
   }
   return block;
+}
+
+/**
+ * Format the `[cortex:auto-recall]` block from cached query records, applying
+ * the config age/char bounds. Returns '' on any failure (R14).
+ *
+ * @param {Array} queries cached `{ query, projectId, results, ranAt }` records
+ * @param {{ max_age_days?: number, max_chars_per_memory?: number }} config
+ * @returns {string} the formatted block, or '' on failure
+ */
+function formatRecallBlock(queries, config) {
+  try {
+    return formatBlock({
+      queries,
+      maxAgeDays: config.max_age_days ?? 180,
+      maxChars: config.max_chars_per_memory ?? 500,
+    });
+  } catch {
+    return '';
+  }
 }
 
 module.exports = {

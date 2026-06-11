@@ -3,6 +3,7 @@
 const os = require('node:os');
 
 const sessionCache = require('../lib/session-cache.js');
+const injectLedger = require('../lib/inject-ledger.js');
 
 const EMPTY_MESSAGE = 'no auto-recall this session';
 
@@ -32,23 +33,26 @@ function renderStatus(cache) {
 }
 
 /**
- * Resolve the active session id the same way the hook does: prefer the
- * provided session id, else fall back to the parent process id.
+ * Resolve the active session id through the SAME resolver the hook's cortex
+ * cache uses (`injectLedger.resolveSessionId`): env `CLAUDE_CODE_SESSION_ID` →
+ * sanitized `payload.session_id` → `.current` → hashed-cwd fallback. Using the
+ * identical resolver guarantees `/synapsys recall` reads the cache the hook
+ * actually wrote, rather than keying off a divergent id.
  *
- * @param {{ env?: NodeJS.ProcessEnv }} [opts]
+ * @param {{ payload?: object }} [opts] optional hook-style payload
  * @returns {string}
  */
-function resolveSessionId({ env = process.env } = {}) {
-  return env.CLAUDE_SESSION_ID || String(process.ppid);
+function resolveSessionId({ payload = {} } = {}) {
+  return injectLedger.resolveSessionId(payload);
 }
 
 /**
  * CLI entry: read the active session cache and print the status report.
  *
- * @param {{ home?: string, env?: NodeJS.ProcessEnv, log?: (s: string) => void }} [opts]
+ * @param {{ home?: string, payload?: object, log?: (s: string) => void }} [opts]
  */
-function main({ home = os.homedir(), env = process.env, log = console.log } = {}) {
-  const sessionId = resolveSessionId({ env });
+function main({ home = os.homedir(), payload = {}, log = console.log } = {}) {
+  const sessionId = resolveSessionId({ payload });
   const cache = sessionCache.read(sessionId, { home });
   log(renderStatus(cache));
 }

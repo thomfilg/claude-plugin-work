@@ -381,15 +381,14 @@ module.exports = {
   }
 });
 
-// Scenario (Fix 2): with no session_id in the payload, the hook keys the cache
-// off process.ppid — the same fallback the status reporter (scripts/synapsys-recall.js)
-// uses — so the two sides agree on the session id.
-test('SessionStart with no session_id keys the baseline cache off the hook child ppid', () => {
+// Scenario (Fix 1): with no session_id in the payload, the hook keys the cache
+// off injectLedger.resolveSessionId — the SAME resolver the ledger/telemetry and
+// the status reporter (scripts/synapsys-recall.js) use — so the two sides agree
+// on the session id. With no CLAUDE_CODE_SESSION_ID and no payload session_id,
+// that resolver yields a safe (sanitized hashed-cwd) id, never "default".
+test('SessionStart with no session_id keys the baseline cache off the shared resolver id', () => {
   const home = mkHome();
   try {
-    // The detached background recall child's ppid is the hook process's pid,
-    // which we cannot know up front. Instead assert the baseline cache lands
-    // under SOME numeric (ppid-derived) id, never the literal "default".
     const res = runHook(
       'SessionStart',
       { cwd: home },
@@ -418,9 +417,10 @@ test('SessionStart with no session_id keys the baseline cache off the hook child
       }
     }
     assert.ok(files.length > 0, 'a baseline cache file is written');
+    // The resolver only ever emits SAFE_ID_RE-matching ids ([A-Za-z0-9_-]).
     assert.ok(
-      files.some((f) => /^\d+\.json$/.test(f)),
-      'cache key is numeric (process.ppid), not the literal "default"'
+      files.every((f) => /^[A-Za-z0-9_-]+\.json$/.test(f)),
+      'cache key matches the sanitized session-id charset'
     );
     assert.ok(!files.includes('default.json'), 'the fallback is never the literal "default"');
   } finally {
