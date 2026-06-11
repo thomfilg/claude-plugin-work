@@ -211,11 +211,15 @@ const RULES = [
       // fires on every tool call (the catch-all-trigger guard). Mirror the
       // PreToolUse-without-trigger_pretool rule: any of trigger_pretool /
       // trigger_posttool_content / trigger_posttool_exit narrows the match.
+      // trigger_posttool_exit is a SCALAR ("nonzero" / "zero" / a code), not a
+      // list — presence (non-null, non-empty) is what counts, not array length.
+      const hasExitTrigger =
+        memory.trigger_posttool_exit != null && memory.trigger_posttool_exit !== '';
       const hasTrigger =
         (Array.isArray(memory.trigger_pretool) && memory.trigger_pretool.length > 0) ||
         (Array.isArray(memory.trigger_posttool_content) &&
           memory.trigger_posttool_content.length > 0) ||
-        (Array.isArray(memory.trigger_posttool_exit) && memory.trigger_posttool_exit.length > 0);
+        hasExitTrigger;
       if (hasTrigger) return [];
       return [
         {

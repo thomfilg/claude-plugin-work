@@ -46,6 +46,17 @@ function _resolveExitCode(payload) {
   return undefined;
 }
 
+// Predicate half of the exit gate: does the resolved exit `code` satisfy the
+// `spec` ('zero' / 'nonzero' / a specific numeric-or-string code)? Split out of
+// _evaluatePostToolExit to keep each function under the complexity gate.
+function _exitCodeMatches(spec, code) {
+  if (spec === 'zero' || spec === 0 || spec === '0') return code === 0;
+  if (spec === 'nonzero') return code !== 0;
+  const wanted = typeof spec === 'number' ? spec : Number(spec);
+  if (Number.isNaN(wanted)) return false;
+  return code === wanted;
+}
+
 // Final content/exit-stage gate (C-1): evaluate trigger_posttool_exit against
 // the resolved exit code. Accepts 'zero' / 'nonzero' / a specific numeric code.
 // Fails closed (matched:false) when the field is set but no exit code is
@@ -57,22 +68,17 @@ function _evaluatePostToolExit(memory, payload) {
   if (spec === null || spec === undefined) return { matched: true };
   const code = _resolveExitCode(payload);
   if (code === undefined) return { matched: false };
-
-  if (spec === 'zero' || spec === 0 || spec === '0') {
-    return code === 0 ? { matched: true, signal: spec } : { matched: false };
-  }
-  if (spec === 'nonzero') {
-    return code !== 0 ? { matched: true, signal: spec } : { matched: false };
-  }
-  const wanted = typeof spec === 'number' ? spec : Number(spec);
-  if (Number.isNaN(wanted)) return { matched: false };
-  return code === wanted ? { matched: true, signal: spec } : { matched: false };
+  return _exitCodeMatches(spec, code) ? { matched: true, signal: spec } : { matched: false };
 }
 
 // Stage 2 (C-1): positive trigger_pretool prefix gate. The event-agnostic
 // trigger_pretool list targets the tool/path; it is evaluated against
 // tool_name + stringified tool_input (P0-4). Returns the matched spec on hit,
-// or null on miss.
+// or null on miss. An EMPTY trigger_pretool is not a miss — it means no
+// tool/path restriction (output-inspection mode, brief P0-4): the gate passes
+// vacuously and targeting falls to the content/exit stage, matching the lint
+// rule (R11) that treats trigger_posttool_content / _exit as standalone
+// targeting. Distinguished from a real miss via _hasPretoolTarget below.
 function _matchPretoolPrefix(memory, payload, pretoolSpecMatches) {
   if (!memory.triggerPretool || !memory.triggerPretool.length) return null;
   const toolName = payload?.tool_name || '';
@@ -80,6 +86,13 @@ function _matchPretoolPrefix(memory, payload, pretoolSpecMatches) {
   return (
     memory.triggerPretool.find((spec) => pretoolSpecMatches(spec, toolName, argBlob)) || null
   );
+}
+
+// True when the memory declares a non-empty trigger_pretool target — i.e. an
+// unmatched prefix is a real 'no-pretool-match' miss (not the vacuous
+// output-inspection pass-through of an empty target).
+function _hasPretoolTarget(memory) {
+  return Array.isArray(memory.triggerPretool) && memory.triggerPretool.length > 0;
 }
 
 // Find the first matching positive trigger_posttool_content pattern against the
@@ -179,9 +192,13 @@ function matchPostTool(memory, payload, helpers) {
   const gate = gateMemory(memory, 'PostToolUse');
   if (gate) return { fired: false, reason: gate };
 
-  // Stage 2: positive trigger_pretool prefix over tool_name + tool_input.
+  // Stage 2: positive trigger_pretool prefix over tool_name + tool_input. An
+  // empty target passes vacuously (output-inspection mode, brief P0-4); a
+  // declared-but-unmatched target is a real miss.
   const matchedSpec = _matchPretoolPrefix(memory, payload, pretoolSpecMatches);
-  if (!matchedSpec) return { fired: false, reason: 'no-pretool-match' };
+  if (_hasPretoolTarget(memory) && !matchedSpec) {
+    return { fired: false, reason: 'no-pretool-match' };
+  }
 
   // Stage 3a: positive/negative content over the stringified tool_response.
   const responseText = _extractPostToolResponse(payload);

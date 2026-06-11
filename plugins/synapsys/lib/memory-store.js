@@ -237,6 +237,13 @@ function _truthy(value) {
   return value === true || value === 'true';
 }
 
+// Inject mode is 'full' only when explicitly requested; everything else
+// (including missing) falls back to 'summary'. Extracted as a named helper to
+// keep readMemoryFile under the complexity gate.
+function _parseInject(value) {
+  return value === 'full' ? 'full' : 'summary';
+}
+
 function readMemoryFile(store, name) {
   if (!name.endsWith('.md') || SKIP_FILES.has(name)) return null;
   const file = path.join(store.dir, name);
@@ -270,7 +277,7 @@ function readMemoryFile(store, name) {
     triggerStopResponse: meta.trigger_stop_response || '',
     triggerSession: _truthy(meta.trigger_session),
     domain: toList(meta.domain),
-    inject: meta.inject === 'full' ? 'full' : 'summary',
+    inject: _parseInject(meta.inject),
     disabled: _truthy(meta.disabled),
     expired: parseExpired(meta.expires),
     fireMode: parseFireMode(meta.fire_mode, memoryName),

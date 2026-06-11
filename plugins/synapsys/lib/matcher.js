@@ -322,48 +322,19 @@ function matchStop(memory, payload) {
 const _extractStopResponse = stopMatcher._extractStopResponse;
 
 // PostToolUse matcher (GH-473): inspects the tool OUTPUT (tool_response + exit
-// code) — distinct from matchPreToolResult, which reads tool_input. Bound here
-// with the same injected-helper pattern as matchStop above, supplying the
-// shared gate / content / pretool helpers the sub-module needs (P0-3, C-2).
+// code) — distinct from matchPreToolResult, which reads tool_input. Same
+// injected-helper pattern as matchStop above (P0-3, C-2).
 const postMatcher = require('./matcher-posttool');
 
 function matchPostTool(memory, payload) {
-  return postMatcher.matchPostTool(memory, payload, {
-    gateMemory,
-    safeRegex,
-    makeMatched,
-    pretoolSpecMatches,
-    findContentMatch,
-    hasNegativeContentPatterns,
-    evaluatePretoolContentNot: content.evaluatePretoolContentNot,
-  });
+  return postMatcher.matchPostTool(memory, payload, { gateMemory, makeMatched, pretoolSpecMatches });
 }
 
 const _extractPostToolResponse = postMatcher._extractPostToolResponse;
 
-/**
- * Domain gate (GH-513 R4 / AC2): when `memory.domain` is non-empty AND an
- * `activeDomains` set is supplied AND their intersection is empty, the memory
- * is excluded BEFORE trigger evaluation. Returns true when the memory should
- * be skipped with reason `domain-mismatch`.
- *
- * Fail-open semantics:
- *   - memory.domain empty/missing  -> not gated (backward compat R10/AC1)
- *   - activeDomains undefined/null -> not gated (backward compat R10)
- *
- * @param {object} memory
- * @param {Set<string>|undefined} activeDomains
- * @returns {boolean}
- */
-function isDomainMismatch(memory, activeDomains) {
-  if (!activeDomains) return false;
-  const domains = memory && memory.domain;
-  if (!Array.isArray(domains) || domains.length === 0) return false;
-  for (const d of domains) {
-    if (activeDomains.has(d)) return false;
-  }
-  return true;
-}
+// Domain gate (GH-513) — extracted to matcher-domain.js to keep matcher.js
+// under the max-lines gate; re-exported below for backward compat.
+const { isDomainMismatch } = require('./matcher-domain');
 
 /**
  * Select memories that fire for the given event payload.

@@ -157,6 +157,32 @@ test('matchPostTool returns no-pretool-match when tool does not match the target
   assert.equal(result.reason, 'no-pretool-match');
 });
 
+test('empty trigger_pretool is output-inspection mode: a content-only memory fires on any tool', () => {
+  // No trigger_pretool target — lint (R11) treats trigger_posttool_content as
+  // standalone targeting, so the matcher must NOT reject with no-pretool-match.
+  const memory = makeMemory({ triggerPosttoolContent: ['ENOTFOUND'] });
+  const payload = {
+    tool_name: 'Bash',
+    tool_input: { command: 'npm install' },
+    tool_response: { stdout: 'getaddrinfo ENOTFOUND registry.npmjs.org', stderr: '' },
+  };
+  const result = run(memory, payload);
+  assert.equal(result.fired, true);
+  assert.equal(result.matched.posttool_content_substring, 'ENOTFOUND');
+});
+
+test('empty trigger_pretool: an exit-only memory fires on matching exit code', () => {
+  const memory = makeMemory({ triggerPosttoolExit: 'nonzero' });
+  const payload = {
+    tool_name: 'Bash',
+    tool_input: { command: 'pnpm test' },
+    tool_response: { stdout: '', stderr: 'fail', exit_code: 1 },
+  };
+  const result = run(memory, payload);
+  assert.equal(result.fired, true);
+  assert.equal(result.matched.posttool_exit, 'nonzero');
+});
+
 test('_extractPostToolResponse returns string responses directly', () => {
   assert.equal(typeof _extractPostToolResponse, 'function');
   assert.equal(_extractPostToolResponse({ tool_response: 'plain string output' }), 'plain string output');

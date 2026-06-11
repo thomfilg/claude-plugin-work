@@ -49,7 +49,7 @@ test('does NOT warn when trigger_posttool_exit targets the PostToolUse memory', 
       {
         name: 'targeted-by-posttool-exit',
         events: ['PostToolUse'],
-        trigger_posttool_exit: [1],
+        trigger_posttool_exit: 'nonzero',
       },
     ],
   };

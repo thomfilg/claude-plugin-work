@@ -113,31 +113,6 @@ function evaluateStop(memory, payload) {
   return matcher.matchStop(memory, payload);
 }
 
-// The shared content helpers that matcher.matchPostTool injects
-// (findContentMatch / evaluatePretoolContentNot) read the pretool-named
-// fields `triggerPretoolContent` / `triggerPretoolContentNot`. A PostToolUse
-// memory carries its tool-output content patterns under the posttool-named
-// fields. Surface the posttool patterns onto the fields the helpers consume
-// so explain's content gate evaluates `trigger_posttool_content(_not)` against
-// the tool_response (read-only adapter; the original memory is left intact).
-function adaptPosttoolContentFields(memory) {
-  const hasPosttoolContent =
-    Array.isArray(memory.triggerPosttoolContent) && memory.triggerPosttoolContent.length > 0;
-  const hasPosttoolContentNot =
-    Array.isArray(memory.triggerPosttoolContentNot) &&
-    memory.triggerPosttoolContentNot.length > 0;
-  if (!hasPosttoolContent && !hasPosttoolContentNot) return memory;
-  return {
-    ...memory,
-    triggerPretoolContent: hasPosttoolContent
-      ? memory.triggerPosttoolContent
-      : memory.triggerPretoolContent,
-    triggerPretoolContentNot: hasPosttoolContentNot
-      ? memory.triggerPosttoolContentNot
-      : memory.triggerPretoolContentNot,
-  };
-}
-
 function evaluateMemory(memory, event, payload, activeDomains) {
   // Domain gate must run BEFORE per-event trigger checks, mirroring
   // selectForEvent in the dispatcher hook. Otherwise explain reports
@@ -152,7 +127,7 @@ function evaluateMemory(memory, event, payload, activeDomains) {
     return matcher.matchPreTool(memory, payload);
   }
   if (event === 'PostToolUse') {
-    return matcher.matchPostTool(adaptPosttoolContentFields(memory), payload);
+    return matcher.matchPostTool(memory, payload);
   }
   if (event === 'SessionStart') {
     return matcher.matchSession(memory);
@@ -212,31 +187,40 @@ function stopTriggerSource(memory) {
   return '(unconditional on Stop)';
 }
 
+// Render the PreToolUse trigger surface (tool/path target + input content).
+// Extracted from eventTriggerSource to keep it under the complexity gate.
+function preToolTriggerSource(memory) {
+  const parts = [];
+  if (memory.triggerPretool && memory.triggerPretool.length) {
+    parts.push(`pretool: ${memory.triggerPretool.join(', ')}`);
+  }
+  if (memory.triggerPretoolContent && memory.triggerPretoolContent.length) {
+    parts.push(`content: ${memory.triggerPretoolContent.join(', ')}`);
+  }
+  return parts.join(' | ');
+}
+
+// Render the PostToolUse trigger surface (tool/path target + output content +
+// exit gate). Extracted from eventTriggerSource to keep it under the
+// complexity gate.
+function postToolTriggerSource(memory) {
+  const parts = [];
+  if (memory.triggerPretool && memory.triggerPretool.length) {
+    parts.push(`pretool: ${memory.triggerPretool.join(', ')}`);
+  }
+  if (memory.triggerPosttoolContent && memory.triggerPosttoolContent.length) {
+    parts.push(`content: ${memory.triggerPosttoolContent.join(', ')}`);
+  }
+  if (memory.triggerPosttoolExit !== null && memory.triggerPosttoolExit !== undefined) {
+    parts.push(`exit: ${memory.triggerPosttoolExit}`);
+  }
+  return parts.join(' | ');
+}
+
 function eventTriggerSource(memory, event) {
   if (event === 'UserPromptSubmit') return memory.triggerPrompt || '';
-  if (event === 'PreToolUse') {
-    const parts = [];
-    if (memory.triggerPretool && memory.triggerPretool.length) {
-      parts.push(`pretool: ${memory.triggerPretool.join(', ')}`);
-    }
-    if (memory.triggerPretoolContent && memory.triggerPretoolContent.length) {
-      parts.push(`content: ${memory.triggerPretoolContent.join(', ')}`);
-    }
-    return parts.join(' | ');
-  }
-  if (event === 'PostToolUse') {
-    const parts = [];
-    if (memory.triggerPretool && memory.triggerPretool.length) {
-      parts.push(`pretool: ${memory.triggerPretool.join(', ')}`);
-    }
-    if (memory.triggerPosttoolContent && memory.triggerPosttoolContent.length) {
-      parts.push(`content: ${memory.triggerPosttoolContent.join(', ')}`);
-    }
-    if (memory.triggerPosttoolExit !== null && memory.triggerPosttoolExit !== undefined) {
-      parts.push(`exit: ${memory.triggerPosttoolExit}`);
-    }
-    return parts.join(' | ');
-  }
+  if (event === 'PreToolUse') return preToolTriggerSource(memory);
+  if (event === 'PostToolUse') return postToolTriggerSource(memory);
   if (event === 'SessionStart') return `trigger_session: ${memory.triggerSession}`;
   if (event === 'Stop') return stopTriggerSource(memory);
   return '';
