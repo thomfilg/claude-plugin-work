@@ -45,6 +45,25 @@ test('readMemoryFile parses trigger_posttool_content/_not as arrays and trigger_
   assert.equal(memories[0].triggerPosttoolExit, 'nonzero');
 });
 
+// Bracket YAML-flow lists must split into separate patterns (BRACKET_LIST_KEYS),
+// matching trigger_pretool_content — not stay one string that toList shreds into
+// invalid regex fragments like "[alpha" / "beta]".
+
+test('readMemoryFile parses bracketed trigger_posttool_content/_not as separate patterns', () => {
+  const { storeDir } = makeTempStore();
+  writeMemory(storeDir, 'bracketed.md', {
+    name: 'bracketed',
+    description: 'd',
+    trigger_posttool_content: '[alpha, beta]',
+    trigger_posttool_content_not: '[gamma, delta]',
+  });
+
+  const memories = listMemoriesFromStore(store(storeDir));
+  assert.equal(memories.length, 1);
+  assert.deepEqual(memories[0].triggerPosttoolContent, ['alpha', 'beta']);
+  assert.deepEqual(memories[0].triggerPosttoolContentNot, ['gamma', 'delta']);
+});
+
 // C-3 — absent fields default to empty arrays / null (forward-only, existing memories unchanged).
 
 test('readMemoryFile yields [] / [] / null when the posttool fields are absent', () => {

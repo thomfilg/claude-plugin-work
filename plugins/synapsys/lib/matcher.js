@@ -327,7 +327,12 @@ const _extractStopResponse = stopMatcher._extractStopResponse;
 const postMatcher = require('./matcher-posttool');
 
 function matchPostTool(memory, payload) {
-  return postMatcher.matchPostTool(memory, payload, { gateMemory, makeMatched, pretoolSpecMatches });
+  return postMatcher.matchPostTool(memory, payload, {
+    gateMemory,
+    makeMatched,
+    pretoolSpecMatches,
+    evaluateExcludePretool,
+  });
 }
 
 const _extractPostToolResponse = postMatcher._extractPostToolResponse;

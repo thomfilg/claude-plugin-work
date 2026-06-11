@@ -185,8 +185,22 @@ function _evaluateContentStage(memory, responseText) {
  * @param {object} helpers shared utilities injected from matcher.js.
  * @returns {{ fired: boolean, reason?: string, matched?: object }}
  */
+// Stage 4 (C-1): exclude_* suppression veto. Mirrors matchPreTool's stage-4 —
+// exclude_pretool / exclude_preset are evaluated against tool_name + tool_input
+// (the same target the trigger_pretool prefix considered). Returns the
+// makeMatched diagnostics on a hit, or null when nothing excludes.
+function _evaluatePostToolExcludes(memory, payload, evaluateExcludePretool, makeMatched) {
+  const toolName = payload?.tool_name || '';
+  const argBlob = JSON.stringify(payload?.tool_input || {});
+  const excluded = evaluateExcludePretool(memory, toolName, argBlob);
+  if (excluded.excluded) {
+    return makeMatched({ excluded_pattern: excluded.pattern });
+  }
+  return null;
+}
+
 function matchPostTool(memory, payload, helpers) {
-  const { gateMemory, makeMatched, pretoolSpecMatches } = helpers;
+  const { gateMemory, makeMatched, pretoolSpecMatches, evaluateExcludePretool } = helpers;
 
   // Stage 1: events / disabled / expired.
   const gate = gateMemory(memory, 'PostToolUse');
@@ -220,6 +234,18 @@ function matchPostTool(memory, payload, helpers) {
   // Stage 3b: exit-code gate (final content/exit stage).
   const exitStage = _evaluatePostToolExit(memory, payload);
   if (!exitStage.matched) return { fired: false, reason: 'no-exit-match' };
+
+  // Stage 4: exclude_* suppression. Runs AFTER content/exit so negative-excludes
+  // retains priority over exclude-matched (locked order, GH-510).
+  const excludedMatched = _evaluatePostToolExcludes(
+    memory,
+    payload,
+    evaluateExcludePretool,
+    makeMatched
+  );
+  if (excludedMatched) {
+    return { fired: false, reason: 'exclude-matched', matched: excludedMatched };
+  }
 
   return {
     fired: true,

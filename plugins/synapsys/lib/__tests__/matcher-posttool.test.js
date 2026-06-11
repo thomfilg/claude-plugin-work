@@ -102,6 +102,18 @@ function evaluatePretoolContentNot(memory, contentString) {
   return { excluded: false, pattern: null };
 }
 
+// Mock of matcher.js's bound evaluateExcludePretool (stage-4 veto): matches
+// memory.excludePretool specs against tool_name + argBlob, mirroring the real
+// matcher-excludes implementation's return shape.
+function evaluateExcludePretool(memory, toolName, argBlob) {
+  const specs = memory.excludePretool;
+  if (!Array.isArray(specs) || specs.length === 0) return { excluded: false, pattern: null };
+  for (const spec of specs) {
+    if (pretoolSpecMatches(spec, toolName, argBlob)) return { excluded: true, pattern: spec };
+  }
+  return { excluded: false, pattern: null };
+}
+
 const HELPERS = {
   gateMemory,
   safeRegex,
@@ -111,6 +123,7 @@ const HELPERS = {
   findContentMatch,
   hasNegativeContentPatterns,
   evaluatePretoolContentNot,
+  evaluateExcludePretool,
 };
 
 function makeMemory(overrides) {
@@ -124,6 +137,7 @@ function makeMemory(overrides) {
       triggerPosttoolContent: [],
       triggerPosttoolContentNot: [],
       triggerPosttoolExit: null,
+      excludePretool: [],
     },
     overrides
   );
@@ -181,6 +195,40 @@ test('empty trigger_pretool: an exit-only memory fires on matching exit code', (
   const result = run(memory, payload);
   assert.equal(result.fired, true);
   assert.equal(result.matched.posttool_exit, 'nonzero');
+});
+
+test('stage-4 exclude_pretool suppresses an otherwise-firing PostToolUse memory (exclude-matched)', () => {
+  // Positive trigger + exit gate would fire, but exclude_pretool vetoes it —
+  // mirrors matchPreTool's stage-4 (locked order GH-510). Without the veto this
+  // memory would inject on a PostToolUse where PreToolUse would exclude it.
+  const memory = makeMemory({
+    triggerPretool: ['Bash:'],
+    triggerPosttoolExit: 'nonzero',
+    excludePretool: ['Bash:pnpm test'],
+  });
+  const payload = {
+    tool_name: 'Bash',
+    tool_input: { command: 'pnpm test' },
+    tool_response: { stdout: '', stderr: 'fail', exit_code: 1 },
+  };
+  const result = run(memory, payload);
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, 'exclude-matched');
+  assert.equal(result.matched.excluded_pattern, 'Bash:pnpm test');
+});
+
+test('exclude_pretool that does NOT match leaves the memory firing', () => {
+  const memory = makeMemory({
+    triggerPretool: ['Bash:'],
+    triggerPosttoolExit: 'nonzero',
+    excludePretool: ['Bash:gh pr create'],
+  });
+  const payload = {
+    tool_name: 'Bash',
+    tool_input: { command: 'pnpm test' },
+    tool_response: { stdout: '', stderr: 'fail', exit_code: 1 },
+  };
+  assert.equal(run(memory, payload).fired, true);
 });
 
 test('_extractPostToolResponse returns string responses directly', () => {

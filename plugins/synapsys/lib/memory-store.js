@@ -117,6 +117,8 @@ const BRACKET_LIST_KEYS = new Set([
   'trigger_pretool',
   'trigger_pretool_content',
   'trigger_pretool_content_not',
+  'trigger_posttool_content',
+  'trigger_posttool_content_not',
   'cite_signals',
   'exclude_pretool',
   'exclude_preset',
