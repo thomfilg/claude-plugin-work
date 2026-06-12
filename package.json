@@ -17,9 +17,18 @@
     "dev:test:main": "./plugins/work/scripts/workflows/lib/scripts/dev-check/dev-test.sh --main",
     "format": "biome format --write .",
     "format:check": "biome format .",
+    "import:codex": "pnpm import:codex:work && pnpm import:codex:synapsys && pnpm import:codex:maestro && pnpm import:codex:heimdall",
+    "import:codex:heimdall": "node scripts/claude-to-codex.js --plugin heimdall --out ./codex-plugins/heimdall --clean",
+    "import:codex:maestro": "node scripts/claude-to-codex.js --plugin maestro --out ./codex-plugins/maestro --clean",
+    "import:codex:synapsys": "node scripts/claude-to-codex.js --plugin synapsys --out ./codex-plugins/synapsys --clean",
+    "import:codex:work": "node scripts/claude-to-codex.js --plugin work --out ./codex-plugins/work --clean",
+    "import:codex:work:smoke": "node scripts/claude-to-codex.js --plugin work --out /tmp/codex-work-test --clean",
+    "post-pull": "bash scripts/setup/install-and-rulesync.sh",
     "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath plugins/work/scripts/hooks || true",
     "quality": "node plugins/work/scripts/workflows/lib/scripts/quality/quality.js",
-    "quality:changed": "node plugins/work/scripts/workflows/lib/scripts/quality/quality.js --changed"
+    "quality:changed": "node plugins/work/scripts/workflows/lib/scripts/quality/quality.js --changed",
+    "rulesync": "node scripts/setup/run-rulesync.js",
+    "sync:agents": "pnpm rulesync && pnpm import:codex"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.11",
