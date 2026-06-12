@@ -1,0 +1,53 @@
+{
+  "name": "work-workflow-local",
+  "plugins": [
+    {
+      "name": "work-workflow",
+      "source": {
+        "source": "local",
+        "path": "./codex-plugins/work"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "synapsys",
+      "source": {
+        "source": "local",
+        "path": "./codex-plugins/synapsys"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "maestro",
+      "source": {
+        "source": "local",
+        "path": "./codex-plugins/maestro"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "heimdall",
+      "source": {
+        "source": "local",
+        "path": "./codex-plugins/heimdall"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
